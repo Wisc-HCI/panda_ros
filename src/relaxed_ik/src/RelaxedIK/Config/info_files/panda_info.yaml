@@ -1,0 +1,17 @@
+urdf_file_name: "panda_arm.urdf"
+fixed_frame: "panda_link0"
+joint_names: [ [ "panda_joint1", "panda_joint2", "panda_joint3", "panda_joint4", "panda_joint5", "panda_joint6", "panda_joint7" ] ]
+joint_ordering: [ "panda_joint1", "panda_joint2", "panda_joint3", "panda_joint4", "panda_joint5", "panda_joint6", "panda_joint7" ]
+ee_fixed_joints: [ "panda_joint8" ]
+starting_config: [ 0, -0.785, 0, -2.356, 0, 1.57, 0.785]
+collision_file_name: "panda_collision.yaml"
+collision_nn_file: "panda_arm_nn"
+path_to_src: "/home/hcilab/Documents/ros_workspace/src/relaxed_ik/src"
+axis_types: [ [ "z", "z", "z", "z", "z", "z", "z" ] ]
+velocity_limits: [ 2.175, 2.175, 2.175, 2.175, 2.61, 2.61, 2.61 ]
+joint_limits: [ [-2.9671,2.9671], [-1.8326,1.8326], [-2.9671,2.9671], [-3.1416,0.0], [-2.9671,2.9671], [-0.0873,3.8223], [-2.9671,2.9671] ]
+displacements: [ [ [0.0,0.0,0.0], [0.0,-0.316,0.0], [0.0825,0.0,0.0], [-0.0825,0.384,0.0], [0.0,0.0,0.0], [0.088,0.0,0.0], [0.0,0.0,0.107] ] ]
+disp_offsets: [ [0.0,0.0,0.333] ]
+rot_offsets: [ [ [0.0,0.0,0.0], [-1.57079632679,0.0,0.0], [1.57079632679,0.0,0.0], [1.57079632679,0.0,0.0], [-1.57079632679,0.0,0.0], [1.57079632679,0.0,0.0], [1.57079632679,0.0,0.0], [0.0,0.0,0.0] ] ]
+joint_types: [ [ "revolute", "revolute", "revolute", "revolute", "revolute", "revolute", "revolute" ] ]
+joint_state_define_func_file: "panda_arm_joint_state_define"
