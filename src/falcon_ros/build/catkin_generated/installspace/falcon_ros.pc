@@ -1,0 +1,8 @@
+prefix=/home/hcilab/Documents/PandaFCI/devel
+
+Name: falcon_ros
+Description: Description of falcon_ros
+Version: 1.0.0
+Cflags: 
+Libs: -L/home/hcilab/Documents/PandaFCI/devel/lib 
+Requires: relaxed_ik

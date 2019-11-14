@@ -1,0 +1,40 @@
+#IncludeRegexLine: ^[ 	]*[#%][ 	]*(include|import)[ 	]*[<"]([^">]+)([">])
+
+#IncludeRegexScan: ^.*$
+
+#IncludeRegexComplain: ^$
+
+#IncludeRegexTransform: 
+
+../include/PandaController.h
+boost/interprocess/shared_memory_object.hpp
+-
+boost/interprocess/mapped_region.hpp
+-
+boost/interprocess/sync/interprocess_mutex.hpp
+-
+boost/interprocess/offset_ptr.hpp
+-
+boost/interprocess/sync/scoped_lock.hpp
+-
+cstdlib
+-
+cstring
+-
+unistd.h
+-
+franka/robot_state.h
+-
+franka/model.h
+-
+eigen3/Eigen/Core
+-
+franka/gripper.h
+-
+
+/home/hcilab/Documents/PandaFCI/src/PandaController/src/panda_controller_ext.cpp
+PandaController.h
+/home/hcilab/Documents/PandaFCI/src/PandaController/src/PandaController.h
+franka/robot_state.h
+-
+

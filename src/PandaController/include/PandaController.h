@@ -9,10 +9,13 @@
 #include <franka/robot_state.h>
 #include <franka/model.h>
 #include <eigen3/Eigen/Core>
+#include <franka/gripper.h>
 
 namespace PandaController {
 
-    pid_t initPandaController(char* = NULL);
+    enum ControlMode {CartesianVelocity, JointVelocity};
+
+    pid_t initPandaController(ControlMode, char* = NULL);
 
     std::array<double, 3> readCommandedPosition();
     void writeCommandedPosition(std::array<double, 3> data);
@@ -24,11 +27,17 @@ namespace PandaController {
     void writeJointAngles(std::array<double, 7> data);
 
     franka::RobotState readRobotState();
-    void writeRobotState(franka::RobotState data, franka::Model * robotModel = NULL);
+    void writeRobotState(franka::RobotState data);
     void consumeBuffer(int &, franka::RobotState*, long *);
 
     void startLogging();
     bool isRunning();
+
+    franka::Gripper *gripper;
+    void writeGripperState();
+    bool homeGripper();
+    bool graspObject();
+    bool releaseObject();
 
     struct shared_data {
     public:
@@ -59,5 +68,8 @@ namespace PandaController {
         shared_data() {
         }
     }; //end struct shared_data
+
+
+
 } //end namespace PandaController
 

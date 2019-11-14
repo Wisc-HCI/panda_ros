@@ -3,6 +3,9 @@ project(pandacontroller CXX)
 set(CMAKE_CXX_STANDARD 14)
 SET(CMAKE_CXX_FLAGS  "-O3 -fopenmp")
 SET(CMAKE_BUILD_TYPE Release)
+SET(CMAKE_SKIP_RPATH False)
+SET(CMAKE_INSTALL_RPATH ../lib)
+
 
 find_library(franka libfranka.so.0.7.1 REQUIRED)
 find_package(Eigen3 REQUIRED)
@@ -25,7 +28,10 @@ add_executable(Falcon ${CMAKE_CURRENT_SOURCE_DIR}/src/Falcon.cpp)
 target_link_libraries(Falcon franka ${LIBNIFALCON} PandaController)
 target_include_directories(Falcon PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
-install(TARGETS
-  LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
-  RUNTIME DESTINATION ${CMAKE_INSTALL_BINARY_DIR}
+message(${CMAKE_INSTALL_PREFIX})
+set(CMAKE_INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/lib")
+install(TARGETS PandaController Falcon common
+  LIBRARY DESTINATION lib
+  RUNTIME DESTINATION bin
 )
+install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/include DESTINATION ".")

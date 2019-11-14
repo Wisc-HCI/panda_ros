@@ -1,0 +1,1 @@
+/usr/bin/c++ -fPIC -O3 -fopenmp -O3 -DNDEBUG  -shared -Wl,-soname,libpanda_controller_ext.so -o libpanda_controller_ext.so CMakeFiles/panda_controller_ext.dir/src/panda_controller_ext.cpp.o -Wl,-rpath,/home/hcilab/Documents/PandaFCI/src/PandaController/build libPandaController.so libcommon.so -lfranka 

@@ -1,0 +1,2 @@
+- setup-file:
+    local-name: /home/hcilab/Documents/PandaFCI/src/falcon_ros/build/devel/setup.sh

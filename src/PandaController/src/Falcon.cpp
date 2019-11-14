@@ -139,7 +139,7 @@ int main() {
         return -1;
     }
     pollFalcon();
-    pid_t pid = PandaController::initPandaController();
+    pid_t pid = PandaController::initPandaController(PandaController::ControlMode::CartesianVelocity);
     if (pid < 0) {
         cout << "Failed to start panda process" << endl;
     }
