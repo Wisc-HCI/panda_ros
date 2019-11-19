@@ -1,1 +1,0 @@
-/usr/bin/c++ -fPIC -O3 -fopenmp -O3 -DNDEBUG  -shared -Wl,-soname,libPandaController.so -o libPandaController.so CMakeFiles/PandaController.dir/src/PandaController.cpp.o -Wl,-rpath,/home/hcilab/Documents/PandaFCI/src/PandaController/build: libcommon.so -lfranka 

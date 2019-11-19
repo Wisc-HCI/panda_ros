@@ -1,8 +1,0 @@
-prefix=/home/hcilab/Documents/PandaFCI/devel
-
-Name: panda_ros
-Description: Description of panda_ros
-Version: 1.0.0
-Cflags: 
-Libs: -L/home/hcilab/Documents/PandaFCI/devel/lib 
-Requires: 
