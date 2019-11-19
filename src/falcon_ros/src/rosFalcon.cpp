@@ -6,8 +6,11 @@
 #include <ros/ros.h>
 #include <relaxed_ik/EEPoseGoals.h>
 #include "geometry_msgs/Pose.h"
+#include "geometry_msgs/Wrench.h"
+#include "std_msgs/String.h"
 
 #include "falcon/core/FalconDevice.h"
+#include "falcon/grip/FalconGripFourButton.h"
 #include "falcon/firmware/FalconFirmwareNovintSDK.h"
 #include "falcon/util/FalconCLIBase.h"
 #include "falcon/util/FalconFirmwareBinaryNvent.h"
@@ -27,7 +30,6 @@ bool init_falcon() {
     cout <<"Setting up LibUSB\n";
     m_falconDevice.close();
     m_falconDevice.setFalconKinematic<FalconKinematicStamper>();
-    //m_falconDevice.setFalconGrip<FalconGripFourButton>();
     m_falconDevice.setFalconFirmware<FalconFirmwareNovintSDK>(); //Set Firmware
 
     if(!m_falconDevice.open(0)) //Open falcon @ index
@@ -41,9 +43,7 @@ bool init_falcon() {
     }
 
     bool skip_checksum = false;
-    //See if we have firmware
     bool firmware_loaded = false;
-    //firmware_loaded = m_falconDevice.isFirmwareLoaded();
     
     // MH: forcing the firmware to reload seems to solve the issue where
     // we had to keep re-plugging it in
@@ -106,10 +106,10 @@ bool init_falcon() {
             stop = true;
         }
     }
+    m_falconDevice.setFalconGrip<libnifalcon::FalconGripFourButton>();
 
     m_falconDevice.runIOLoop();
-    //falconFirmware = m_falconDevice.getFalconFirmware();
-    //falconKinematic = new FalconKinematicStamper(true);
+    
     return true;
 }
 
@@ -127,34 +127,49 @@ void publishPose(ros::Publisher pose_goal_pub, std::array<double, 7> panda_pose)
     pose_goal_pub.publish(ee_goal);
 }
 
-void pollFalcon(ros::Publisher pose_goal_pub) {
+void pollFalcon(ros::Publisher pose_goal_pub, ros::Publisher command_pub) {
+    static bool lastCenterButton = false;
     array<double, 3> falconPos = {0,0,0};
     m_falconDevice.runIOLoop();
     falconPos = m_falconDevice.getPosition();
-    // std::array<double, 3> panda_pos = {0.0, 0.0, 0.0};
     std::array<double, 7> panda_pos = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
-    //panda_pos[0] = -.12 + .5 * 0.26 * ((falconPos[2] - 0.074) / 0.099);
-    panda_pos[0] = -.05 + .5 * 0.26 * ((falconPos[2] - 0.074) / 0.099);
-    panda_pos[1] = -.16 + .5 * 0.47 * ((falconPos[0] + 0.047) / 0.067);
-    panda_pos[2] = -.08 + .5 * 0.3 * ((falconPos[1] + 0.05) / 0.098);
+    
+    panda_pos[0] = .05 - .5 * 0.26 * ((falconPos[2] - 0.074) / 0.099);
+    panda_pos[1] = 2*(.16 - .5 * 0.47 * ((falconPos[0] + 0.047) / 0.067));
+    panda_pos[2] = 2*(-.08 + .5 * 0.3 * ((falconPos[1] + 0.05) / 0.098));
     panda_pos[6] = 1;
-    //panda_pos[0] = 0.26 + 0.26 * ((falconPos[2] - 0.074) / 0.099);
-    //panda_pos[1] = -0.12 + 0.47 * ((falconPos[0] + 0.047) / 0.067);
-    //panda_pos[2] = 0.29 + 0.3 * ((falconPos[1] + 0.05) / 0.098);
-    //TODO: write the pose instead of the position
-    // PandaController::writeCommandedPosition(panda_pos);
-    //PandaController::writePoseGoal(panda_pos);
+    
     publishPose(pose_goal_pub, panda_pos);
+
+    unsigned int my_buttons = m_falconDevice.getFalconGrip()->getDigitalInputs();
+    
+    bool buttons[4];
+    buttons[0] = (my_buttons & libnifalcon::FalconGripFourButton::CENTER_BUTTON)  ? 1 : 0;
+    buttons[1] = (my_buttons & libnifalcon::FalconGripFourButton::PLUS_BUTTON)    ? 1 : 0;
+    buttons[2] = (my_buttons & libnifalcon::FalconGripFourButton::MINUS_BUTTON)   ? 1 : 0;
+    buttons[3] = (my_buttons & libnifalcon::FalconGripFourButton::FORWARD_BUTTON) ? 1 : 0;
+
+    //Click 
+    if(buttons[0] != lastCenterButton){
+        std_msgs::String cmd;
+        if(buttons[0]){
+            cmd.data = "button_pressed";
+        }
+        else{
+            cmd.data = "button_released";
+        }
+        command_pub.publish(cmd);
+    }
+    lastCenterButton = buttons[0];
 }
 
-// void feedbackFalcon() {
-//     franka::RobotState state = PandaController::readRobotState();
-//     double scale = -0.1;
-//     m_falconDevice.setForce({
-//                 state.O_F_ext_hat_K[1] * scale, 
-//                 state.O_F_ext_hat_K[2] * scale, 
-//                 state.O_F_ext_hat_K[0] * scale});
-// }
+void feedbackFalcon(geometry_msgs::Wrench wrench) {
+    double scale = -0.1;
+    m_falconDevice.setForce({
+                wrench.force.y * scale, 
+                wrench.force.z * scale, 
+                wrench.force.x * scale});
+}
 
 int main(int argc, char **argv) {
     if (!init_falcon()) {
@@ -162,12 +177,16 @@ int main(int argc, char **argv) {
         return -1;
     }
     ros::init(argc, argv, "Falcon");
-    ros::NodeHandle n;
+    ros::NodeHandle n;  
         
     ros::Publisher pose_goal_pub = 
         n.advertise<relaxed_ik::EEPoseGoals>("/relaxed_ik/ee_pose_goals", 5);
+    ros::Publisher command_pub = 
+        n.advertise<std_msgs::String>("/interaction/commands", 5);
+    ros::Subscriber force_sub = n.subscribe("/panda/wrench", 10, feedbackFalcon);
     while(ros::ok()){
-        pollFalcon(pose_goal_pub);
+        pollFalcon(pose_goal_pub,command_pub);
+        ros::spinOnce();
         usleep(1000);   
     }
     

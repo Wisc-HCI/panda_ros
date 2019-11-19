@@ -23,6 +23,7 @@ namespace PandaController {
     namespace {
         shared_data* SharedData = NULL;
         mapped_region* memoryRegion;
+        franka::Gripper *p_gripper;
     }
 
     void stopControl() {
@@ -685,7 +686,7 @@ namespace PandaController {
             robot.control(motion_generator);
             setDefaultBehavior(robot);
 
-            double time_max = 10.0;
+            double time_max = 50.0;
             double omega_max = 1.0;
             double time = 0.0;
             double delta_t = 0.001;
@@ -708,8 +709,8 @@ namespace PandaController {
                     (joint_angles[5] - robot_state.q[5]) * scale,
                     (joint_angles[6] - robot_state.q[6]) * scale;
 
-                cout<<constrainJointVelocity(joint_velocity, robot_state)<<endl;
-
+                //cout<<constrainJointVelocity(joint_velocity, robot_state)<<endl;
+                constrainJointVelocity(joint_velocity, robot_state);
                 Eigen::VectorXd lastJointAcceleration = (joint_velocity - Eigen::Map<const Eigen::VectorXd>(robot_state.dq_d.data(), 7)) * 1000;
                 for(int i = 0; i < 7; i++) {
                     SharedData->lastJointAcceleration[i] = lastJointAcceleration[i];
@@ -722,6 +723,49 @@ namespace PandaController {
                     joint_velocity[4],
                     joint_velocity[5],
                     joint_velocity[6]};
+
+                if (time >= time_max) {
+                    std::cout << std::endl << "TIME OUT!!" << std::endl;
+                    return franka::MotionFinished(velocities);
+                }
+                return velocities;
+            });
+        } catch (const franka::ControlException& e) {
+            cout << e.what() << endl;
+            //cout << franka::logToCSV(e.log) << endl;
+            stopControl();
+        } catch (const franka::Exception& e){  
+            cout << e.what() << endl;
+            stopControl();
+        } catch(const exception& e) {
+            cout << e.what() << endl;
+            stopControl();
+        }
+        // std::cout << "\n\n\n\n\n\n\n\n Outside of panda control loop\n\n\n\n\n\n\n\n\n";
+        stopControl();
+    }
+
+    void noController(char* ip = NULL){
+        if (ip == NULL) {
+            ip = "10.134.71.22";
+        }
+        try {
+            franka::Robot robot(ip);
+            robot.automaticErrorRecovery();
+            std::array<double,7> q_goal = {{0, -M_PI_4, 0, -3 * M_PI_4, 0, M_PI_2, M_PI_4}};
+            // std::array<double,7> q_goal = {{0.626267,-0.757022,8.87913e-06,-2.46825,-3.16042e-06,1.71123,1.41167}};
+            MotionGenerator motion_generator(0.5, q_goal);
+            robot.control(motion_generator);
+            setDefaultBehavior(robot);
+
+            double time_max = 30.0;
+            double time = 0.0;
+            double delta_t = 0.001;
+            robot.control([=, &time](const franka::RobotState& robot_state, franka::Duration period) -> franka::JointVelocities {
+                time += period.toSec();
+                writeRobotState(robot_state);
+
+                franka::JointVelocities velocities = {0,0,0,0,0,0,0};
 
                 if (time >= time_max) {
                  std::cout << std::endl << "TIME OUT!!" << std::endl;
@@ -743,16 +787,15 @@ namespace PandaController {
         // std::cout << "\n\n\n\n\n\n\n\n Outside of panda control loop\n\n\n\n\n\n\n\n\n";
         stopControl();
     }
-
     void writeGripperState() {
-        franka::GripperState state = gripper->readOnce();
+        franka::GripperState state = p_gripper->readOnce();
         std::cout << "Printing the gripper state:\n" << "Current width = " << state.width <<
                      "m\nMax width = " << state.max_width << "m\nIs grasped = " << state.is_grasped << "\n";        
     }
 
     bool homeGripper() {
         try {
-            return gripper->homing();
+            return p_gripper->homing();
         } catch (franka::Exception const& e) {
             std::cout << e.what() << std::endl;
             return -1;
@@ -760,8 +803,9 @@ namespace PandaController {
     }
 
     bool graspObject() {
+        cout<<"In grasp"<<endl;
         try {
-            return gripper->grasp(0.03994995,0.05,10,0.5,0.5);
+            return p_gripper->grasp(0.03994995,0.05,10,0.5,0.5);
         } catch (franka::Exception const& e) {
             std::cout << e.what() << std::endl;
             return -1;
@@ -770,15 +814,15 @@ namespace PandaController {
 
     bool releaseObject() {
         try {
-            gripper->stop();
-            return gripper->move(0.0798999,0.05);            
+            p_gripper->stop();
+            return p_gripper->move(0.0798999,0.05);            
         } catch (franka::Exception const& e) {
             std::cout << e.what() << std::endl;
             return -1;
         }
     }
 
-    void controlGripper() {
+    void gripperTest() {
         // homeGripper();
         writeGripperState();
         if(!graspObject()) {std::cout << "Could not grasp object\n";}
@@ -794,16 +838,17 @@ namespace PandaController {
         new (memoryRegion->get_address()) shared_data;
         SharedData = (shared_data*)memoryRegion->get_address();
 
+        if (ip == NULL) {
+            ip = "10.134.71.22";
+        }    
+        p_gripper = new franka::Gripper(ip);
+
         std::cout << "Starting" << std::endl;
 
         SharedData->running = true;
         SharedData->start_time = std::chrono::system_clock::now();
         pid_t pid = fork();
         if (pid == 0) {
-            // if (ip == NULL) {
-            //     ip = "10.134.71.22";
-            // }
-            // gripper = new franka::Gripper(ip);
             switch(mode){
                 case PandaController::ControlMode::CartesianVelocity:
                     runVelocityController(ip);
@@ -811,11 +856,12 @@ namespace PandaController {
                 case PandaController::ControlMode::JointVelocity:
                     runJointVelocityController(ip);
                     break;
+                case PandaController::ControlMode::None:
+                    noController(ip);
+                    break;
              }
-            // controlGripper(ip);
-            // stopControl();
-
-
+            // gripperTest();
+            stopControl();
             exit(0);
         }
         return pid;

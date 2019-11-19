@@ -13,7 +13,7 @@
 
 namespace PandaController {
 
-    enum ControlMode {CartesianVelocity, JointVelocity};
+    enum ControlMode {CartesianVelocity, JointVelocity, None};
 
     pid_t initPandaController(ControlMode, char* = NULL);
 
@@ -33,7 +33,6 @@ namespace PandaController {
     void startLogging();
     bool isRunning();
 
-    franka::Gripper *gripper;
     void writeGripperState();
     bool homeGripper();
     bool graspObject();
