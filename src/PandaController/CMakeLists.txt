@@ -5,6 +5,7 @@ SET(CMAKE_CXX_FLAGS  "-O3 -fopenmp")
 SET(CMAKE_BUILD_TYPE Release)
 SET(CMAKE_SKIP_RPATH False)
 SET(CMAKE_INSTALL_RPATH ../lib)
+SET( CMAKE_INSTALL_PREFIX ../../../devel )
 
 
 find_library(franka libfranka.so.0.7.1 REQUIRED)
