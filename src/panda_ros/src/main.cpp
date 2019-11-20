@@ -2,12 +2,13 @@
 #include "PandaController.h"
 #include "std_msgs/String.h"
 #include "geometry_msgs/Pose.h"
+#include "geometry_msgs/Twist.h"
 #include "geometry_msgs/Wrench.h"
 #include <relaxed_ik/JointAngles.h>
 
 using namespace std;
 
-void updateCallbackCart(const geometry_msgs::Pose::ConstPtr& msg){
+void updateCallbackCartPos(const geometry_msgs::Pose::ConstPtr& msg){
     if (PandaController::isRunning()){
         std::array<double, 3> position;
         position[0] = msg->position.x;
@@ -18,9 +19,8 @@ void updateCallbackCart(const geometry_msgs::Pose::ConstPtr& msg){
     }
 }
 
-void updateCallbackJoint(const relaxed_ik::JointAngles::ConstPtr& msg){
+void updateCallbackJointPos(const relaxed_ik::JointAngles::ConstPtr& msg){
     if (PandaController::isRunning()){
-
         std::array<double, 7> position;
         position[0] = msg->angles.data[0];
         position[1] = msg->angles.data[1];
@@ -30,7 +30,19 @@ void updateCallbackJoint(const relaxed_ik::JointAngles::ConstPtr& msg){
         position[5] = msg->angles.data[5];
         position[6] = msg->angles.data[6];
         PandaController::writeJointAngles(position);
-        cout << "Updating joint angles" << endl;
+    }
+}
+
+void updateCallbackCartVel(const geometry_msgs::Twist::ConstPtr& msg){
+    if (PandaController::isRunning()){
+        std::array<double, 6> position;
+        position[0] = msg->linear.x/2.5;
+        position[1] = msg->linear.y/2.5;
+        position[2] = msg->linear.z/2.5;
+        position[3] = 0;
+        position[4] = 0;
+        position[5] = 0;
+        PandaController::writeCommandedVelocity(position);
     }
 }
 
@@ -48,19 +60,39 @@ void callbackCommands(const std_msgs::String& msg){
 
 int main(int argc, char **argv) {
     ros::init(argc, argv, "PandaListener");
-    ros::NodeHandle n;
-    // PandaController::ControlMode mode  = PandaController::ControlMode::JointVelocity;
-    PandaController::ControlMode mode  = PandaController::ControlMode::None;
-    //PandaController::ControlMode mode  = PandaController::ControlMode::CartesianVelocity;
+    ros::NodeHandle n("~");
+    std::string mode_str;
+    n.getParam("control_mode", mode_str);
+
+    PandaController::ControlMode mode;
+
+    if(mode_str == "cartesian_velocity")
+        mode = PandaController::ControlMode::CartesianVelocity;
+    if(mode_str == "joint_velocity")
+        mode = PandaController::ControlMode::JointVelocity;
+    if(mode_str == "cartesian_position")
+        mode = PandaController::ControlMode::CartesianVelocity;
+    if(mode_str == "joint_position")
+        mode = PandaController::ControlMode::JointVelocity;
+    if(mode_str == "none")
+        mode = PandaController::ControlMode::None;
+        
     PandaController::initPandaController(mode);
     
-    n.subscribe("/interaction/commands", 10, callbackCommands);
+    ros::Subscriber sub_commands = n.subscribe("/interaction/commands", 10, callbackCommands);
+    ros::Subscriber sub_position;
     switch(mode){
         case PandaController::ControlMode::CartesianVelocity:
-            n.subscribe("/panda/pose", 10, updateCallbackCart);
+            sub_position = n.subscribe("/spacenav/twist", 10, updateCallbackCartVel);
             break;
         case PandaController::ControlMode::JointVelocity:
-            n.subscribe("/relaxed_ik/joint_angle_solutions", 10, updateCallbackJoint);
+            //sub_position = n.subscribe("/relaxed_ik/joint_angle_solutions", 10, updateCallbackJointVel);
+            break;
+        case PandaController::ControlMode::CartesianPosition:
+            sub_position = n.subscribe("/panda/pose", 10, updateCallbackCartPos);
+            break;
+        case PandaController::ControlMode::JointPosition:
+            sub_position = n.subscribe("/relaxed_ik/joint_angle_solutions", 10, updateCallbackJointPos);
             break;
         case PandaController::ControlMode::None:
             break;
@@ -85,8 +117,6 @@ int main(int argc, char **argv) {
 
         wrenchPub.publish(wrench);
         ros::spinOnce();
-        ros::spinOnce();
-        cout << "looping" << endl;
         loopRate.sleep();
     }
 

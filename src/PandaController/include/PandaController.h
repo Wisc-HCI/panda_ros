@@ -13,12 +13,15 @@
 
 namespace PandaController {
 
-    enum ControlMode {CartesianVelocity, JointVelocity, None};
+    enum ControlMode {CartesianVelocity, CartesianPosition, JointVelocity, JointPosition, None};
 
     pid_t initPandaController(ControlMode, char* = NULL);
 
     std::array<double, 3> readCommandedPosition();
     void writeCommandedPosition(std::array<double, 3> data);
+
+    std::array<double, 6> readCommandedVelocity();
+    void writeCommandedVelocity(std::array<double, 6> data);
 
     std::array<double, 7> readPoseGoal();
     void writePoseGoal(std::array<double, 7> data);
@@ -41,6 +44,7 @@ namespace PandaController {
     struct shared_data {
     public:
         std::array<double, 3> commanded_position;
+        std::array<double, 6> commanded_velocity;
         franka::RobotState current_state;
         franka::RobotState buffer[1000];
         std::chrono::system_clock::time_point start_time;
@@ -65,6 +69,7 @@ namespace PandaController {
         
 
         shared_data() {
+            writeCommandedVelocity({0,0,0,0,0,0});
         }
     }; //end struct shared_data
 

@@ -440,7 +440,7 @@ namespace PandaController {
     }
 
     double constrainJointJerk(Eigen::VectorXd & desiredJointJerk, const franka::RobotState & robot_state) {
-        double softThreshold = 0.95;
+        double softThreshold = 0.9;
         array<double, 7> max_dddq = {7500*softThreshold, 3750*softThreshold, 5000*softThreshold, 6250*softThreshold, 7500*softThreshold, 10000*softThreshold, 10000*softThreshold};
         double length = desiredJointJerk.norm();
 
@@ -457,7 +457,7 @@ namespace PandaController {
     }
 
     double constrainJointAcceleration(Eigen::VectorXd & desiredJointAcceleration, const franka::RobotState & robot_state) {
-        double softThreshold = 0.95;
+        double softThreshold = 0.9;
         array<double, 7> max_ddq = {15*softThreshold, 7.5*softThreshold, 10*softThreshold, 12.5*softThreshold, 15*softThreshold, 20*softThreshold, 20*softThreshold};
         double length = desiredJointAcceleration.norm();
         Eigen::Map<const Eigen::VectorXd> lastJointAcceleration(SharedData->lastJointAcceleration.data(), 7);
@@ -479,7 +479,7 @@ namespace PandaController {
     }
 
     double constrainJointVelocity(Eigen::VectorXd & desiredJointVelocity, const franka::RobotState & robot_state) {
-        double softThreshold = 0.95;
+        double softThreshold = 0.9;
         array<double, 7> max_dq = {2.1750*softThreshold, 2.1750*softThreshold, 2.1750*softThreshold, 2.1750*softThreshold, 2.6100*softThreshold, 2.6100*softThreshold, 2.6100*softThreshold};
         double length = desiredJointVelocity.norm();
         Eigen::Map<const Eigen::VectorXd> lastJointVelocity(robot_state.dq_d.data(), 7);
@@ -522,7 +522,7 @@ namespace PandaController {
     }
 
 
-    void runVelocityController(char* ip = NULL){
+    void runPositionController(char* ip = NULL){
         if (ip == NULL) {
             ip = "10.134.71.22";
         }
@@ -597,6 +597,67 @@ namespace PandaController {
         }
         stopControl();
     }
+
+    void runVelocityController(char* ip = NULL){
+        if (ip == NULL) {
+            ip = "10.134.71.22";
+        }
+        try {
+            cout << "Before connect" << endl;
+            franka::Robot robot(ip);
+            robot.automaticErrorRecovery();
+            MotionGenerator motion_generator(0.5, {{0.626267,-0.757022,8.87913e-06,-2.46825,-3.16042e-06,1.71123,1.41167}});
+            cout << "Starting homing" << endl;
+            robot.control(motion_generator);
+            cout << "Motion complete" << endl;
+            setDefaultBehavior(robot);
+            cout << "Default Behavior Set" << endl;
+
+            double time_max = 30.0;
+            double time = 0.0;
+            double v_max = 0.1;
+            int count = 0;
+            cout << "Model loaded" << endl;
+
+            writeRobotState(robot.readOnce());
+            cout << "About to start" << endl;
+
+            robot.control([=, &time, &count](const franka::RobotState& robot_state,
+                                    franka::Duration period) -> franka::CartesianVelocities {
+                time += period.toSec();
+                writeRobotState(robot_state);
+
+                Eigen::VectorXd v = Eigen::Map<Eigen::VectorXd>(readCommandedVelocity().data(), 6);
+
+                Eigen::VectorXd jointVelocities = Eigen::Map<Eigen::MatrixXd>(SharedData->jacobian.data(), 6, 7).completeOrthogonalDecomposition().solve(v);
+                constrainJointVelocity(jointVelocities, robot_state);
+                v = Eigen::Map<Eigen::MatrixXd>(SharedData->jacobian.data(), 6, 7) * jointVelocities;
+                franka::CartesianVelocities output = {{v[0], v[1], v[2], 0.0, 0.0, 0.0}};
+                Eigen::VectorXd lastJointAcceleration = (jointVelocities - Eigen::Map<const Eigen::VectorXd>(robot_state.dq_d.data(), 7)) * 1000;
+                for(int i = 0; i < 7; i++) {
+                    SharedData->lastJointAcceleration[i] = lastJointAcceleration[i];
+                }
+                
+                if (time >= time_max) {
+                    cout << endl << "Finished motion, shutting down example" << endl;
+                    return franka::MotionFinished(output);
+                }
+                count =  count + 1;
+                return output;
+            });
+        } catch (const franka::ControlException& e) {
+            cout << e.what() << endl;
+            stopControl();
+        } catch (const franka::Exception& e){  
+            cout << e.what() << endl;
+            stopControl();
+        } catch(const exception& e) {
+            cout << e.what() << endl;
+            stopControl();
+        }
+        stopControl();
+    }
+
 
     void runJointPositionController(char* ip = NULL){
         if (ip == NULL) {
@@ -696,6 +757,7 @@ namespace PandaController {
             cout << "In vel controller" <<endl;
             robot.control([=, &time, &joint_pos, &joint_vel, &joint_acc](const franka::RobotState& robot_state, franka::Duration period) -> franka::JointVelocities {
                 time += period.toSec();
+                PandaController::writeRobotState(robot_state);
                 array<double, 7> joint_angles = readJointAngles();
 
                 double scale = 5;
@@ -853,8 +915,14 @@ namespace PandaController {
                 case PandaController::ControlMode::CartesianVelocity:
                     runVelocityController(ip);
                     break;
+                case PandaController::ControlMode::CartesianPosition:
+                    runPositionController(ip);
+                    break;
                 case PandaController::ControlMode::JointVelocity:
                     runJointVelocityController(ip);
+                    break;
+                case PandaController::ControlMode::JointPosition:
+                    runJointPositionController(ip);
                     break;
                 case PandaController::ControlMode::None:
                     noController(ip);
@@ -887,6 +955,20 @@ namespace PandaController {
         boost::interprocess::scoped_lock<boost::interprocess::interprocess_mutex> lock(SharedData->mutex);
         return SharedData->commanded_position;
     }
+
+    std::array<double, 6> readCommandedVelocity() {
+        if (SharedData == NULL) throw "Must initialize shared memory space first";
+
+        boost::interprocess::scoped_lock<boost::interprocess::interprocess_mutex> lock(SharedData->mutex);
+        return SharedData->commanded_velocity;
+    }
+
+    void writeCommandedVelocity(std::array<double, 6> data){
+        if (SharedData == NULL) return;
+        boost::interprocess::scoped_lock<boost::interprocess::interprocess_mutex> lock(SharedData->mutex);
+        SharedData->commanded_velocity = data;
+    }
+    
     
     void writeCommandedPosition(std::array<double, 3> data){
         if (SharedData == NULL) return;

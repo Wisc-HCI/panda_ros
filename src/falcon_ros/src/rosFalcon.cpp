@@ -166,9 +166,9 @@ void pollFalcon(ros::Publisher pose_goal_pub, ros::Publisher command_pub) {
 void feedbackFalcon(geometry_msgs::Wrench wrench) {
     double scale = -0.1;
     m_falconDevice.setForce({
-                wrench.force.y * scale, 
+                -wrench.force.y * scale, 
                 wrench.force.z * scale, 
-                wrench.force.x * scale});
+                -wrench.force.x * scale});
 }
 
 int main(int argc, char **argv) {
