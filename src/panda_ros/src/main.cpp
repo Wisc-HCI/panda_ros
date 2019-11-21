@@ -71,9 +71,9 @@ int main(int argc, char **argv) {
     if(mode_str == "joint_velocity")
         mode = PandaController::ControlMode::JointVelocity;
     if(mode_str == "cartesian_position")
-        mode = PandaController::ControlMode::CartesianVelocity;
+        mode = PandaController::ControlMode::CartesianPosition;
     if(mode_str == "joint_position")
-        mode = PandaController::ControlMode::JointVelocity;
+        mode = PandaController::ControlMode::JointPosition;
     if(mode_str == "none")
         mode = PandaController::ControlMode::None;
         
