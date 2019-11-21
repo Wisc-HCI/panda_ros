@@ -86,7 +86,9 @@ int main(int argc, char **argv) {
             sub_position = n.subscribe("/spacenav/twist", 10, updateCallbackCartVel);
             break;
         case PandaController::ControlMode::JointVelocity:
-            //sub_position = n.subscribe("/relaxed_ik/joint_angle_solutions", 10, updateCallbackJointVel);
+            //TODO: fix to call correct method
+            // sub_position = n.subscribe("/relaxed_ik/joint_angle_solutions", 10, updateCallbackJointVel);
+            sub_position = n.subscribe("/relaxed_ik/joint_angle_solutions", 10, updateCallbackJointPos);
             break;
         case PandaController::ControlMode::CartesianPosition:
             sub_position = n.subscribe("/panda/pose", 10, updateCallbackCartPos);

@@ -24,6 +24,7 @@ namespace PandaController {
         shared_data* SharedData = NULL;
         mapped_region* memoryRegion;
         franka::Gripper *p_gripper;
+        double maxGripperWidth;
     }
 
     void stopControl() {
@@ -523,9 +524,9 @@ namespace PandaController {
 
 
     void runPositionController(char* ip = NULL){
-        if (ip == NULL) {
-            ip = "10.134.71.22";
-        }
+        // if (ip == NULL) {
+        //     ip = "10.134.71.22";
+        // }
         try {
             cout << "Before connect" << endl;
             franka::Robot robot(ip);
@@ -599,9 +600,9 @@ namespace PandaController {
     }
 
     void runVelocityController(char* ip = NULL){
-        if (ip == NULL) {
-            ip = "10.134.71.22";
-        }
+        // if (ip == NULL) {
+        //     ip = "10.134.71.22";
+        // }
         try {
             cout << "Before connect" << endl;
             franka::Robot robot(ip);
@@ -660,9 +661,9 @@ namespace PandaController {
 
 
     void runJointPositionController(char* ip = NULL){
-        if (ip == NULL) {
-            ip = "10.134.71.22";
-        }
+        // if (ip == NULL) {
+        //     ip = "10.134.71.22";
+        // }
         try {
             franka::Robot robot(ip);
             robot.automaticErrorRecovery();
@@ -734,20 +735,21 @@ namespace PandaController {
         stopControl();
     }
 
+    //TODO: this method does not work!!!!
     void runJointVelocityController(char* ip = NULL){
-        if (ip == NULL) {
-            ip = "10.134.71.22";
-        }
+        // if (ip == NULL) {
+        //     ip = "10.134.71.22";
+        // }
         try {
             franka::Robot robot(ip);
             robot.automaticErrorRecovery();
-            std::array<double,7> q_goal = {{0, -M_PI_4, 0, -3 * M_PI_4, 0, M_PI_2, M_PI_4}};
-            // std::array<double,7> q_goal = {{0.626267,-0.757022,8.87913e-06,-2.46825,-3.16042e-06,1.71123,1.41167}};
+            // std::array<double,7> q_goal = {{0, -M_PI_4, 0, -3 * M_PI_4, 0, M_PI_2, M_PI_4}};
+            std::array<double,7> q_goal = {{0.626267,-0.757022,8.87913e-06,-2.46825,-3.16042e-06,1.71123,1.41167}};
             MotionGenerator motion_generator(0.5, q_goal);
             robot.control(motion_generator);
             setDefaultBehavior(robot);
 
-            double time_max = 50.0;
+            double time_max = 180.0;
             double omega_max = 1.0;
             double time = 0.0;
             double delta_t = 0.001;
@@ -803,14 +805,13 @@ namespace PandaController {
             cout << e.what() << endl;
             stopControl();
         }
-        // std::cout << "\n\n\n\n\n\n\n\n Outside of panda control loop\n\n\n\n\n\n\n\n\n";
         stopControl();
     }
 
     void noController(char* ip = NULL){
-        if (ip == NULL) {
-            ip = "10.134.71.22";
-        }
+        // if (ip == NULL) {
+        //     ip = "10.134.71.22";
+        // }
         try {
             franka::Robot robot(ip);
             robot.automaticErrorRecovery();
@@ -867,7 +868,7 @@ namespace PandaController {
     bool graspObject() {
         cout<<"In grasp"<<endl;
         try {
-            return p_gripper->grasp(0.03994995,0.05,10,0.5,0.5);
+            return p_gripper->grasp(maxGripperWidth/2,0.2,10,0.5,0.5);
         } catch (franka::Exception const& e) {
             std::cout << e.what() << std::endl;
             return -1;
@@ -877,7 +878,7 @@ namespace PandaController {
     bool releaseObject() {
         try {
             p_gripper->stop();
-            return p_gripper->move(0.0798999,0.05);            
+            return p_gripper->move(maxGripperWidth,0.2);            
         } catch (franka::Exception const& e) {
             std::cout << e.what() << std::endl;
             return -1;
@@ -904,6 +905,9 @@ namespace PandaController {
             ip = "10.134.71.22";
         }    
         p_gripper = new franka::Gripper(ip);
+        homeGripper();
+        franka::GripperState state = p_gripper->readOnce();
+        maxGripperWidth = state.max_width;
 
         std::cout << "Starting" << std::endl;
 
