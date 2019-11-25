@@ -545,7 +545,6 @@ namespace PandaController {
             cout << "Model loaded" << endl;
 
             writeRobotState(robot.readOnce());
-            //startInvJacobianComputer();
             cout << "About to start" << endl;
 
             robot.control([=, &time, &count](const franka::RobotState& robot_state,

@@ -42,7 +42,6 @@ bool init_falcon() {
     bool skip_checksum = false;
     //See if we have firmware
     bool firmware_loaded = false;
-    //firmware_loaded = m_falconDevice.isFirmwareLoaded();
     
     // MH: forcing the firmware to reload seems to solve the issue where
     // we had to keep re-plugging it in
@@ -107,8 +106,6 @@ bool init_falcon() {
     }
 
     m_falconDevice.runIOLoop();
-    //falconFirmware = m_falconDevice.getFalconFirmware();
-    //falconKinematic = new FalconKinematicStamper(true);
     return true;
 }
 
@@ -139,7 +136,7 @@ int main() {
         return -1;
     }
     pollFalcon();
-    pid_t pid = PandaController::initPandaController(PandaController::ControlMode::CartesianVelocity);
+    pid_t pid = PandaController::initPandaController(PandaController::ControlMode::CartesianPosition);
     if (pid < 0) {
         cout << "Failed to start panda process" << endl;
     }
