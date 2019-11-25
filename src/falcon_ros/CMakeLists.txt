@@ -13,10 +13,10 @@ include_directories(${catkin_INCLUDE_DIRS})
 #generate_messages(DEPENDENCIES std_msgs)
 catkin_package(CATKIN_DEPENDS relaxed_ik)
 
-add_executable(rosFalcon ${CMAKE_CURRENT_SOURCE_DIR}/src/rosFalcon.cpp)
-target_link_libraries(rosFalcon ${LIBNIFALCON}  ${catkin_LIBRARIES})
-target_include_directories(rosFalcon PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include ${CMAKE_CURRENT_SOURCE_DIR}/../../devel/include)
+add_executable(falconRosWrapper ${CMAKE_CURRENT_SOURCE_DIR}/src/falcon_ros.cpp)
+target_link_libraries(falconRosWrapper ${LIBNIFALCON}  ${catkin_LIBRARIES})
+target_include_directories(falconRosWrapper PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include ${CMAKE_CURRENT_SOURCE_DIR}/../../devel/include)
 
-install(TARGETS rosFalcon
+install(TARGETS falconRosWrapper
   RUNTIME DESTINATION lib/falcon_ros
 )
