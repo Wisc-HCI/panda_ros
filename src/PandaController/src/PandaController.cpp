@@ -522,7 +522,7 @@ namespace PandaController {
         }
     }
 
-
+    //Input Cartesian position
     void runPositionController(char* ip = NULL){
         // if (ip == NULL) {
         //     ip = "10.134.71.22";
@@ -598,7 +598,7 @@ namespace PandaController {
         }
         stopControl();
     }
-
+    //Input Cartesian velocity
     void runVelocityController(char* ip = NULL){
         // if (ip == NULL) {
         //     ip = "10.134.71.22";
@@ -658,68 +658,61 @@ namespace PandaController {
         }
         stopControl();
     }
-
-
+    // Input Joint Position, control in velocity
     void runJointPositionController(char* ip = NULL){
-        // if (ip == NULL) {
-        //     ip = "10.134.71.22";
-        // }
         try {
             franka::Robot robot(ip);
             robot.automaticErrorRecovery();
             std::array<double,7> q_goal = {{0, -M_PI_4, 0, -3 * M_PI_4, 0, M_PI_2, M_PI_4}};
-            // std::array<double,7> q_goal = {{0.626267,-0.757022,8.87913e-06,-2.46825,-3.16042e-06,1.71123,1.41167}};
+            //std::array<double,7> q_goal = {{0.626267,-0.757022,8.87913e-06,-2.46825,-3.16042e-06,1.71123,1.41167}};
             MotionGenerator motion_generator(0.5, q_goal);
             robot.control(motion_generator);
             setDefaultBehavior(robot);
 
-            std::array<double, 7> initial_position;
-            std::array<double, 7> curr_position;
+            double time_max = 180.0;
+            double omega_max = 1.0;
             double time = 0.0;
-            double time_max = 5.0;
-            //int count = 0;
-            //franka::Model robotModel = robot.loadModel();
-            robot.control([=, &initial_position, &curr_position, &time](const franka::RobotState& robot_state,
-                                    franka::Duration period) -> franka::JointPositions {
+            double delta_t = 0.001;
+            std::array<double, 7> joint_pos;
+            std::array<double, 7> joint_vel;
+            std::array<double, 7> joint_acc;
+            cout << "In joint position controller" <<endl;
+            robot.control([=, &time, &joint_pos, &joint_vel, &joint_acc](const franka::RobotState& robot_state, franka::Duration period) -> franka::JointVelocities {
                 time += period.toSec();
-                writeRobotState(robot_state);
+                PandaController::writeRobotState(robot_state);
+                array<double, 7> joint_angles = readJointAngles();
 
-                if (time == 0.0) {
-                    initial_position = robot_state.q_d;
-                    curr_position = initial_position;
+                double scale = 5;
+                Eigen::VectorXd joint_velocity(7);
+                joint_velocity << 
+                    (joint_angles[0] - robot_state.q[0]) * scale,
+                    (joint_angles[1] - robot_state.q[1]) * scale,
+                    (joint_angles[2] - robot_state.q[2]) * scale,
+                    (joint_angles[3] - robot_state.q[3]) * scale,
+                    (joint_angles[4] - robot_state.q[4]) * scale,
+                    (joint_angles[5] - robot_state.q[5]) * scale,
+                    (joint_angles[6] - robot_state.q[6]) * scale;
+
+                //cout<<constrainJointVelocity(joint_velocity, robot_state)<<endl;
+                constrainJointVelocity(joint_velocity, robot_state);
+                Eigen::VectorXd lastJointAcceleration = (joint_velocity - Eigen::Map<const Eigen::VectorXd>(robot_state.dq_d.data(), 7)) * 1000;
+                for(int i = 0; i < 7; i++) {
+                    SharedData->lastJointAcceleration[i] = lastJointAcceleration[i];
                 }
-
-                array<double, 7> joint_angles = readJointAngles();  
-                array<double, 7> delta_angles;
-                for (int i = 0; i < 7; i++) {
-                    delta_angles[i] = joint_angles[i] - curr_position[i];
-                }
-
-                //TODO: some sort of bounds checking on the delta angles
-                //TODO: relaxed IK takes care of smoothing right?
-
-                for (int i = 0; i < 7; i++) {
-                    curr_position[i] = delta_angles[i] + curr_position[i];
-                }
-
-                //TODO: actually use the joint positions here
-                // franka::JointPositions output = {{curr_position[0], curr_position[1],
-                //                                 curr_position[2], curr_position[3],
-                //                                 curr_position[4], curr_position[5],
-                //                                 curr_position[6]}};
-
-                double delta_angle = M_PI / 8.0 * (1 - std::cos(M_PI / 2.5 * time));
-                franka::JointPositions output = {{initial_position[0], initial_position[1],
-                                                initial_position[2], initial_position[3] + delta_angle,
-                                                initial_position[4] + delta_angle, initial_position[5],
-                                                initial_position[6] + delta_angle}};
+                franka::JointVelocities velocities = {
+                    joint_velocity[0],
+                    joint_velocity[1],
+                    joint_velocity[2],
+                    joint_velocity[3],
+                    joint_velocity[4],
+                    joint_velocity[5],
+                    joint_velocity[6]};
 
                 if (time >= time_max) {
-                    std::cout << std::endl << "Finished motion, shutting down example" << std::endl;
-                    return franka::MotionFinished(output);
+                    std::cout << std::endl << "TIME OUT!!" << std::endl;
+                    return franka::MotionFinished(velocities);
                 }
-                //count =  count + 1;
-                return output;
+                return velocities;
             });
         } catch (const franka::ControlException& e) {
             cout << e.what() << endl;
@@ -735,16 +728,17 @@ namespace PandaController {
         stopControl();
     }
 
-    //TODO: this method does not work!!!!
+    // TODO: currently takes position as input, should be velocity
     void runJointVelocityController(char* ip = NULL){
         // if (ip == NULL) {
         //     ip = "10.134.71.22";
         // }
         try {
+            cout<<"There"<<endl;
             franka::Robot robot(ip);
             robot.automaticErrorRecovery();
-            // std::array<double,7> q_goal = {{0, -M_PI_4, 0, -3 * M_PI_4, 0, M_PI_2, M_PI_4}};
-            std::array<double,7> q_goal = {{0.626267,-0.757022,8.87913e-06,-2.46825,-3.16042e-06,1.71123,1.41167}};
+            std::array<double,7> q_goal = {{0, -M_PI_4, 0, -3 * M_PI_4, 0, M_PI_2, M_PI_4}};
+            //std::array<double,7> q_goal = {{0.626267,-0.757022,8.87913e-06,-2.46825,-3.16042e-06,1.71123,1.41167}};
             MotionGenerator motion_generator(0.5, q_goal);
             robot.control(motion_generator);
             setDefaultBehavior(robot);
@@ -808,6 +802,7 @@ namespace PandaController {
         stopControl();
     }
 
+    //Does not do anything, might need clean way to exit
     void noController(char* ip = NULL){
         // if (ip == NULL) {
         //     ip = "10.134.71.22";
@@ -850,6 +845,7 @@ namespace PandaController {
         // std::cout << "\n\n\n\n\n\n\n\n Outside of panda control loop\n\n\n\n\n\n\n\n\n";
         stopControl();
     }
+
     void writeGripperState() {
         franka::GripperState state = p_gripper->readOnce();
         std::cout << "Printing the gripper state:\n" << "Current width = " << state.width <<
