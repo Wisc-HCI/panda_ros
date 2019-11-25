@@ -1,4 +1,5 @@
 #include <ros/ros.h>
+#include <signal.h>
 #include "PandaController.h"
 #include "std_msgs/String.h"
 #include "geometry_msgs/Pose.h"
@@ -7,6 +8,11 @@
 #include <relaxed_ik/JointAngles.h>
 
 using namespace std;
+
+void mySigintHandler(int sig)
+{
+      ros::shutdown();
+}
 
 void updateCallbackCartPos(const geometry_msgs::Pose::ConstPtr& msg){
     if (PandaController::isRunning()){
@@ -31,6 +37,11 @@ void updateCallbackJointPos(const relaxed_ik::JointAngles::ConstPtr& msg){
         position[6] = msg->angles.data[6];
         PandaController::writeJointAngles(position);
     }
+}
+
+void updateCallbackJointVel(const relaxed_ik::JointAngles::ConstPtr& msg){
+    //TODO
+    return;
 }
 
 void updateCallbackCartVel(const geometry_msgs::Twist::ConstPtr& msg){
@@ -62,8 +73,8 @@ int main(int argc, char **argv) {
     ros::init(argc, argv, "PandaListener");
     ros::NodeHandle n("~");
     std::string mode_str;
-    n.getParam("control_mode", mode_str);
-
+    //Always specify parameter, it uses cached parameter instead of default value.
+    n.param<std::string>("control_mode", mode_str,"joint_position");
     PandaController::ControlMode mode;
 
     if(mode_str == "cartesian_velocity")
@@ -86,9 +97,8 @@ int main(int argc, char **argv) {
             sub_position = n.subscribe("/spacenav/twist", 10, updateCallbackCartVel);
             break;
         case PandaController::ControlMode::JointVelocity:
-            //TODO: fix to call correct method
-            // sub_position = n.subscribe("/relaxed_ik/joint_angle_solutions", 10, updateCallbackJointVel);
-            sub_position = n.subscribe("/relaxed_ik/joint_angle_solutions", 10, updateCallbackJointPos);
+            //TO DO
+            sub_position = n.subscribe("/relaxed_ik/joint_angle_solutions", 10, updateCallbackJointVel);
             break;
         case PandaController::ControlMode::CartesianPosition:
             sub_position = n.subscribe("/panda/pose", 10, updateCallbackCartPos);
@@ -97,9 +107,10 @@ int main(int argc, char **argv) {
             sub_position = n.subscribe("/relaxed_ik/joint_angle_solutions", 10, updateCallbackJointPos);
             break;
         case PandaController::ControlMode::None:
-            break;
-            
+            break;     
     }
+
+    signal(SIGINT, mySigintHandler);
 
     franka::RobotState currentState;
     std::array<double, 6> forces;

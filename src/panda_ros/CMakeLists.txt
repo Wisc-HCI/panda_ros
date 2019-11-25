@@ -16,6 +16,12 @@ find_library(
     
     PATHS ${CMAKE_CURRENT_SOURCE_DIR}/../../devel/lib
 )
+
+install(DIRECTORY
+    launch/
+    DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}/launch
+)
+
 message(STATUS ${pandaController})
 find_library(
     pandaCommon
@@ -24,10 +30,10 @@ find_library(
 )
 message(STATUS ${pandaCommon})
 
-add_executable(rosPandaVelocity src/main.cpp)
-target_include_directories(rosPandaVelocity PUBLIC ${catkin_INCLUDE_DIRS} ${CMAKE_CURRENT_SOURCE_DIR}/../../devel/include)
-target_link_libraries(rosPandaVelocity ${catkin_LIBRARIES} ${pandaController} ${pandaCommon} franka)
+add_executable(pandaRosWrapper src/panda_ros.cpp)
+target_include_directories(pandaRosWrapper PUBLIC ${catkin_INCLUDE_DIRS} ${CMAKE_CURRENT_SOURCE_DIR}/../../devel/include)
+target_link_libraries(pandaRosWrapper ${catkin_LIBRARIES} ${pandaController} ${pandaCommon} franka)
 
-install(TARGETS rosPandaVelocity
+install(TARGETS pandaRosWrapper
   RUNTIME DESTINATION lib/panda_ros
 )
