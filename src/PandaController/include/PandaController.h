@@ -54,9 +54,6 @@ namespace PandaController {
 
         std::array<double, 7> pose_goal; //<x, y, z, x, y, z, w>
         std::array<double, 7> joint_angles;
-        //uint32_t sequence_num;
-	    //bool quit;
-        //bool reset_solver;
         
         mutable boost::interprocess::interprocess_mutex mutex;
 
@@ -72,8 +69,6 @@ namespace PandaController {
             writeCommandedVelocity({0,0,0,0,0,0});
         }
     }; //end struct shared_data
-
-
 
 } //end namespace PandaController
 

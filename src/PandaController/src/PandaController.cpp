@@ -522,21 +522,19 @@ namespace PandaController {
         }
     }
 
-    //Input Cartesian position
+    //Input Cartesian position, control with cartesian velocities
     void runPositionController(char* ip = NULL){
-        // if (ip == NULL) {
-        //     ip = "10.134.71.22";
-        // }
         try {
-            cout << "Before connect" << endl;
+            cout << "In runPositionController" << endl;
             franka::Robot robot(ip);
+            cout << "Robot connected" << endl;
             robot.automaticErrorRecovery();
             MotionGenerator motion_generator(0.5, {{0.626267,-0.757022,8.87913e-06,-2.46825,-3.16042e-06,1.71123,1.41167}});
             cout << "Starting homing" << endl;
             robot.control(motion_generator);
             cout << "Motion complete" << endl;
             setDefaultBehavior(robot);
-            cout << "Default Behavior Set" << endl;
+            cout << "Default behavior set" << endl;
 
             double time_max = 30.0;
             double time = 0.0;
@@ -597,21 +595,19 @@ namespace PandaController {
         }
         stopControl();
     }
-    //Input Cartesian velocity
+    //Input Cartesian velocity, control with cartesian velocities
     void runVelocityController(char* ip = NULL){
-        // if (ip == NULL) {
-        //     ip = "10.134.71.22";
-        // }
         try {
-            cout << "Before connect" << endl;
+            cout << "In runVelocityController" << endl;
             franka::Robot robot(ip);
+            cout << "Robot connected" << endl;
             robot.automaticErrorRecovery();
             MotionGenerator motion_generator(0.5, {{0.626267,-0.757022,8.87913e-06,-2.46825,-3.16042e-06,1.71123,1.41167}});
             cout << "Starting homing" << endl;
             robot.control(motion_generator);
             cout << "Motion complete" << endl;
             setDefaultBehavior(robot);
-            cout << "Default Behavior Set" << endl;
+            cout << "Default behavior set" << endl;
 
             double time_max = 30.0;
             double time = 0.0;
@@ -657,16 +653,20 @@ namespace PandaController {
         }
         stopControl();
     }
-    // Input Joint Position, control in velocity
+    // Input joint positions (angles), control with joint velocities
     void runJointPositionController(char* ip = NULL){
         try {
+            cout << "In runJointPositionController" << endl;
             franka::Robot robot(ip);
+            cout << "Robot connected" << endl;
             robot.automaticErrorRecovery();
-            std::array<double,7> q_goal = {{0, -M_PI_4, 0, -3 * M_PI_4, 0, M_PI_2, M_PI_4}};
-            //std::array<double,7> q_goal = {{0.626267,-0.757022,8.87913e-06,-2.46825,-3.16042e-06,1.71123,1.41167}};
+            std::array<double,7> q_goal = {{0.626267,-0.757022,8.87913e-06,-2.46825,-3.16042e-06,1.71123,1.41167}};
             MotionGenerator motion_generator(0.5, q_goal);
+            cout << "Starting homing" << endl;
             robot.control(motion_generator);
+            cout << "Motion complete" << endl;
             setDefaultBehavior(robot);
+            cout << "Default behavior set" << endl;
 
             double time_max = 180.0;
             double omega_max = 1.0;
@@ -675,7 +675,11 @@ namespace PandaController {
             std::array<double, 7> joint_pos;
             std::array<double, 7> joint_vel;
             std::array<double, 7> joint_acc;
-            cout << "In joint position controller" <<endl;
+            cout << "Model loaded" << endl;
+            
+            writeRobotState(robot.readOnce());
+            cout << "About to start" << endl;
+
             robot.control([=, &time, &joint_pos, &joint_vel, &joint_acc](const franka::RobotState& robot_state, franka::Duration period) -> franka::JointVelocities {
                 time += period.toSec();
                 PandaController::writeRobotState(robot_state);
@@ -708,7 +712,7 @@ namespace PandaController {
                     joint_velocity[6]};
 
                 if (time >= time_max) {
-                    std::cout << std::endl << "TIME OUT!!" << std::endl;
+                    cout << endl << "Finished motion, shutting down example" << endl;
                     return franka::MotionFinished(velocities);
                 }
                 return velocities;
@@ -727,20 +731,21 @@ namespace PandaController {
         stopControl();
     }
 
-    // TODO: currently takes position as input, should be velocity
+    // Input joint velocity, controls joint velocities
+    // TODO: currently takes position input instead of velocity
     void runJointVelocityController(char* ip = NULL){
-        // if (ip == NULL) {
-        //     ip = "10.134.71.22";
-        // }
         try {
-            cout<<"There"<<endl;
+            cout << "In runJointVelocityController" << endl;
             franka::Robot robot(ip);
+            cout << "Robot connected" << endl;
             robot.automaticErrorRecovery();
-            std::array<double,7> q_goal = {{0, -M_PI_4, 0, -3 * M_PI_4, 0, M_PI_2, M_PI_4}};
-            //std::array<double,7> q_goal = {{0.626267,-0.757022,8.87913e-06,-2.46825,-3.16042e-06,1.71123,1.41167}};
+            std::array<double,7> q_goal = {{0.626267,-0.757022,8.87913e-06,-2.46825,-3.16042e-06,1.71123,1.41167}};
             MotionGenerator motion_generator(0.5, q_goal);
+            cout << "Starting homing" << endl;
             robot.control(motion_generator);
+            cout << "Motion complete" << endl;
             setDefaultBehavior(robot);
+            cout << "Default behavior set" << endl;
 
             double time_max = 180.0;
             double omega_max = 1.0;
@@ -749,7 +754,11 @@ namespace PandaController {
             std::array<double, 7> joint_pos;
             std::array<double, 7> joint_vel;
             std::array<double, 7> joint_acc;
-            cout << "In vel controller" <<endl;
+            cout << "Model loaded" << endl;
+            
+            writeRobotState(robot.readOnce());
+            cout << "About to start" << endl;
+
             robot.control([=, &time, &joint_pos, &joint_vel, &joint_acc](const franka::RobotState& robot_state, franka::Duration period) -> franka::JointVelocities {
                 time += period.toSec();
                 PandaController::writeRobotState(robot_state);
@@ -782,7 +791,7 @@ namespace PandaController {
                     joint_velocity[6]};
 
                 if (time >= time_max) {
-                    std::cout << std::endl << "TIME OUT!!" << std::endl;
+                    cout << endl << "Finished motion, shutting down example" << endl;
                     return franka::MotionFinished(velocities);
                 }
                 return velocities;
@@ -801,23 +810,30 @@ namespace PandaController {
         stopControl();
     }
 
-    //Does not do anything, might need clean way to exit
+    //Does not control the panda
+    //TODO: might need clean way to exit
     void noController(char* ip = NULL){
-        // if (ip == NULL) {
-        //     ip = "10.134.71.22";
-        // }
         try {
+            cout << "In noController" << endl;
             franka::Robot robot(ip);
+            cout << "Robot connected" << endl;
             robot.automaticErrorRecovery();
-            std::array<double,7> q_goal = {{0, -M_PI_4, 0, -3 * M_PI_4, 0, M_PI_2, M_PI_4}};
-            // std::array<double,7> q_goal = {{0.626267,-0.757022,8.87913e-06,-2.46825,-3.16042e-06,1.71123,1.41167}};
+            std::array<double,7> q_goal = {{0.626267,-0.757022,8.87913e-06,-2.46825,-3.16042e-06,1.71123,1.41167}};
             MotionGenerator motion_generator(0.5, q_goal);
+            cout << "Starting homing" << endl;
             robot.control(motion_generator);
+            cout << "Motion complete" << endl;
             setDefaultBehavior(robot);
+            cout << "Default behavior set" << endl;
 
             double time_max = 30.0;
             double time = 0.0;
             double delta_t = 0.001;
+            cout << "Model loaded" << endl;
+            
+            writeRobotState(robot.readOnce());
+            cout << "About to start" << endl;
+
             robot.control([=, &time](const franka::RobotState& robot_state, franka::Duration period) -> franka::JointVelocities {
                 time += period.toSec();
                 writeRobotState(robot_state);
@@ -825,7 +841,7 @@ namespace PandaController {
                 franka::JointVelocities velocities = {0,0,0,0,0,0,0};
 
                 if (time >= time_max) {
-                 std::cout << std::endl << "TIME OUT!!" << std::endl;
+                    cout << endl << "Finished motion, shutting down example" << endl;
                     return franka::MotionFinished(velocities);
                 }
                 return velocities;
@@ -841,7 +857,6 @@ namespace PandaController {
             cout << e.what() << endl;
             stopControl();
         }
-        // std::cout << "\n\n\n\n\n\n\n\n Outside of panda control loop\n\n\n\n\n\n\n\n\n";
         stopControl();
     }
 
@@ -861,7 +876,6 @@ namespace PandaController {
     }
 
     bool graspObject() {
-        cout<<"In grasp"<<endl;
         try {
             return p_gripper->grasp(maxGripperWidth/2,0.2,10,0.5,0.5);
         } catch (franka::Exception const& e) {
@@ -881,7 +895,6 @@ namespace PandaController {
     }
 
     void gripperTest() {
-        // homeGripper();
         writeGripperState();
         if(!graspObject()) {std::cout << "Could not grasp object\n";}
         writeGripperState();
@@ -890,22 +903,27 @@ namespace PandaController {
     }
 
     pid_t initPandaController(ControlMode mode, char* ip) {
+        //Creating the shared memory
         shared_memory_object shm(open_or_create, "Panda Controller", read_write);
         shm.truncate(sizeof(shared_data));
         memoryRegion = new mapped_region(shm, read_write);
         new (memoryRegion->get_address()) shared_data;
         SharedData = (shared_data*)memoryRegion->get_address();
 
+        //Setting the Panda IP
         if (ip == NULL) {
             ip = "10.134.71.22";
-        }    
+        }
+
+        //Initializing the gripper/ setting the max width
         p_gripper = new franka::Gripper(ip);
-        homeGripper();
+        if (!homeGripper()){
+            cout << "Could not home gripper\n";
+        }
         franka::GripperState state = p_gripper->readOnce();
         maxGripperWidth = state.max_width;
 
         std::cout << "Starting" << std::endl;
-
         SharedData->running = true;
         SharedData->start_time = std::chrono::system_clock::now();
         pid_t pid = fork();

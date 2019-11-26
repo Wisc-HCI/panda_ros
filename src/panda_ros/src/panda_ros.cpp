@@ -60,12 +60,16 @@ void updateCallbackCartVel(const geometry_msgs::Twist::ConstPtr& msg){
 void callbackCommands(const std_msgs::String& msg){
     if(msg.data == "button_pressed"){
         cout<<"Grasping"<<endl;
-        PandaController::graspObject();
+        if (!PandaController::graspObject()){
+            cout << "Could not grasp object\n";
+        }
     }
     if(msg.data == "button_released"){
         cout<<"Releasing"<<endl;
-        PandaController::releaseObject();
+        if (!PandaController::releaseObject()){
+            cout << "Could not release object\n";
         }
+    }
     
 }
 
@@ -97,7 +101,7 @@ int main(int argc, char **argv) {
             sub_position = n.subscribe("/spacenav/twist", 10, updateCallbackCartVel);
             break;
         case PandaController::ControlMode::JointVelocity:
-            //TO DO
+            //TODO: we don't actually have anything that uses this, not set up correctly in PandaController
             sub_position = n.subscribe("/relaxed_ik/joint_angle_solutions", 10, updateCallbackJointVel);
             break;
         case PandaController::ControlMode::CartesianPosition:
