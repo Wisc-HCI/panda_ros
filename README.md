@@ -16,7 +16,7 @@ To compile non-ros package (PandaController): go to the package's build folder a
     * Falcon:
 		- Terminal 1: `roslaunch relaxed_ik relaxed_ik_julia.launch`
 		- Terminal 2: `rosrun falcon_ros rosFalcon`
-		- Terminal 3: `rosrun panda_ros rosPandaVelocity _control_mode:=joint_velocity`
+		- Terminal 3: `rosrun panda_ros rosPandaVelocity _control_mode:=joint_position`
 	* Space mouse:
 	    - Terminal 1: `roslaunch spacenav_node classic.launch`
 	    - Terminal 2: `rosrun panda_ros rosPandaVelocity _control_mode:=cartesian_velocity`
