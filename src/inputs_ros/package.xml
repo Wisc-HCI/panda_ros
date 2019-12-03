@@ -1,9 +1,9 @@
 <?xml version="1.0"?>
 <package format="2">
-    <name>falcon_ros</name>
+    <name>inputs_ros</name>
     <version>1.0.0</version>
     <description>
-        Ros node for the Falcon.
+        Ros nodes for the different input methods.
     </description>
     <maintainer email="wisconsinhci@gmail.com">Mike H., Kevin W., Tim L., Luis M., Emmanuel S.</maintainer>
     <license>WTFPL</license>
@@ -12,6 +12,8 @@
 
     <depend>roscpp</depend>
     <depend>std_msgs</depend>
+    <depend>sensor_msgs</depend>
+    <depend>geometry_msgs</depend>
     <depend>relaxed_ik</depend>
 
 </package>
