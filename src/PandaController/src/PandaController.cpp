@@ -628,7 +628,7 @@ namespace PandaController {
                 Eigen::VectorXd jointVelocities = Eigen::Map<Eigen::MatrixXd>(SharedData->jacobian.data(), 6, 7).completeOrthogonalDecomposition().solve(v);
                 constrainJointVelocity(jointVelocities, robot_state);
                 v = Eigen::Map<Eigen::MatrixXd>(SharedData->jacobian.data(), 6, 7) * jointVelocities;
-                franka::CartesianVelocities output = {{v[0], v[1], v[2], 0.0, 0.0, 0.0}};
+                franka::CartesianVelocities output = {{v[0], v[1], v[2], v[3], v[4], v[5]}};
                 Eigen::VectorXd lastJointAcceleration = (jointVelocities - Eigen::Map<const Eigen::VectorXd>(robot_state.dq_d.data(), 7)) * 1000;
                 for(int i = 0; i < 7; i++) {
                     SharedData->lastJointAcceleration[i] = lastJointAcceleration[i];

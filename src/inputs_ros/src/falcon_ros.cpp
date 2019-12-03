@@ -134,9 +134,9 @@ void pollFalcon(ros::Publisher pose_goal_pub, ros::Publisher command_pub) {
     falconPos = m_falconDevice.getPosition();
     std::array<double, 7> panda_pos = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
     
-    panda_pos[0] = .05 - .5 * 0.26 * ((falconPos[2] - 0.074) / 0.099);
-    panda_pos[1] = 2*(.16 - .5 * 0.47 * ((falconPos[0] + 0.047) / 0.067));
-    panda_pos[2] = 2*(-.08 + .5 * 0.3 * ((falconPos[1] + 0.05) / 0.098));
+    panda_pos[0] = 1.5*(.05 - .5 * 0.26 * ((falconPos[2] - 0.074) / 0.099));
+    panda_pos[1] = 3*(.16 - .5 * 0.47 * ((falconPos[0] + 0.047) / 0.067));
+    panda_pos[2] = 2.5*(-.08 + .5 * 0.3 * ((falconPos[1] + 0.05) / 0.098));
     panda_pos[6] = 1;
     
     publishPose(pose_goal_pub, panda_pos);
@@ -153,10 +153,10 @@ void pollFalcon(ros::Publisher pose_goal_pub, ros::Publisher command_pub) {
     if(buttons[0] != lastCenterButton){
         std_msgs::String cmd;
         if(buttons[0]){
-            cmd.data = "button_pressed";
+            cmd.data = "grasp";
         }
         else{
-            cmd.data = "button_released";
+            cmd.data = "release";
         }
         command_pub.publish(cmd);
     }
@@ -182,7 +182,7 @@ int main(int argc, char **argv) {
     ros::Publisher pose_goal_pub = 
         n.advertise<relaxed_ik::EEPoseGoals>("/relaxed_ik/ee_pose_goals", 5);
     ros::Publisher command_pub = 
-        n.advertise<std_msgs::String>("/interaction/commands", 5);
+        n.advertise<std_msgs::String>("/panda/commands", 5);
     ros::Subscriber force_sub = n.subscribe("/panda/wrench", 10, feedbackFalcon);
     while(ros::ok()){
         pollFalcon(pose_goal_pub,command_pub);
