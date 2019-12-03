@@ -14,6 +14,7 @@
 #include "PandaController.h"
 #include "Common.h"
 #include <eigen3/Eigen/Dense>
+#include <csignal>
 
 
 using namespace boost::interprocess;
@@ -25,7 +26,7 @@ namespace PandaController {
         mapped_region* memoryRegion;
         franka::Gripper *p_gripper;
         double maxGripperWidth;
-    }
+    }  
 
     void stopControl() {
         cout << "Control stopping" << endl;
@@ -536,7 +537,7 @@ namespace PandaController {
             setDefaultBehavior(robot);
             cout << "Default behavior set" << endl;
 
-            double time_max = 30.0;
+            //double time_max = 30.0;
             double time = 0.0;
             double v_max = 0.1;
             int count = 0;
@@ -576,7 +577,7 @@ namespace PandaController {
                     SharedData->lastJointAcceleration[i] = lastJointAcceleration[i];
                 }
                 
-                if (time >= time_max) {
+                if (!isRunning()) {
                     cout << endl << "Finished motion, shutting down example" << endl;
                     return franka::MotionFinished(output);
                 }
@@ -593,7 +594,7 @@ namespace PandaController {
             cout << e.what() << endl;
             stopControl();
         }
-        stopControl();
+        //stopControl();
     }
     //Input Cartesian velocity, control with cartesian velocities
     void runVelocityController(char* ip = NULL){
@@ -609,7 +610,7 @@ namespace PandaController {
             setDefaultBehavior(robot);
             cout << "Default behavior set" << endl;
 
-            double time_max = 30.0;
+            // double time_max = 30.0;
             double time = 0.0;
             double v_max = 0.1;
             int count = 0;
@@ -634,7 +635,7 @@ namespace PandaController {
                     SharedData->lastJointAcceleration[i] = lastJointAcceleration[i];
                 }
                 
-                if (time >= time_max) {
+                if (!isRunning()) {
                     cout << endl << "Finished motion, shutting down example" << endl;
                     return franka::MotionFinished(output);
                 }
@@ -651,7 +652,7 @@ namespace PandaController {
             cout << e.what() << endl;
             stopControl();
         }
-        stopControl();
+        //stopControl();
     }
     // Input joint positions (angles), control with joint velocities
     void runJointPositionController(char* ip = NULL){
@@ -711,7 +712,7 @@ namespace PandaController {
                     joint_velocity[5],
                     joint_velocity[6]};
 
-                if (time >= time_max) {
+                if (!isRunning()) {
                     cout << endl << "Finished motion, shutting down example" << endl;
                     return franka::MotionFinished(velocities);
                 }
@@ -728,7 +729,7 @@ namespace PandaController {
             cout << e.what() << endl;
             stopControl();
         }
-        stopControl();
+        //stopControl();
     }
 
     // Input joint velocity, controls joint velocities
@@ -790,7 +791,7 @@ namespace PandaController {
                     joint_velocity[5],
                     joint_velocity[6]};
 
-                if (time >= time_max) {
+                if (!isRunning()) {
                     cout << endl << "Finished motion, shutting down example" << endl;
                     return franka::MotionFinished(velocities);
                 }
@@ -807,7 +808,7 @@ namespace PandaController {
             cout << e.what() << endl;
             stopControl();
         }
-        stopControl();
+        //stopControl();
     }
 
     //Does not control the panda
@@ -840,7 +841,7 @@ namespace PandaController {
 
                 franka::JointVelocities velocities = {0,0,0,0,0,0,0};
 
-                if (time >= time_max) {
+                if (!isRunning()) {
                     cout << endl << "Finished motion, shutting down example" << endl;
                     return franka::MotionFinished(velocities);
                 }
@@ -857,7 +858,7 @@ namespace PandaController {
             cout << e.what() << endl;
             stopControl();
         }
-        stopControl();
+        //stopControl();
     }
 
     void writeGripperState() {

@@ -15,12 +15,21 @@
 #include "falcon/core/FalconGeometry.h"
 #include "falcon/gmtl/gmtl.h"
 #include "falcon/util/FalconFirmwareBinaryNvent.h"
+#include <csignal>
 
 using namespace std;
 using namespace libnifalcon;
 using namespace StamperKinematicImpl;
 
 FalconDevice m_falconDevice;
+
+void signalHandler(int sig)
+{
+    std::cout << "Interrupt " << sig << " recieved in Falcon.cpp\n";
+    PandaController::stopControl();
+
+    exit(sig);
+}
 
 bool init_falcon() {
     cout <<"Setting up LibUSB\n";
@@ -131,6 +140,9 @@ void feedbackFalcon() {
 }
 
 int main() {
+    //Setup the signal handler for exiting
+    signal(SIGINT, signalHandler);
+
     if (!init_falcon()) {
         cout << "Failed to init falcon" << endl;
         return -1;

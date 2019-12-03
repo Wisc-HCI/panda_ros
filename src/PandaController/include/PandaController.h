@@ -15,6 +15,7 @@ namespace PandaController {
 
     enum ControlMode {CartesianVelocity, CartesianPosition, JointVelocity, JointPosition, None};
 
+    void stopControl();
     pid_t initPandaController(ControlMode, char* = NULL);
 
     std::array<double, 3> readCommandedPosition();

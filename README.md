@@ -15,14 +15,14 @@ To compile non-ros package (PandaController): go to the package's build folder a
 2. Start the ros nodes related to the application:
     * Falcon:
 		- Terminal 1: `roslaunch relaxed_ik relaxed_ik_julia.launch`
-		- Terminal 2: `rosrun falcon_ros rosFalcon`
-		- Terminal 3: `rosrun panda_ros rosPandaVelocity _control_mode:=joint_position`
+		- Terminal 2: `rosrun falcon_ros falconRosWrapper`
+		- Terminal 3: `rosrun panda_ros pandaRosWrapper _control_mode:=joint_position`
 	* Space mouse:
 	    - Terminal 1: `roslaunch spacenav_node classic.launch`
-	    - Terminal 2: `rosrun panda_ros rosPandaVelocity _control_mode:=cartesian_velocity`
+	    - Terminal 2: `rosrun panda_ros pandaRosWrapper _control_mode:=cartesian_velocity`
 
 
 ## Running without ROS
 Falcon controller running a real-time 1kHz control loop:
 1. Move to PandaFCI/devel/bin directory
-2. Run `Falcon <robot ip>`
+2. Run `./Falcon <robot ip>`

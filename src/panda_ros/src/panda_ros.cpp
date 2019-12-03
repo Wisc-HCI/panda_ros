@@ -6,12 +6,17 @@
 #include "geometry_msgs/Twist.h"
 #include "geometry_msgs/Wrench.h"
 #include <relaxed_ik/JointAngles.h>
+#include <csignal>
 
 using namespace std;
 
-void mySigintHandler(int sig)
+void signalHandler(int sig)
 {
-      ros::shutdown();
+    std::cout << "Interrupt " << sig << " recieved in panda_ros.cpp\n";
+    PandaController::stopControl();
+    ros::shutdown();
+
+    exit(sig);
 }
 
 void updateCallbackCartPos(const geometry_msgs::Pose::ConstPtr& msg){
@@ -92,6 +97,9 @@ int main(int argc, char **argv) {
     if(mode_str == "none")
         mode = PandaController::ControlMode::None;
         
+    //Setup the signal handler for exiting, must be called after ros is intialized
+    signal(SIGINT, signalHandler); 
+
     PandaController::initPandaController(mode);
     
     ros::Subscriber sub_commands = n.subscribe("/interaction/commands", 10, callbackCommands);
@@ -113,8 +121,6 @@ int main(int argc, char **argv) {
         case PandaController::ControlMode::None:
             break;     
     }
-
-    signal(SIGINT, mySigintHandler);
 
     franka::RobotState currentState;
     std::array<double, 6> forces;
