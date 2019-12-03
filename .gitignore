@@ -2,5 +2,6 @@ build/
 devel/*
 src/PandaController/build/
 .catkin_workspace
-*.pyc
-src/relaxed_ik/src/RelaxedIK/GROOVE/GROOVE_Utils/*.pyc
+**/*.pyc
+#/src/relaxed_ik/src/RelaxedIK/GROOVE/GROOVE_Utils/**
+src/relaxed_ik/src/RelaxedIK/GROOVE/GROOVE_Utils/__init__.pyc
