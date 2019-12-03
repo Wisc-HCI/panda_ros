@@ -2,7 +2,7 @@
     <node pkg="panda_ros" type="pandaRosWrapper" name="panda_controller" output="screen">
 		<param name="control_mode" value="joint_position" />
     </node>
-    <node pkg="falcon_ros" type="falconRosWrapper" name="falcon_interface" output="screen">
+    <node pkg="inputs_ros" type="falconRosWrapper" name="falcon_interface" output="screen">
 		<param name="control_mode" value="joint_position" />
     </node>
 </launch>

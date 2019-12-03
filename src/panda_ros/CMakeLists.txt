@@ -17,10 +17,6 @@ find_library(
     PATHS ${CMAKE_CURRENT_SOURCE_DIR}/../../devel/lib
 )
 
-install(DIRECTORY
-    launch/
-    DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}/launch
-)
 
 message(STATUS ${pandaController})
 find_library(
