@@ -7,4 +7,4 @@ make install
 cd ../../..
 catkin_make --only-pkg-with-deps relaxed_ik
 catkin_make --only-pkg-with-deps panda_ros
-catkin_make --only-pkg-with-deps falcon_ros
+catkin_make --only-pkg-with-deps inputs_ros
