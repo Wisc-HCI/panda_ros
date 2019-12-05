@@ -15,6 +15,8 @@
 #include "PandaController.h"
 #include "Common.h"
 #include <eigen3/Eigen/Dense>
+#include <csignal>
+#include <thread>
 
 
 using namespace boost::interprocess;
@@ -26,7 +28,7 @@ namespace PandaController {
         mapped_region* memoryRegion;
         franka::Gripper *p_gripper;
         double maxGripperWidth;
-    }
+    }  
 
     void stopControl() {
         cout << "Control stopping" << endl;
@@ -585,14 +587,15 @@ namespace PandaController {
             franka::Robot robot(ip);
             cout << "Robot connected" << endl;
             robot.automaticErrorRecovery();
-            MotionGenerator motion_generator(0.5, {{0.626267,-0.757022,8.87913e-06,-2.46825,-3.16042e-06,1.71123,1.41167}});
+            std::array<double,7> q_goal = {{0.0,-0.4,0.0,-2.0,0.0,1.6,0.8}};
+            MotionGenerator motion_generator(0.5, q_goal);
             cout << "Starting homing" << endl;
             robot.control(motion_generator);
             cout << "Motion complete" << endl;
             setDefaultBehavior(robot);
             cout << "Default behavior set" << endl;
 
-            double time_max = 30.0;
+            //double time_max = 30.0;
             double time = 0.0;
             double v_max = 0.1;
             int count = 0;
@@ -634,7 +637,7 @@ namespace PandaController {
                     SharedData->lastJointAcceleration[i] = lastJointAcceleration[i];
                 }
                 
-                if (time >= time_max) {
+                if (!isRunning()) {
                     cout << endl << "Finished motion, shutting down example" << endl;
 
                     return franka::MotionFinished(output);
@@ -657,14 +660,15 @@ namespace PandaController {
             franka::Robot robot(ip);
             cout << "Robot connected" << endl;
             robot.automaticErrorRecovery();
-            MotionGenerator motion_generator(0.5, {{0.626267,-0.757022,8.87913e-06,-2.46825,-3.16042e-06,1.71123,1.41167}});
+            std::array<double,7> q_goal = {{0.0,-0.4,0.0,-2.0,0.0,1.6,0.8}};
+            MotionGenerator motion_generator(0.5, q_goal);
             cout << "Starting homing" << endl;
             robot.control(motion_generator);
             cout << "Motion complete" << endl;
             setDefaultBehavior(robot);
             cout << "Default behavior set" << endl;
 
-            double time_max = 30.0;
+            // double time_max = 30.0;
             double time = 0.0;
             double v_max = 0.1;
             int count = 0;
@@ -689,13 +693,13 @@ namespace PandaController {
                 realTime = chrono::system_clock::now();
                 cout << "Velocity " << v.transpose() << endl;
                 cout << "Joint Velocity " << jointVelocities.transpose() << endl;
-                franka::CartesianVelocities output = {{v[0], v[1], v[2], 0.0, 0.0, 0.0}};
+                franka::CartesianVelocities output = {{v[0], v[1], v[2], v[3], v[4], v[5]}};
                 Eigen::VectorXd lastJointAcceleration = (jointVelocities - Eigen::Map<const Eigen::VectorXd>(robot_state.dq_d.data(), 7)) * 1000;
                 for(int i = 0; i < 7; i++) {
                     SharedData->lastJointAcceleration[i] = lastJointAcceleration[i];
                 }
                 
-                if (time >= time_max) {
+                if (!isRunning()) {
                     cout << endl << "Finished motion, shutting down example" << endl;
                     return franka::MotionFinished(output);
                 }
@@ -715,7 +719,6 @@ namespace PandaController {
             cout << e.what() << endl;
             stopControl();
         }
-        stopControl();
     }
     // Input joint positions (angles), control with joint velocities
     void runJointPositionController(char* ip = NULL){
@@ -724,7 +727,7 @@ namespace PandaController {
             franka::Robot robot(ip);
             cout << "Robot connected" << endl;
             robot.automaticErrorRecovery();
-            std::array<double,7> q_goal = {{0.626267,-0.757022,8.87913e-06,-2.46825,-3.16042e-06,1.71123,1.41167}};
+            std::array<double,7> q_goal = {{0.0,-0.4,0.0,-2.0,0.0,1.6,0.8}};
             MotionGenerator motion_generator(0.5, q_goal);
             cout << "Starting homing" << endl;
             robot.control(motion_generator);
@@ -775,7 +778,7 @@ namespace PandaController {
                     joint_velocity[5],
                     joint_velocity[6]};
 
-                if (time >= time_max) {
+                if (!isRunning()) {
                     cout << endl << "Finished motion, shutting down example" << endl;
                     return franka::MotionFinished(velocities);
                 }
@@ -792,7 +795,6 @@ namespace PandaController {
             cout << e.what() << endl;
             stopControl();
         }
-        stopControl();
     }
 
     // Input joint velocity, controls joint velocities
@@ -803,7 +805,7 @@ namespace PandaController {
             franka::Robot robot(ip);
             cout << "Robot connected" << endl;
             robot.automaticErrorRecovery();
-            std::array<double,7> q_goal = {{0.626267,-0.757022,8.87913e-06,-2.46825,-3.16042e-06,1.71123,1.41167}};
+            std::array<double,7> q_goal = {{0.0,-0.4,0.0,-2.0,0.0,1.6,0.8}};
             MotionGenerator motion_generator(0.5, q_goal);
             cout << "Starting homing" << endl;
             robot.control(motion_generator);
@@ -854,7 +856,7 @@ namespace PandaController {
                     joint_velocity[5],
                     joint_velocity[6]};
 
-                if (time >= time_max) {
+                if (!isRunning()) {
                     cout << endl << "Finished motion, shutting down example" << endl;
                     return franka::MotionFinished(velocities);
                 }
@@ -871,18 +873,16 @@ namespace PandaController {
             cout << e.what() << endl;
             stopControl();
         }
-        stopControl();
     }
 
     //Does not control the panda
-    //TODO: might need clean way to exit
     void noController(char* ip = NULL){
         try {
             cout << "In noController" << endl;
             franka::Robot robot(ip);
             cout << "Robot connected" << endl;
             robot.automaticErrorRecovery();
-            std::array<double,7> q_goal = {{0.626267,-0.757022,8.87913e-06,-2.46825,-3.16042e-06,1.71123,1.41167}};
+            std::array<double,7> q_goal = {{0.0,-0.4,0.0,-2.0,0.0,1.6,0.8}};
             MotionGenerator motion_generator(0.5, q_goal);
             cout << "Starting homing" << endl;
             robot.control(motion_generator);
@@ -904,7 +904,7 @@ namespace PandaController {
 
                 franka::JointVelocities velocities = {0,0,0,0,0,0,0};
 
-                if (time >= time_max) {
+                if (!isRunning()) {
                     cout << endl << "Finished motion, shutting down example" << endl;
                     return franka::MotionFinished(velocities);
                 }
@@ -921,7 +921,6 @@ namespace PandaController {
             cout << e.what() << endl;
             stopControl();
         }
-        stopControl();
     }
 
     void writeGripperState() {
@@ -930,39 +929,54 @@ namespace PandaController {
                      "m\nMax width = " << state.max_width << "m\nIs grasped = " << state.is_grasped << "\n";        
     }
 
-    bool homeGripper() {
-        try {
-            return p_gripper->homing();
-        } catch (franka::Exception const& e) {
-            std::cout << e.what() << std::endl;
-            return -1;
-        }
-    }
-
-    bool graspObject() {
-        try {
-            return p_gripper->grasp(maxGripperWidth/2,0.2,10,0.5,0.5);
-        } catch (franka::Exception const& e) {
-            std::cout << e.what() << std::endl;
-            return -1;
-        }
-    }
-
-    bool releaseObject() {
+    void homeGripper() {
         try {
             p_gripper->stop();
-            return p_gripper->move(maxGripperWidth,0.2);            
+            p_gripper->homing();
         } catch (franka::Exception const& e) {
             std::cout << e.what() << std::endl;
-            return -1;
         }
     }
 
+    void graspObj() {
+        try {
+            p_gripper->stop();
+            p_gripper->grasp(maxGripperWidth/2,0.2,10,0.5,0.5);
+        } catch (franka::Exception const& e) {
+            std::cout << e.what() << std::endl;
+        }
+    }
+
+    void graspObject(){
+        pid_t pid = fork();
+        if (pid == 0) {
+            graspObj();
+            exit(0);
+        }
+    }
+
+    void releaseObj() {
+        try {
+            p_gripper->stop();
+            p_gripper->move(maxGripperWidth,0.2);
+        } catch (franka::Exception const& e) {
+            std::cout << e.what() << std::endl;
+        }
+    }
+
+    void releaseObject() {
+        pid_t pid = fork();
+        if (pid == 0) {
+            releaseObj();
+            exit(0);
+        }
+    }
     void gripperTest() {
-        writeGripperState();
-        if(!graspObject()) {std::cout << "Could not grasp object\n";}
-        writeGripperState();
-        if(!releaseObject()) {std::cout << "Could not release object\n";}
+        std::cout << "In gripperTest\n";
+        p_gripper->move(0.04, 0.2);
+        // if(!graspObject()) {std::cout << "Could not grasp object\n";}
+        // writeGripperState();
+        // if(!releaseObject()) {std::cout << "Could not release object\n";}
         writeGripperState();
     }
 
@@ -1013,26 +1027,6 @@ namespace PandaController {
     void startLogging() {
         if (SharedData == NULL) throw "Must initialize shared memory space first";
         SharedData->logging = true;
-    }
-    void stopLogging() {
-        if (SharedData == NULL) return;
-        SharedData->logging = false;
-    }
-
-    bool isRunning() {
-        if (SharedData == NULL) return false;
-        return SharedData->running;
-    }
-
-    std::array<double, 3> readCommandedPosition(){
-        if (SharedData == NULL) throw "Must initialize shared memory space first";
-
-        boost::interprocess::scoped_lock<boost::interprocess::interprocess_mutex> lock(SharedData->mutex);
-        return SharedData->commanded_position;
-    }
-
-    std::array<double, 6> readCommandedVelocity() {
-        if (SharedData == NULL) throw "Must initialize shared memory space first";
 
         boost::interprocess::scoped_lock<boost::interprocess::interprocess_mutex> lock(SharedData->mutex);
         return SharedData->commanded_velocity;
@@ -1098,6 +1092,12 @@ namespace PandaController {
             SharedData->timestamps[SharedData->buffer_end-1] = (std::chrono::system_clock::now() - SharedData->start_time).count();
         }
         SharedData->current_state = data;
+    }
+
+    void printRobotJointAngles(franka::RobotState data){
+        std::array<double, 7> a = data.q;
+        std::cout << "Joint angles: " << a[0] << ", " << a[1] << ", " << a[2] << ", " << a[3] << ", "
+                                        << a[4] << ", " << a[5] << ", " << a[6] << "\n";
     }
 
     void consumeBuffer(int &count, franka::RobotState* result, long* times){

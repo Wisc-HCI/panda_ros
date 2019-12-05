@@ -1,0 +1,9 @@
+<launch>
+    <node pkg="panda_ros" type="pandaRosWrapper" name="panda_controller" output="screen">
+		<param name="control_mode" value="joint_position" />
+    </node>
+    <node pkg="inputs_ros" type="falconRosWrapper" name="falcon_interface" output="screen">
+		<rosparam param="offsets">[.15, 0, 0]</rosparam>
+		<rosparam param="scaling_factors">[-.20, -.25, .25]</rosparam>
+    </node>
+</launch>

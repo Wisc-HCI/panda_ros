@@ -15,6 +15,7 @@ namespace PandaController {
 
     enum ControlMode {CartesianVelocity, CartesianPosition, JointVelocity, JointPosition, None};
 
+    void stopControl();
     pid_t initPandaController(ControlMode, char* = NULL);
 
     std::array<double, 3> readCommandedPosition();
@@ -31,15 +32,16 @@ namespace PandaController {
 
     franka::RobotState readRobotState();
     void writeRobotState(franka::RobotState data);
+    void printRobotJointAngles(franka::RobotState data);
     void consumeBuffer(int &, franka::RobotState*, long *);
 
     void startLogging();
     bool isRunning();
 
     void writeGripperState();
-    bool homeGripper();
-    bool graspObject();
-    bool releaseObject();
+    void homeGripper();
+    void graspObject();
+    void releaseObject();
 
     struct shared_data {
     public:

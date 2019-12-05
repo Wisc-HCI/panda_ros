@@ -6,12 +6,30 @@
 #include "geometry_msgs/Twist.h"
 #include "geometry_msgs/Wrench.h"
 #include <relaxed_ik/JointAngles.h>
+#include <csignal>
 
 using namespace std;
 
-void mySigintHandler(int sig)
+void signalHandler(int sig)
 {
-      ros::shutdown();
+    std::cout << "Interrupt " << sig << " recieved in panda_ros.cpp\n";
+    PandaController::stopControl();
+    ros::NodeHandle n("~");
+    ros::Publisher wrenchPub = n.advertise<geometry_msgs::Wrench>("/panda/wrench", 10);
+    geometry_msgs::Wrench wrench;
+    wrench.force.x = 0;
+    wrench.force.y = 0;
+    wrench.force.z = 0;
+    wrench.torque.x = 0;
+    wrench.torque.y = 0;
+    wrench.torque.z = 0;
+
+    wrenchPub.publish(wrench);   
+    ros::shutdown();
+
+    std::array<double, 6> data = {0.0,0.0,0.0,0.0,0.0,0.0};
+    PandaController::writeCommandedVelocity(data);
+    exit(sig);
 }
 
 void updateCallbackCartPos(const geometry_msgs::Pose::ConstPtr& msg){
@@ -46,29 +64,25 @@ void updateCallbackJointVel(const relaxed_ik::JointAngles::ConstPtr& msg){
 
 void updateCallbackCartVel(const geometry_msgs::Twist::ConstPtr& msg){
     if (PandaController::isRunning()){
-        std::array<double, 6> position;
-        position[0] = msg->linear.x/2.5;
-        position[1] = msg->linear.y/2.5;
-        position[2] = msg->linear.z/2.5;
-        position[3] = 0;
-        position[4] = 0;
-        position[5] = 0;
-        PandaController::writeCommandedVelocity(position);
+        std::array<double, 6> velocity;
+        velocity[0] = msg->linear.x;
+        velocity[1] = msg->linear.y;
+        velocity[2] = msg->linear.z;
+        velocity[3] = msg->angular.x;
+        velocity[4] = msg->angular.y;
+        velocity[5] = msg->angular.z;
+        PandaController::writeCommandedVelocity(velocity);
     }
 }
 
 void callbackCommands(const std_msgs::String& msg){
-    if(msg.data == "button_pressed"){
+
+    if(msg.data == "grasp"){
         cout<<"Grasping"<<endl;
-        if (!PandaController::graspObject()){
-            cout << "Could not grasp object\n";
-        }
+        PandaController::graspObject();
     }
-    if(msg.data == "button_released"){
-        cout<<"Releasing"<<endl;
-        if (!PandaController::releaseObject()){
-            cout << "Could not release object\n";
-        }
+    if(msg.data == "release"){
+        PandaController::releaseObject();
     }
     
 }
@@ -78,7 +92,7 @@ int main(int argc, char **argv) {
     ros::NodeHandle n("~");
     std::string mode_str;
     //Always specify parameter, it uses cached parameter instead of default value.
-    n.param<std::string>("control_mode", mode_str,"joint_position");
+    n.param<std::string>("control_mode", mode_str,"none");
     PandaController::ControlMode mode;
 
     if(mode_str == "cartesian_velocity")
@@ -92,20 +106,23 @@ int main(int argc, char **argv) {
     if(mode_str == "none")
         mode = PandaController::ControlMode::None;
         
+    //Setup the signal handler for exiting, must be called after ros is intialized
+    signal(SIGINT, signalHandler); 
+
     PandaController::initPandaController(mode);
     
-    ros::Subscriber sub_commands = n.subscribe("/interaction/commands", 10, callbackCommands);
+    ros::Subscriber sub_commands = n.subscribe("/panda/commands", 10, callbackCommands);
     ros::Subscriber sub_position;
     switch(mode){
         case PandaController::ControlMode::CartesianVelocity:
-            sub_position = n.subscribe("/spacenav/twist", 10, updateCallbackCartVel);
+            sub_position = n.subscribe("/panda/cart_vel", 10, updateCallbackCartVel);
             break;
         case PandaController::ControlMode::JointVelocity:
             //TODO: we don't actually have anything that uses this, not set up correctly in PandaController
             sub_position = n.subscribe("/relaxed_ik/joint_angle_solutions", 10, updateCallbackJointVel);
             break;
         case PandaController::ControlMode::CartesianPosition:
-            sub_position = n.subscribe("/panda/pose", 10, updateCallbackCartPos);
+            sub_position = n.subscribe("/panda/cart_pose", 10, updateCallbackCartPos);
             break;
         case PandaController::ControlMode::JointPosition:
             sub_position = n.subscribe("/relaxed_ik/joint_angle_solutions", 10, updateCallbackJointPos);
@@ -113,8 +130,6 @@ int main(int argc, char **argv) {
         case PandaController::ControlMode::None:
             break;     
     }
-
-    signal(SIGINT, mySigintHandler);
 
     franka::RobotState currentState;
     std::array<double, 6> forces;
