@@ -25,7 +25,7 @@ using namespace libnifalcon;
 using namespace StamperKinematicImpl;
 
 FalconDevice m_falconDevice;
-
+ 
 bool init_falcon() {
     cout <<"Setting up LibUSB\n";
     m_falconDevice.close();
@@ -127,16 +127,20 @@ void publishPose(ros::Publisher pose_goal_pub, std::array<double, 7> panda_pose)
     pose_goal_pub.publish(ee_goal);
 }
 
-void pollFalcon(ros::Publisher pose_goal_pub, ros::Publisher command_pub) {
+void pollFalcon(ros::Publisher pose_goal_pub, ros::Publisher command_pub, double* scaling_factors, double* offsets) {
     static bool lastCenterButton = false;
     array<double, 3> falconPos = {0,0,0};
     m_falconDevice.runIOLoop();
     falconPos = m_falconDevice.getPosition();
     std::array<double, 7> panda_pos = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
+    std::array<double, 3> normalized_falcon = {0.0, 0.0, 0.0};
     
-    panda_pos[0] = 1.5*(.05 - .5 * 0.26 * ((falconPos[2] - 0.074) / 0.099));
-    panda_pos[1] = 3*(.16 - .5 * 0.47 * ((falconPos[0] + 0.047) / 0.067));
-    panda_pos[2] = 2.5*(-.08 + .5 * 0.3 * ((falconPos[1] + 0.05) / 0.098));
+    normalized_falcon[0] = (falconPos[2]-0.12377318)/.049856;
+    normalized_falcon[1] = (falconPos[0]-0.002083)/0.05756836;
+    normalized_falcon[2] = (falconPos[1]-0.0010705)/0.05645284;
+    panda_pos[0] = scaling_factors[0] * normalized_falcon[0] + offsets[0];
+    panda_pos[1] = scaling_factors[1] * normalized_falcon[1] + offsets[1];
+    panda_pos[2] = scaling_factors[2] * normalized_falcon[2] + offsets[2];
     panda_pos[6] = 1;
     
     publishPose(pose_goal_pub, panda_pos);
@@ -172,20 +176,25 @@ void feedbackFalcon(geometry_msgs::Wrench wrench) {
 }
 
 int main(int argc, char **argv) {
+    ros::init(argc, argv, "Falcon");
+    ros::NodeHandle n("~");  
+    std::vector<double> scaling_factors = {-0.20, -0.25, 0.25};
+    std::vector<double> offsets = {0.10, 0, 0};
+    n.getParam("offsets",offsets);
+    n.getParam("scaling_factors",scaling_factors);
+
     if (!init_falcon()) {
         cout << "Failed to init falcon" << endl;
         return -1;
     }
-    ros::init(argc, argv, "Falcon");
-    ros::NodeHandle n;  
-        
-    ros::Publisher pose_goal_pub = 
+    
+   ros::Publisher pose_goal_pub = 
         n.advertise<relaxed_ik::EEPoseGoals>("/relaxed_ik/ee_pose_goals", 5);
     ros::Publisher command_pub = 
         n.advertise<std_msgs::String>("/panda/commands", 5);
     ros::Subscriber force_sub = n.subscribe("/panda/wrench", 10, feedbackFalcon);
     while(ros::ok()){
-        pollFalcon(pose_goal_pub,command_pub);
+        pollFalcon(pose_goal_pub,command_pub,scaling_factors.data(),offsets.data());
         ros::spinOnce();
         usleep(1000);   
     }
