@@ -14,8 +14,19 @@ void signalHandler(int sig)
 {
     std::cout << "Interrupt " << sig << " recieved in panda_ros.cpp\n";
     PandaController::stopControl();
-    ros::shutdown();
+    ros::NodeHandle n("~");
+    ros::Publisher wrenchPub = n.advertise<geometry_msgs::Wrench>("/panda/wrench", 10);
+    geometry_msgs::Wrench wrench;
+    wrench.force.x = 0;
+    wrench.force.y = 0;
+    wrench.force.z = 0;
+    wrench.torque.x = 0;
+    wrench.torque.y = 0;
+    wrench.torque.z = 0;
 
+    wrenchPub.publish(wrench);   
+
+    ros::shutdown();
     exit(sig);
 }
 
