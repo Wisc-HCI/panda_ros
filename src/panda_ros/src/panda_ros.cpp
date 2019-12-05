@@ -62,26 +62,25 @@ void updateCallbackJointVel(const relaxed_ik::JointAngles::ConstPtr& msg){
 
 void updateCallbackCartVel(const geometry_msgs::Twist::ConstPtr& msg){
     if (PandaController::isRunning()){
-        std::array<double, 6> position;
-        position[0] = msg->linear.x/2.5;
-        position[1] = msg->linear.y/2.5;
-        position[2] = msg->linear.z/2.5;
-        position[3] = 0;
-        position[4] = 0;
-        position[5] = 0;
-        PandaController::writeCommandedVelocity(position);
+        std::array<double, 6> velocity;
+        velocity[0] = msg->linear.x;
+        velocity[1] = msg->linear.y;
+        velocity[2] = msg->linear.z;
+        velocity[3] = msg->angular.x;
+        velocity[4] = msg->angular.y;
+        velocity[5] = msg->angular.z;
+        PandaController::writeCommandedVelocity(velocity);
     }
 }
 
 void callbackCommands(const std_msgs::String& msg){
-    if(msg.data == "button_pressed"){
+    if(msg.data == "grasp"){
         cout<<"Grasping"<<endl;
         if (!PandaController::graspObject()){
             cout << "Could not grasp object\n";
         }
     }
-    if(msg.data == "button_released"){
-        cout<<"Releasing"<<endl;
+    if(msg.data == "release"){
         if (!PandaController::releaseObject()){
             cout << "Could not release object\n";
         }
@@ -113,18 +112,18 @@ int main(int argc, char **argv) {
 
     PandaController::initPandaController(mode);
     
-    ros::Subscriber sub_commands = n.subscribe("/interaction/commands", 10, callbackCommands);
+    ros::Subscriber sub_commands = n.subscribe("/panda/commands", 10, callbackCommands);
     ros::Subscriber sub_position;
     switch(mode){
         case PandaController::ControlMode::CartesianVelocity:
-            sub_position = n.subscribe("/spacenav/twist", 10, updateCallbackCartVel);
+            sub_position = n.subscribe("/panda/cart_vel", 10, updateCallbackCartVel);
             break;
         case PandaController::ControlMode::JointVelocity:
             //TODO: we don't actually have anything that uses this, not set up correctly in PandaController
             sub_position = n.subscribe("/relaxed_ik/joint_angle_solutions", 10, updateCallbackJointVel);
             break;
         case PandaController::ControlMode::CartesianPosition:
-            sub_position = n.subscribe("/panda/pose", 10, updateCallbackCartPos);
+            sub_position = n.subscribe("/panda/cart_pose", 10, updateCallbackCartPos);
             break;
         case PandaController::ControlMode::JointPosition:
             sub_position = n.subscribe("/relaxed_ik/joint_angle_solutions", 10, updateCallbackJointPos);
