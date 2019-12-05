@@ -32,6 +32,7 @@ namespace PandaController {
 
     franka::RobotState readRobotState();
     void writeRobotState(franka::RobotState data);
+    void printRobotJointAngles(franka::RobotState data);
     void consumeBuffer(int &, franka::RobotState*, long *);
 
     void startLogging();

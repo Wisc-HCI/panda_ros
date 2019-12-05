@@ -25,8 +25,10 @@ void signalHandler(int sig)
     wrench.torque.z = 0;
 
     wrenchPub.publish(wrench);   
-
     ros::shutdown();
+
+    std::array<double, 6> data = {0.0,0.0,0.0,0.0,0.0,0.0};
+    PandaController::writeCommandedVelocity(data);
     exit(sig);
 }
 

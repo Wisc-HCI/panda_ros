@@ -52,6 +52,9 @@ class SpaceMouse(object):
         rospy.spin()
 
     def signal_handler(self, signal, frame):
+        #publish zeros for the twist, exit
+        twist = Twist()
+        self._twist_pub.publish(twist)
         sys.exit(0)
 
 if __name__ == "__main__":
