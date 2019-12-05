@@ -15,6 +15,7 @@
 #include "Common.h"
 #include <eigen3/Eigen/Dense>
 #include <csignal>
+#include <thread>
 
 
 using namespace boost::interprocess;
@@ -863,34 +864,48 @@ namespace PandaController {
                      "m\nMax width = " << state.max_width << "m\nIs grasped = " << state.is_grasped << "\n";        
     }
 
-    bool homeGripper() {
-        try {
-            return p_gripper->homing();
-        } catch (franka::Exception const& e) {
-            std::cout << e.what() << std::endl;
-            return -1;
-        }
-    }
-
-    bool graspObject() {
-        try {
-            return p_gripper->grasp(maxGripperWidth/2,0.2,10,0.5,0.5);
-        } catch (franka::Exception const& e) {
-            std::cout << e.what() << std::endl;
-            return -1;
-        }
-    }
-
-    bool releaseObject() {
+    void homeGripper() {
         try {
             p_gripper->stop();
-            return p_gripper->move(maxGripperWidth,0.2);            
+            p_gripper->homing();
         } catch (franka::Exception const& e) {
             std::cout << e.what() << std::endl;
-            return -1;
         }
     }
 
+    void graspObj() {
+        try {
+            p_gripper->stop();
+            p_gripper->grasp(maxGripperWidth/2,0.2,10,0.5,0.5);
+        } catch (franka::Exception const& e) {
+            std::cout << e.what() << std::endl;
+        }
+    }
+
+    void graspObject(){
+        pid_t pid = fork();
+        if (pid == 0) {
+            graspObj();
+            exit(0);
+        }
+    }
+
+    void releaseObj() {
+        try {
+            p_gripper->stop();
+            p_gripper->move(maxGripperWidth,0.2);
+        } catch (franka::Exception const& e) {
+            std::cout << e.what() << std::endl;
+        }
+    }
+
+    void releaseObject() {
+        pid_t pid = fork();
+        if (pid == 0) {
+            releaseObj();
+            exit(0);
+        }
+    }
     void gripperTest() {
         std::cout << "In gripperTest\n";
         p_gripper->move(0.04, 0.2);

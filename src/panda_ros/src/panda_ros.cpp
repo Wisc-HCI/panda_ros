@@ -76,16 +76,13 @@ void updateCallbackCartVel(const geometry_msgs::Twist::ConstPtr& msg){
 }
 
 void callbackCommands(const std_msgs::String& msg){
+
     if(msg.data == "grasp"){
         cout<<"Grasping"<<endl;
-        if (!PandaController::graspObject()){
-            cout << "Could not grasp object\n";
-        }
+        PandaController::graspObject();
     }
     if(msg.data == "release"){
-        if (!PandaController::releaseObject()){
-            cout << "Could not release object\n";
-        }
+        PandaController::releaseObject();
     }
     
 }
@@ -95,7 +92,7 @@ int main(int argc, char **argv) {
     ros::NodeHandle n("~");
     std::string mode_str;
     //Always specify parameter, it uses cached parameter instead of default value.
-    n.param<std::string>("control_mode", mode_str,"joint_position");
+    n.param<std::string>("control_mode", mode_str,"none");
     PandaController::ControlMode mode;
 
     if(mode_str == "cartesian_velocity")

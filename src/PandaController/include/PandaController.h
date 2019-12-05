@@ -39,9 +39,9 @@ namespace PandaController {
     bool isRunning();
 
     void writeGripperState();
-    bool homeGripper();
-    bool graspObject();
-    bool releaseObject();
+    void homeGripper();
+    void graspObject();
+    void releaseObject();
 
     struct shared_data {
     public:
