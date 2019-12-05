@@ -1027,6 +1027,26 @@ namespace PandaController {
     void startLogging() {
         if (SharedData == NULL) throw "Must initialize shared memory space first";
         SharedData->logging = true;
+    }
+    void stopLogging() {
+        if (SharedData == NULL) return;
+        SharedData->logging = false;
+    }
+
+    bool isRunning() {
+        if (SharedData == NULL) return false;
+        return SharedData->running;
+    }
+
+    std::array<double, 3> readCommandedPosition(){
+        if (SharedData == NULL) throw "Must initialize shared memory space first";
+
+        boost::interprocess::scoped_lock<boost::interprocess::interprocess_mutex> lock(SharedData->mutex);
+        return SharedData->commanded_position;
+    }
+
+    std::array<double, 6> readCommandedVelocity() {
+        if (SharedData == NULL) throw "Must initialize shared memory space first";
 
         boost::interprocess::scoped_lock<boost::interprocess::interprocess_mutex> lock(SharedData->mutex);
         return SharedData->commanded_velocity;
