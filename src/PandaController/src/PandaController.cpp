@@ -996,6 +996,16 @@ namespace PandaController {
             ip = "10.134.71.22";
         }
 
+        //Initializing the gripper/ setting the max width
+        p_gripper = new franka::Gripper(ip);
+        // if (!homeGripper()){
+        //     cout << "Could not home gripper\n";
+        // }
+        franka::GripperState state = p_gripper->readOnce();
+        maxGripperWidth = state.max_width;
+        p_gripper->move(maxGripperWidth, 0.2);
+        writeGripperState();
+
         std::cout << "Starting" << std::endl;
         SharedData->running = true;
         SharedData->start_time = std::chrono::system_clock::now();
