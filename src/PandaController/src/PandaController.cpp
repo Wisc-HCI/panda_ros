@@ -28,18 +28,14 @@ namespace PandaController {
         mapped_region* memoryRegion;
         franka::Gripper *p_gripper;
         double maxGripperWidth;
-    }  
-
-    void stopControl() {
-        cout << "Control stopping" << endl;
-        SharedData->running = false;
-    }
+    } 
 
     void printJointValues(const vector<franka::Record> log, int derivative) {
         vector<Eigen::VectorXd> values;
         for (int i = 0; i < log.size(); i++) {
             franka::RobotState state = log.at(i).state;
             values.push_back(Eigen::Map<Eigen::VectorXd>(state.q_d.data(), 6));
+            cout << "q_d " << values.at(i).transpose() << endl;
         }
         for (int d = 0; d < derivative; d++) {
             for(int i = 0; i < values.size() - 1; i++){
@@ -391,57 +387,16 @@ namespace PandaController {
         return jacobian_array;
     }
 
-    double absMax(Eigen::VectorXd v) {
-        double max = 0;
-        for(int i = 0; i < v.size(); i++){
-            if (std::abs(v[i]) > max){
-                max = std::abs(v[i]);
-            }
-        }
-        return max;
-    }
-
-    double signAbsMax(Eigen::VectorXd v) {
-        double max = 0;
-        double act_max = 0;
-        for(int i = 0; i < v.size(); i++){
-            if (std::abs(v[i]) > max){
-                max = std::abs(v[i]);
-                act_max = v[i];
-            }
-        }
-
-        if (act_max < 0){
-            return -1;
-        }
-        else{
-            return 1;
-        }
-    }
-
-    int absMaxIndex(Eigen::VectorXd v) {
-        double max = 0;
-        int max_index = 0;
-        for(int i = 0; i < v.size(); i++){
-            if (std::abs(v[i]) > max){
-                max = std::abs(v[i]);
-                max_index = i;
-            }
-        }
-        return max_index;
-    }
-
     double constrainEEJerk(Eigen::VectorXd & desiredJerk, const franka::RobotState & robot_state){
         double max_j = 6500.0;
         double length = desiredJerk.norm();
-        double j = absMax(desiredJerk);
+        double j = desiredJerk.cwiseAbs().maxCoeff();
         if (j > max_j){
             desiredJerk *= max_j / j;
         }
         if (length == 0) return 1;
         return desiredJerk.norm() / length;
     }
-
 
     double constrainEEAcceleration(Eigen::VectorXd & desiredAcceleration, const franka::RobotState & robot_state){
         double max_a = 13.0;
@@ -452,7 +407,7 @@ namespace PandaController {
         constrainEEJerk(desiredJerk, robot_state);
 
         desiredAcceleration = lastAcceleration + desiredJerk / 1000;
-        double a = absMax(desiredAcceleration);
+        double a = desiredAcceleration.cwiseAbs().maxCoeff();
         if (a > max_a){
             desiredAcceleration *= max_a / a;
         }
@@ -468,7 +423,7 @@ namespace PandaController {
         constrainEEAcceleration(desiredAcceleration, robot_state);
 
         desiredVelocity = lastVelocity + desiredAcceleration / 1000;
-        double v = absMax(desiredVelocity);
+        double v = desiredVelocity.cwiseAbs().maxCoeff();
         if (v > max_v){
             desiredVelocity *= max_v / v; 
         }
@@ -553,7 +508,7 @@ namespace PandaController {
     }
 
     void constrainForces(Eigen::VectorXd & velocity, const franka::RobotState & robot_state) {
-        double maxForce = 20;
+        double maxForce = 15;
         for (int i = 0; i < 3; i++){
             // If the force is too high, and the velocity would increase the force,
             // Then remove that velocity.
@@ -561,26 +516,14 @@ namespace PandaController {
             // I.E. velocity in x direction could increase twist on the EE.
             if (abs(robot_state.O_F_ext_hat_K[i]) > maxForce
                 && velocity[i] * robot_state.O_F_ext_hat_K[i] >= 0){
-                velocity[i] = - 0.1 * velocity[i] / abs(velocity[i]);
+                if (abs(velocity[i]) >= 0.0001){
+                    velocity[i] = 0;//- 0.05 * velocity[i] / abs(velocity[i]);
+                }
             } 
         }
     }
 
-    void printOutJointThings(Eigen::VectorXd dq, const franka::RobotState & robot_state){
-        cout << "Velocity: " << dq.transpose() << endl;
-        Eigen::VectorXd desiredAcceleration = (dq - Eigen::Map<const Eigen::VectorXd>(robot_state.dq.data(),7)) * 1000;
-        cout << "Acceleration: " << (desiredAcceleration).transpose() << endl;
-        Eigen::VectorXd desiredJerk = (desiredAcceleration - Eigen::Map<Eigen::VectorXd>(SharedData->lastJointAcceleration.data(),7)) * 1000;
-        cout << "Jerk: " << (desiredJerk).transpose() << endl;
-    }
-
-    void roundTo(Eigen::VectorXd & a, int precision){
-        for(int i = 0; i < a.size(); i++){
-            a[i] = trunc(a[i] * precision) / precision;
-        }
-    }
-
-    //Input Cartesian position, control with cartesian velocities
+    //Input Cartesian position, control with joint velocities
     void runPositionController(char* ip = NULL){
         try {
             cout << "In runPositionController" << endl;
@@ -595,21 +538,14 @@ namespace PandaController {
             setDefaultBehavior(robot);
             cout << "Default behavior set" << endl;
 
-            //double time_max = 30.0;
-            double time = 0.0;
-            double v_max = 0.1;
             int count = 0;
             cout << "Model loaded" << endl;
 
             writeRobotState(robot.readOnce());
             cout << "About to start" << endl;
 
-            robot.control([=, &time, &count](const franka::RobotState& robot_state,
-                                    franka::Duration period) -> franka::CartesianVelocities {
-                time += period.toSec();
-                if (time == period.toSec()){
-                    return {{0,0,0,0,0,0}};
-                }
+            robot.control([=, &count](const franka::RobotState& robot_state,
+                                    franka::Duration period) -> franka::JointVelocities {
                 writeRobotState(robot_state);
 
                 array<double, 3> commandedPosition = readCommandedPosition();
@@ -619,19 +555,20 @@ namespace PandaController {
                 double v_y = (commandedPosition[1] - robot_state.O_T_EE[13]) / scaling_factor;
                 double v_z = (commandedPosition[2] - robot_state.O_T_EE[14]) / scaling_factor;
 
-
                 Eigen::VectorXd v(6);
                 v << v_x, v_y, v_z, 0, 0, 0;
                 constrainForces(v, robot_state);
                 Eigen::VectorXd jointVelocities = Eigen::Map<Eigen::MatrixXd>(SharedData->jacobian.data(), 6, 7).completeOrthogonalDecomposition().solve(v);
                 constrainJointVelocity(jointVelocities, robot_state);
                 v = Eigen::Map<Eigen::MatrixXd>(SharedData->jacobian.data(), 6, 7) * jointVelocities;
-                /*cout << Eigen::Map<const Eigen::VectorXd>(robot_state.O_F_ext_hat_K.data(),6)[2] << " ";
-                cout << Eigen::Map<const Eigen::VectorXd>(robot_state.O_dP_EE_c.data(),6)[2] << " ";
-                cout << Eigen::Map<const Eigen::VectorXd>(robot_state.O_T_EE.data(),13)[2] << " ";
-                cout << v[2] << " ";
-                cout << Eigen::Map<const Eigen::VectorXd>(robot_state.O_dP_EE_d.data(),6)[2] << endl;*/
-                franka::CartesianVelocities output = {{v[0], v[1], v[2], 0.0, 0.0, 0.0}};
+                franka::JointVelocities output = {{
+                    jointVelocities[0], 
+                    jointVelocities[1], 
+                    jointVelocities[2], 
+                    jointVelocities[3], 
+                    jointVelocities[4], 
+                    jointVelocities[5], 
+                    jointVelocities[6]}};
                 Eigen::VectorXd lastJointAcceleration = (jointVelocities - Eigen::Map<const Eigen::VectorXd>(robot_state.dq_d.data(), 7)) * 1000;
                 for(int i = 0; i < 7; i++) {
                     SharedData->lastJointAcceleration[i] = lastJointAcceleration[i];
@@ -643,6 +580,7 @@ namespace PandaController {
                     return franka::MotionFinished(output);
                 }
                 count =  count + 1;
+                if (count < 5) return {{0,0,0,0,0,0,0}};
                 return output;
             });
         } catch (const franka::ControlException& e) {
@@ -653,7 +591,7 @@ namespace PandaController {
             cout << e.what() << endl;
         }
     }
-    //Input Cartesian velocity, control with cartesian velocities
+    //Input Cartesian velocity, control with joint velocities
     void runVelocityController(char* ip = NULL){
         try {
             cout << "In runVelocityController" << endl;
@@ -668,32 +606,28 @@ namespace PandaController {
             setDefaultBehavior(robot);
             cout << "Default behavior set" << endl;
 
-            // double time_max = 30.0;
-            double time = 0.0;
-            double v_max = 0.1;
             int count = 0;
             cout << "Model loaded" << endl;
 
             writeRobotState(robot.readOnce());
             cout << "About to start" << endl;
-            auto realTime = chrono::system_clock::now();
 
-            robot.control([=, &realTime, &time, &count](const franka::RobotState& robot_state,
-                                    franka::Duration period) -> franka::CartesianVelocities {
-                time += period.toSec();
+            robot.control([=, &count](const franka::RobotState& robot_state,
+                                    franka::Duration period) -> franka::JointVelocities {
                 writeRobotState(robot_state);
 
                 Eigen::VectorXd v = Eigen::Map<Eigen::VectorXd>(readCommandedVelocity().data(), 6);
                 constrainForces(v, robot_state);
-                constrainEEVelocity(v, robot_state);
                 Eigen::VectorXd jointVelocities = Eigen::Map<Eigen::MatrixXd>(SharedData->jacobian.data(), 6, 7).completeOrthogonalDecomposition().solve(v);
                 constrainJointVelocity(jointVelocities, robot_state);
-                v = Eigen::Map<Eigen::MatrixXd>(SharedData->jacobian.data(), 6, 7) * jointVelocities;
-                cout << (chrono::system_clock::now() - realTime).count() << endl;
-                realTime = chrono::system_clock::now();
-                cout << "Velocity " << v.transpose() << endl;
-                cout << "Joint Velocity " << jointVelocities.transpose() << endl;
-                franka::CartesianVelocities output = {{v[0], v[1], v[2], v[3], v[4], v[5]}};
+                franka::JointVelocities output = {{
+                    jointVelocities[0], 
+                    jointVelocities[1], 
+                    jointVelocities[2], 
+                    jointVelocities[3], 
+                    jointVelocities[4], 
+                    jointVelocities[5], 
+                    jointVelocities[6]}};
                 Eigen::VectorXd lastJointAcceleration = (jointVelocities - Eigen::Map<const Eigen::VectorXd>(robot_state.dq_d.data(), 7)) * 1000;
                 for(int i = 0; i < 7; i++) {
                     SharedData->lastJointAcceleration[i] = lastJointAcceleration[i];
@@ -704,20 +638,15 @@ namespace PandaController {
                     return franka::MotionFinished(output);
                 }
                 count =  count + 1;
-                if (count < 5) return {{0,0,0,0,0,0}};
+                if (count < 5) return {{0,0,0,0,0,0,0}};
                 return output;
             });
         } catch (const franka::ControlException& e) {
-
             printControlError(e);
-            stopControl();
-            
         } catch (const franka::Exception& e){  
             cout << e.what() << endl;
-            stopControl();
         } catch(const exception& e) {
             cout << e.what() << endl;
-            stopControl();
         }
     }
     // Input joint positions (angles), control with joint velocities
@@ -734,21 +663,13 @@ namespace PandaController {
             cout << "Motion complete" << endl;
             setDefaultBehavior(robot);
             cout << "Default behavior set" << endl;
-
-            double time_max = 180.0;
-            double omega_max = 1.0;
-            double time = 0.0;
-            double delta_t = 0.001;
-            std::array<double, 7> joint_pos;
-            std::array<double, 7> joint_vel;
-            std::array<double, 7> joint_acc;
-            cout << "Model loaded" << endl;
             
             writeRobotState(robot.readOnce());
+            
             cout << "About to start" << endl;
 
-            robot.control([=, &time, &joint_pos, &joint_vel, &joint_acc](const franka::RobotState& robot_state, franka::Duration period) -> franka::JointVelocities {
-                time += period.toSec();
+            int count = 0;
+            robot.control([=, &count](const franka::RobotState& robot_state, franka::Duration period) -> franka::JointVelocities {
                 PandaController::writeRobotState(robot_state);
                 array<double, 7> joint_angles = readJointAngles();
 
@@ -763,7 +684,13 @@ namespace PandaController {
                     (joint_angles[5] - robot_state.q[5]) * scale,
                     (joint_angles[6] - robot_state.q[6]) * scale;
 
-                //cout<<constrainJointVelocity(joint_velocity, robot_state)<<endl;
+                // Take the desired joint velocities. Convert to cartesian space.
+                // Attempt to shift the target cartesian velocity to avoid a collision.
+                // Go back to joint space using a simplified IK via the Jacobian. <-- This part might be a little bit sketchy.
+                // Then double check that we aren't exceeding joint limits.
+                Eigen::VectorXd v = Eigen::Map<Eigen::MatrixXd>(SharedData->jacobian.data(), 6, 7) * joint_velocity;
+                constrainForces(v, robot_state);
+                joint_velocity = Eigen::Map<Eigen::MatrixXd>(SharedData->jacobian.data(), 6, 7).completeOrthogonalDecomposition().solve(v);
                 constrainJointVelocity(joint_velocity, robot_state);
                 Eigen::VectorXd lastJointAcceleration = (joint_velocity - Eigen::Map<const Eigen::VectorXd>(robot_state.dq_d.data(), 7)) * 1000;
                 for(int i = 0; i < 7; i++) {
@@ -782,18 +709,16 @@ namespace PandaController {
                     cout << endl << "Finished motion, shutting down example" << endl;
                     return franka::MotionFinished(velocities);
                 }
+                count += 1;
+                if (count < 5) return {{0,0,0,0,0,0,0}};
                 return velocities;
             });
         } catch (const franka::ControlException& e) {
-            cout << e.what() << endl;
-            //cout << franka::logToCSV(e.log) << endl;
-            stopControl();
+            printControlError(e);
         } catch (const franka::Exception& e){  
             cout << e.what() << endl;
-            stopControl();
         } catch(const exception& e) {
             cout << e.what() << endl;
-            stopControl();
         }
     }
 
@@ -971,14 +896,6 @@ namespace PandaController {
             exit(0);
         }
     }
-    void gripperTest() {
-        std::cout << "In gripperTest\n";
-        p_gripper->move(0.04, 0.2);
-        // if(!graspObject()) {std::cout << "Could not grasp object\n";}
-        // writeGripperState();
-        // if(!releaseObject()) {std::cout << "Could not release object\n";}
-        writeGripperState();
-    }
 
     void initializeMemory() {
         shared_memory_object shm(open_or_create, "Panda Controller", read_write);
@@ -1034,6 +951,16 @@ namespace PandaController {
         return pid;
     }
 
+
+    /** 
+     *  Shared Memory Accessors
+     * */
+
+    void stopControl() {
+        cout << "Control stopping" << endl;
+        SharedData->running = false;
+    }
+
     void startLogging() {
         if (SharedData == NULL) throw "Must initialize shared memory space first";
         SharedData->logging = true;
@@ -1054,6 +981,11 @@ namespace PandaController {
         boost::interprocess::scoped_lock<boost::interprocess::interprocess_mutex> lock(SharedData->mutex);
         return SharedData->commanded_position;
     }
+    void writeCommandedPosition(std::array<double, 3> data){
+        if (SharedData == NULL) return;
+        boost::interprocess::scoped_lock<boost::interprocess::interprocess_mutex> lock(SharedData->mutex);
+        SharedData->commanded_position = data;
+    }
 
     std::array<double, 6> readCommandedVelocity() {
         if (SharedData == NULL) throw "Must initialize shared memory space first";
@@ -1061,19 +993,12 @@ namespace PandaController {
         boost::interprocess::scoped_lock<boost::interprocess::interprocess_mutex> lock(SharedData->mutex);
         return SharedData->commanded_velocity;
     }
-
     void writeCommandedVelocity(std::array<double, 6> data){
         if (SharedData == NULL) return;
         boost::interprocess::scoped_lock<boost::interprocess::interprocess_mutex> lock(SharedData->mutex);
         SharedData->commanded_velocity = data;
     }
     
-    
-    void writeCommandedPosition(std::array<double, 3> data){
-        if (SharedData == NULL) return;
-        boost::interprocess::scoped_lock<boost::interprocess::interprocess_mutex> lock(SharedData->mutex);
-        SharedData->commanded_position = data;
-    }
 
     std::array<double, 7> readPoseGoal(){
         if (SharedData == NULL) throw "Must initialize shared memory space first";
@@ -1081,7 +1006,6 @@ namespace PandaController {
         boost::interprocess::scoped_lock<boost::interprocess::interprocess_mutex> lock(SharedData->mutex);
         return SharedData->pose_goal;
     }
-
     void writePoseGoals(std::array<double, 7> data){
         if (SharedData == NULL) return;
         boost::interprocess::scoped_lock<boost::interprocess::interprocess_mutex> lock(SharedData->mutex);
@@ -1094,7 +1018,6 @@ namespace PandaController {
         boost::interprocess::scoped_lock<boost::interprocess::interprocess_mutex> lock(SharedData->mutex);
         return SharedData->joint_angles;
     }
-
     void writeJointAngles(std::array<double, 7> data){
         if (SharedData == NULL) return;
         boost::interprocess::scoped_lock<boost::interprocess::interprocess_mutex> lock(SharedData->mutex);
@@ -1106,7 +1029,6 @@ namespace PandaController {
         boost::interprocess::scoped_lock<boost::interprocess::interprocess_mutex> lock(SharedData->mutex);
         return SharedData->current_state;
     }
-    
     void writeRobotState(franka::RobotState data){
         if (SharedData == NULL) return;
         boost::interprocess::scoped_lock<boost::interprocess::interprocess_mutex> lock(SharedData->mutex);
@@ -1122,12 +1044,6 @@ namespace PandaController {
             SharedData->timestamps[SharedData->buffer_end-1] = (std::chrono::system_clock::now() - SharedData->start_time).count();
         }
         SharedData->current_state = data;
-    }
-
-    void printRobotJointAngles(franka::RobotState data){
-        std::array<double, 7> a = data.q;
-        std::cout << "Joint angles: " << a[0] << ", " << a[1] << ", " << a[2] << ", " << a[3] << ", "
-                                        << a[4] << ", " << a[5] << ", " << a[6] << "\n";
     }
 
     void consumeBuffer(int &count, franka::RobotState* result, long* times){

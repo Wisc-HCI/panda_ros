@@ -54,17 +54,17 @@ namespace PandaController {
         int buffer_start = 0;
         int buffer_end = 0;
 
-        std::array<double, 7> pose_goal; //<x, y, z, x, y, z, w>
-        std::array<double, 7> joint_angles;
+        std::array<double, 7> pose_goal{}; //<x, y, z, x, y, z, w>
+        std::array<double, 7> joint_angles{};
         
         mutable boost::interprocess::interprocess_mutex mutex;
 
         long iteration;
         bool running = false;
         bool logging = false;
-        std::array<double, 42> jacobian;
-        std::array<double, 42> jacobian_pinv;
-        std::array<double, 7> lastJointAcceleration;
+        std::array<double, 42> jacobian{};
+        std::array<double, 42> jacobian_pinv{};
+        std::array<double, 7> lastJointAcceleration{};
         
 
         shared_data() {
