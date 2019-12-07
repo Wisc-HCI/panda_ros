@@ -910,7 +910,8 @@ namespace PandaController {
 
         //Setting the Panda IP
         if (ip == NULL) {
-            ip = "10.134.71.22";
+            //ip = "10.134.71.22";
+            ip = "172.16.0.2";
         }
 
         //Initializing the gripper/ setting the max width
