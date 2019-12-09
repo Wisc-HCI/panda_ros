@@ -37,9 +37,9 @@ glob_grab_down = 0
 def grab_cb(data):
     global glob_grab_down
     if data.data == 1 and glob_grab_down == 0:
-        commands_pub.publish("button_pressed")
+        commands_pub.publish("grasp")
     elif data.data == 0 and glob_grab_down == 1:
-        commands_pub.publish("button_released")
+        commands_pub.publish("release")
     glob_grab_down = data.data
 
 rospy.init_node('pose_goal_pub')
@@ -48,7 +48,7 @@ rospy.Subscriber('/vive_controller/quaternion_r', QuaternionStamped, quaternion_
 rospy.Subscriber('/vive_controller/position_r', Vector3Stamped, vector3_cb)
 rospy.Subscriber('/vive_controller/clutch', Int8, clutch_cb)
 rospy.Subscriber('/vive_controller/grab', Int8, grab_cb)
-commands_pub = rospy.Publisher('/interaction/commands', String, queue_size=3)
+commands_pub = rospy.Publisher('/panda/commands', String, queue_size=3)
 eepg_pub = rospy.Publisher('/relaxed_ik/ee_pose_goals', EEPoseGoals, queue_size=3)
 rospy.sleep(0.3)
 
