@@ -1,0 +1,42 @@
+<?xml version="1.0"?>
+<launch>
+   <arg name="move_robot" value="true" />
+   <arg name="motion_controller" value="true" />
+   <arg name="kinova_robotType" default="m1n6s200" />
+
+   <!-- ##################################################################################### -->
+
+   <param name="move_robot" value="$(arg move_robot)"/>
+   <param name="motion_controller" value="$(arg motion_controller)"/>
+
+   <!--
+   <node name="mico_solution_pub" pkg="teleop" type="mico_solution_pub.py" output="screen" />
+   -->
+
+   <include file="$(find relaxed_ik)/launch/relaxed_ik_python.launch" />
+
+   <!--
+   <param name="robot_description" command="$(find xacro)/xacro.py '$(find kinova_description)/urdf/$(arg kinova_robotType)_standalone.xacro'" />
+   <node pkg="rviz" type="rviz" name="rviz_2" args="-d $(find teleop)/rviz/teleop.rviz" />
+   <node pkg="tf" type="static_transform_publisher" name="common_world_publisher" args="0 0 0 0 0 0 m1n6s200_link_base /common_world 50" />
+    -->
+
+   <group if="$(arg move_robot)">
+       <include file="$(find robotiq_85_bringup)/launch/robotiq_85.launch" />
+       <node name="mico_controller" pkg="mimicry_control" type="mico_controller.py" output="screen" />
+   </group>
+
+   <group unless="$(arg move_robot)">
+       <node name="robot_state_publisher" pkg="robot_state_publisher" type="state_publisher" />
+   </group>
+
+   <group if="$(arg motion_controller)">
+       <node name="ee_pose_goal_pub" pkg="mimicry_control" type="ee_pose_goal_pub.py" output="screen" />
+       <node name="controller_publisher" pkg="mimicry_control" type="controller_publisher.py" output="screen" />
+   </group>
+
+   <group unless="$(arg motion_controller)">
+       <node name="keyboard_driver" pkg="relaxed_ik" type="keyboard_ikgoal_driver.py" output="screen" />
+   </group>
+   
+</launch>

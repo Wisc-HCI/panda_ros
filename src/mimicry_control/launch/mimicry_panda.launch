@@ -1,0 +1,19 @@
+<?xml version="1.0"?>
+<launch>
+    <arg name="move_robot" value="true" />
+    <arg name="relik_running" default="true" />
+
+    <!-- ##################################################################################### -->   
+
+    <include unless="$(arg relik_running)" file="$(find relaxed_ik)/launch/relaxed_ik_julia.launch" />
+
+    <node unless="$(arg move_robot)" pkg="relaxed_ik" type="rviz_viewer.py" name="rviz_viewer" output="screen"/>
+
+<!--
+    <node if="$(arg move_robot)" name="main" pkg="ur3test" type= output="screen" />
+-->
+
+    <node name="ee_pose_goal_pub" pkg="mimicry_control" type="ee_pose_goal_pub.py" output="screen" />
+    <node name="controller_publisher" pkg="mimicry_control" type="controller_publisher.py" output="screen" />
+
+</launch>
