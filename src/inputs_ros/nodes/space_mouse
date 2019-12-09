@@ -28,16 +28,16 @@ class SpaceMouse(object):
 
             twist.angular.x=0
             twist.angular.y=0
-            twist.angular.z=0
+            twist.angular.z=self.non_lin_scale(msg.axes[5])/2.5
 
         else:
             twist.linear.x=0
             twist.linear.y=0
             twist.linear.z=0
 
-            twist.angular.x=self.non_lin_scale(msg.axes[3])/30.
-            twist.angular.y=self.non_lin_scale(msg.axes[4])/30.
-            twist.angular.z=self.non_lin_scale(msg.axes[5])/2.5
+            twist.angular.x=self.non_lin_scale(msg.axes[3])/2.5
+            twist.angular.y=self.non_lin_scale(msg.axes[4])/2.5
+            twist.angular.z=0
         self._twist_pub.publish(twist)
 
         if msg.buttons[0] and not self._last_buttons[0]:
