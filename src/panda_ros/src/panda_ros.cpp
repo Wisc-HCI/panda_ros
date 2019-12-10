@@ -34,10 +34,14 @@ void signalHandler(int sig)
 
 void updateCallbackCartPos(const geometry_msgs::Pose::ConstPtr& msg){
     if (PandaController::isRunning()){
-        std::array<double, 3> position;
+        std::array<double, 6> position;
         position[0] = msg->position.x;
         position[1] = msg->position.y;
         position[2] = msg->position.z;
+        //TODO update with quat
+        position[3] = 0;
+        position[4] = 0;
+        position[5] = 0;
         
         PandaController::writeCommandedPosition(position);
     }
