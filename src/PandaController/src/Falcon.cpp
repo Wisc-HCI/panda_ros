@@ -7,6 +7,7 @@
 #include <franka/robot_state.h>
 
 #include "falcon/core/FalconDevice.h"
+#include "falcon/grip/FalconGripFourButton.h"
 #include "falcon/firmware/FalconFirmwareNovintSDK.h"
 #include "falcon/util/FalconCLIBase.h"
 #include "falcon/util/FalconFirmwareBinaryNvent.h"
@@ -35,7 +36,7 @@ bool init_falcon() {
     cout <<"Setting up LibUSB\n";
     m_falconDevice.close();
     m_falconDevice.setFalconKinematic<FalconKinematicStamper>();
-    //m_falconDevice.setFalconGrip<FalconGripFourButton>();
+    m_falconDevice.setFalconGrip<FalconGripFourButton>();
     m_falconDevice.setFalconFirmware<FalconFirmwareNovintSDK>(); //Set Firmware
 
     if(!m_falconDevice.open(0)) //Open falcon @ index
@@ -119,10 +120,13 @@ bool init_falcon() {
 }
 
 void pollFalcon() {
+    static bool lastCenterButton = false;
+    static bool gripping = false;
+
     array<double, 3> falconPos = {0,0,0};
     m_falconDevice.runIOLoop();
     falconPos = m_falconDevice.getPosition();
-    array<double,3> scaling_factors = {-0.20, -0.25, 0.25};
+    array<double,3> scaling_factors = {-0.20, -0.35, 0.25};
     array<double,3> offsets = {0.26, -0.12, 0.5};
 
     array<double, 3> panda_pos = {0.0, 0.0, 0.0};
@@ -140,6 +144,29 @@ void pollFalcon() {
 //    panda_pos[2] = 0.29 + 0.3 * ((falconPos[1] + 0.05) / 0.098);
     PandaController::writeCommandedPosition(panda_pos);
     //TODO: write the pose instead of the position
+
+    //Grasping
+    unsigned int my_buttons = m_falconDevice.getFalconGrip()->getDigitalInputs();
+
+    bool buttons[4];
+    buttons[0] = (my_buttons & libnifalcon::FalconGripFourButton::CENTER_BUTTON)  ? 1 : 0;
+    buttons[1] = (my_buttons & libnifalcon::FalconGripFourButton::PLUS_BUTTON)    ? 1 : 0;
+    buttons[2] = (my_buttons & libnifalcon::FalconGripFourButton::MINUS_BUTTON)   ? 1 : 0;
+    buttons[3] = (my_buttons & libnifalcon::FalconGripFourButton::FORWARD_BUTTON) ? 1 : 0;
+
+    //Click 
+    if(buttons[0] && buttons[0] != lastCenterButton){
+        if(! gripping){
+            PandaController::graspObject();
+            gripping = true;
+        }
+        else{
+            PandaController::releaseObject();
+            gripping = false;
+        }
+    }
+
+    lastCenterButton = buttons[0];
 }
 
 void feedbackFalcon() {
