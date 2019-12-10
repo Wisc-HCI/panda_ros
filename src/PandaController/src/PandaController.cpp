@@ -916,7 +916,7 @@ namespace PandaController {
         pid_t pid = fork();
         if (pid == 0) {
             graspObj();
-            exit(0);
+            _Exit(0);
         }
     }
 
@@ -933,7 +933,7 @@ namespace PandaController {
         pid_t pid = fork();
         if (pid == 0) {
             releaseObj();
-            exit(0);
+            _Exit(0);
         }
     }
 
