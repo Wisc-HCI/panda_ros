@@ -17,7 +17,7 @@
 #include <eigen3/Eigen/Dense>
 #include <csignal>
 #include <thread>
-
+#include <cmath>
 
 using namespace boost::interprocess;
 using namespace std;
@@ -551,16 +551,56 @@ namespace PandaController {
                 array<double, 3> commandedPosition = readCommandedPosition();
                 
                 double scaling_factor = 0.2;
-                double v_x = (commandedPosition[0] - robot_state.O_T_EE[12]) / scaling_factor;
-                double v_y = (commandedPosition[1] - robot_state.O_T_EE[13]) / scaling_factor;
-                double v_z = (commandedPosition[2] - robot_state.O_T_EE[14]) / scaling_factor;
+                Eigen::Affine3d transform(Eigen::Matrix4d::Map(robot_state.O_T_EE.data()));
+                Eigen::Vector3d position(transform.translation());
+                Eigen::Quaterniond orientation(transform.linear());
+                // Eigen initialise quaternions as w, x, y, z
+                Eigen::Quaterniond initial_q(0,1,0,0);
+                Eigen::Quaterniond difference(initial_q*orientation.inverse());
+                
+                // Not working for all configuration 
+                //https://stackoverflow.com/questions/31589901/euler-to-quaternion-quaternion-to-euler-using-eigen
+                //auto euler = difference.toRotationMatrix().eulerAngles(0, 1, 2);
+
+                //Quaternions to euler angles from: https://en.wikipedia.org/wiki/Conversion_between_quaternions_and_Euler_angles
+                double q0=difference.coeffs()[3];
+                double q1=difference.coeffs()[0];
+                double q2=difference.coeffs()[1];
+                double q3=difference.coeffs()[2];
+
+                // roll (x-axis rotation)
+                double sinr_cosp = 2 * (q0 * q1 + q2 * q3);
+                double cosr_cosp = 1 - 2 * (q1 * q1 + q2 * q2);
+                double roll = std::atan2(sinr_cosp, cosr_cosp);
+
+                // pitch (y-axis rotation)
+                double sinp = 2 * (q0 * q2 - q3 * q1);
+                double pitch = 0.;
+                if (std::abs(sinp) >= 1)
+                    pitch = std::copysign(M_PI / 2, sinp); // use 90 degrees if out of range
+                else
+                    pitch = std::asin(sinp);
+
+                // yaw (z-axis rotation)
+                double siny_cosp = 2 * (q0 * q3 + q1 * q2);
+                double cosy_cosp = 1 - 2 * (q2 * q2 + q3 * q3);
+                double yaw = std::atan2(siny_cosp, cosy_cosp);
+
+                double v_x = (commandedPosition[0] - position[0]) / scaling_factor;
+                double v_y = (commandedPosition[1] - position[1]) / scaling_factor;
+                double v_z = (commandedPosition[2] - position[2]) / scaling_factor;
+                double v_r = roll / scaling_factor;//euler[0];// / scaling_factor;
+                double v_p = pitch / scaling_factor;//euler[1];// / scaling_factor;
+                double v_yaw = yaw / scaling_factor;//euler[2];// / scaling_factor;
 
                 Eigen::VectorXd v(6);
-                v << v_x, v_y, v_z, 0, 0, 0;
+                v << v_x, v_y, v_z, v_r, v_p, v_yaw;
                 constrainForces(v, robot_state);
                 Eigen::VectorXd jointVelocities = Eigen::Map<Eigen::MatrixXd>(SharedData->jacobian.data(), 6, 7).completeOrthogonalDecomposition().solve(v);
-                constrainJointVelocity(jointVelocities, robot_state);
-                v = Eigen::Map<Eigen::MatrixXd>(SharedData->jacobian.data(), 6, 7) * jointVelocities;
+                
+                //constrainJointVelocity(jointVelocities, robot_state);
+                //v = Eigen::Map<Eigen::MatrixXd>(SharedData->jacobian.data(), 6, 7) * jointVelocities;
+                
                 franka::JointVelocities output = {{
                     jointVelocities[0], 
                     jointVelocities[1], 
