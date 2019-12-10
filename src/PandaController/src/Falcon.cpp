@@ -122,28 +122,10 @@ bool init_falcon() {
 void pollFalcon() {
     static bool lastCenterButton = false;
     static bool gripping = false;
+    static double yaw=0;
 
     array<double, 3> falconPos = {0,0,0};
     m_falconDevice.runIOLoop();
-    falconPos = m_falconDevice.getPosition();
-    array<double,3> scaling_factors = {-0.20, -0.35, 0.25};
-    array<double,3> offsets = {0.35, 0., 0.5};
-
-    array<double, 6> panda_pos = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
-    array<double, 3> normalized_falcon = {0.0, 0.0, 0.0};
-
-    normalized_falcon[0] = (falconPos[2]-0.12377318)/.049856;
-    normalized_falcon[1] = (falconPos[0]-0.002083)/0.05756836;
-    normalized_falcon[2] = (falconPos[1]-0.0010705)/0.05645284;
-    panda_pos[0] = scaling_factors[0] * normalized_falcon[0] + offsets[0];
-    panda_pos[1] = scaling_factors[1] * normalized_falcon[1] + offsets[1];
-    panda_pos[2] = scaling_factors[2] * normalized_falcon[2] + offsets[2];
-
-//    panda_pos[0] = 0.26 + 0.26 * ((falconPos[2] - 0.074) / 0.099);
-//    panda_pos[1] = -0.12 + 0.47 * ((falconPos[0] + 0.047) / 0.067);
-//    panda_pos[2] = 0.29 + 0.3 * ((falconPos[1] + 0.05) / 0.098);
-    PandaController::writeCommandedPosition(panda_pos);
-    //TODO: write the pose instead of the position
 
     //Grasping
     unsigned int my_buttons = m_falconDevice.getFalconGrip()->getDigitalInputs();
@@ -153,7 +135,11 @@ void pollFalcon() {
     buttons[1] = (my_buttons & libnifalcon::FalconGripFourButton::PLUS_BUTTON)    ? 1 : 0;
     buttons[2] = (my_buttons & libnifalcon::FalconGripFourButton::MINUS_BUTTON)   ? 1 : 0;
     buttons[3] = (my_buttons & libnifalcon::FalconGripFourButton::FORWARD_BUTTON) ? 1 : 0;
-
+    
+    if(buttons[1])
+        yaw+=.0002;
+    if(buttons[2])
+        yaw-=.0002;
     //Click 
     if(buttons[0] && buttons[0] != lastCenterButton){
         if(! gripping){
@@ -167,6 +153,25 @@ void pollFalcon() {
     }
 
     lastCenterButton = buttons[0];
+
+    falconPos = m_falconDevice.getPosition();
+    array<double,3> scaling_factors = {-0.20, -0.35, 0.25};
+    array<double,3> offsets = {0.35, 0., 0.5};
+
+    array<double, 6> panda_pos = {0.0, 0.0, 0.0, 0.0, 0.0, yaw};
+    array<double, 3> normalized_falcon = {0.0, 0.0, 0.0};
+
+    normalized_falcon[0] = (falconPos[2]-0.12377318)/.049856;
+    normalized_falcon[1] = (falconPos[0]-0.002083)/0.05756836;
+    normalized_falcon[2] = (falconPos[1]-0.0010705)/0.05645284;
+    panda_pos[0] = scaling_factors[0] * normalized_falcon[0] + offsets[0];
+    panda_pos[1] = scaling_factors[1] * normalized_falcon[1] + offsets[1];
+    panda_pos[2] = scaling_factors[2] * normalized_falcon[2] + offsets[2];
+
+//    panda_pos[0] = 0.26 + 0.26 * ((falconPos[2] - 0.074) / 0.099);
+//    panda_pos[1] = -0.12 + 0.47 * ((falconPos[0] + 0.047) / 0.067);
+//    panda_pos[2] = 0.29 + 0.3 * ((falconPos[1] + 0.05) / 0.098);
+    PandaController::writeCommandedPosition(panda_pos);
 }
 
 void feedbackFalcon() {
