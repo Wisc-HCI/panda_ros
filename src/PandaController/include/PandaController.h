@@ -18,8 +18,8 @@ namespace PandaController {
     void stopControl();
     pid_t initPandaController(ControlMode, char* = NULL);
 
-    std::array<double, 3> readCommandedPosition();
-    void writeCommandedPosition(std::array<double, 3> data);
+    std::array<double, 6> readCommandedPosition();
+    void writeCommandedPosition(std::array<double, 6> data);
 
     std::array<double, 6> readCommandedVelocity();
     void writeCommandedVelocity(std::array<double, 6> data);
@@ -45,7 +45,8 @@ namespace PandaController {
 
     struct shared_data {
     public:
-        std::array<double, 3> commanded_position;
+
+        std::array<double, 6> commanded_position;
         std::array<double, 6> commanded_velocity;
         franka::RobotState current_state;
         franka::RobotState buffer[1000];
