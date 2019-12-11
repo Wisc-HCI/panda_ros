@@ -15,20 +15,30 @@ class SpaceMouse(object):
         self._string_pub = rospy.Publisher("/panda/commands",String, queue_size=5)
         self._last_buttons = [0,0]
         self._grasping = False
+        self._last_ax = None
+        self._delay = 0
 
     def non_lin_scale(self, val):
         return val*math.fabs(val)
 
     def on_joy(self, msg):
         twist = Twist()
+        if self._last_ax and msg.axes == (0,0,0,0,0,0) and self._delay<2:
+            ax=self._last_ax
+            self._delay += 1
+        else:
+            ax = msg.axes
+            self._last_ax = msg.axes
+            self._delay = 0
+
         if not msg.buttons[1]:
-            twist.linear.x=self.non_lin_scale(msg.axes[0])/2.5
-            twist.linear.y=self.non_lin_scale(msg.axes[1])/2.5
-            twist.linear.z=self.non_lin_scale(msg.axes[2])/2.5
+            twist.linear.x=self.non_lin_scale(ax[0])/2.5
+            twist.linear.y=self.non_lin_scale(ax[1])/2.5
+            twist.linear.z=self.non_lin_scale(ax[2])/2.5
 
             twist.angular.x=0
             twist.angular.y=0
-            twist.angular.z=self.non_lin_scale(msg.axes[5])/2.5
+            twist.angular.z=self.non_lin_scale(ax[5])/1.5
 
         else:
             twist.linear.x=0
