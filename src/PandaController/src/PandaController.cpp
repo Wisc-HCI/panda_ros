@@ -986,7 +986,9 @@ namespace PandaController {
         //Setting the Panda IP
         if (ip == NULL) {
             //ip = "10.134.71.22";
-            ip = "172.16.0.2";
+            ip = std::getenv("PANDA_IP");
+            cout<<"Panda ip is "<<ip<<endl;
+                
         }
 
         //Initializing the gripper/ setting the max width
