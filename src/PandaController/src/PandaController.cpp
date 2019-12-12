@@ -18,6 +18,7 @@
 #include <csignal>
 #include <thread>
 #include <cmath>
+#include <sys/prctl.h>
 
 using namespace boost::interprocess;
 using namespace std;
@@ -77,6 +78,16 @@ namespace PandaController {
         angle.yaw = std::atan2(siny_cosp, cosy_cosp);
         
         return angle;
+    }
+
+    // See: https://github.com/frankaemika/franka_ros/issues/35
+    // This adds a tiny bit of random noise to each component to ensure they aren't 0.
+    // Only works with column vectors, which seems to be the normal kind.
+    void addNoise(Eigen::VectorXd v) {
+        double epsilon = 0.000001;
+        for(int i = 0; i < v.rows(); i++) {
+            v[i] += rand() % 2 == 0 ? epsilon : - epsilon;
+        }
     }
 
     void printJointValues(const vector<franka::Record> log, int derivative) {
@@ -692,6 +703,7 @@ namespace PandaController {
                 writeRobotState(robot_state);
 
                 Eigen::VectorXd v = Eigen::Map<Eigen::VectorXd>(readCommandedVelocity().data(), 6);
+                addNoise(v);
                 constrainForces(v, robot_state);
                 Eigen::VectorXd jointVelocities = Eigen::Map<Eigen::MatrixXd>(SharedData->jacobian.data(), 6, 7).completeOrthogonalDecomposition().solve(v);
                 constrainJointVelocity(jointVelocities, robot_state);
@@ -758,6 +770,7 @@ namespace PandaController {
                     (joint_angles[4] - robot_state.q[4]) * scale,
                     (joint_angles[5] - robot_state.q[5]) * scale,
                     (joint_angles[6] - robot_state.q[6]) * scale;
+                addNoise(joint_velocity);
 
                 // Take the desired joint velocities. Convert to cartesian space.
                 // Attempt to shift the target cartesian velocity to avoid a collision.
@@ -950,8 +963,9 @@ namespace PandaController {
     void graspObject(){
         pid_t pid = fork();
         if (pid == 0) {
+            prctl(PR_SET_NAME, (unsigned long)("Grasper"));
             graspObj();
-            _Exit(0);
+            exit(0);
         }
     }
 
@@ -968,7 +982,7 @@ namespace PandaController {
         pid_t pid = fork();
         if (pid == 0) {
             releaseObj();
-            _Exit(0);
+            exit(0);
         }
     }
 
