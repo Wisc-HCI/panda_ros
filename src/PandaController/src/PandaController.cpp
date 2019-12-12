@@ -83,8 +83,8 @@ namespace PandaController {
     // See: https://github.com/frankaemika/franka_ros/issues/35
     // This adds a tiny bit of random noise to each component to ensure they aren't 0.
     // Only works with column vectors, which seems to be the normal kind.
-    void addNoise(Eigen::VectorXd v) {
-        double epsilon = 0.000001;
+    void addNoise(Eigen::VectorXd & v) {
+        double epsilon = 0.00001;
         for(int i = 0; i < v.rows(); i++) {
             v[i] += rand() % 2 == 0 ? epsilon : - epsilon;
         }
@@ -981,6 +981,7 @@ namespace PandaController {
     void releaseObject() {
         pid_t pid = fork();
         if (pid == 0) {
+            prctl(PR_SET_NAME, (unsigned long)("Releaser"));
             releaseObj();
             exit(0);
         }
