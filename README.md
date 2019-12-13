@@ -22,7 +22,7 @@ Compile individually each ros packages:
 2. Start the launch files related to the application:
     * Falcon:
 		- Terminal 1: `roslaunch relaxed_ik relaxed_ik_julia.launch`
-		- Terminal 2: `rosrun inputs_ros falcon.launch`
+		- Terminal 2: `roslaunch inputs_ros falcon.launch`
 	* Space mouse:
 	    - Terminal 1: `roslaunch inputs_ros space_mouse.launch`
 
