@@ -965,7 +965,7 @@ namespace PandaController {
         if (pid == 0) {
             prctl(PR_SET_NAME, (unsigned long)("Grasper"));
             graspObj();
-            exit(0);
+            _Exit(0);
         }
     }
 
@@ -983,7 +983,7 @@ namespace PandaController {
         if (pid == 0) {
             prctl(PR_SET_NAME, (unsigned long)("Releaser"));
             releaseObj();
-            exit(0);
+            _Exit(0);
         }
     }
 
