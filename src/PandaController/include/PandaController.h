@@ -40,8 +40,10 @@ namespace PandaController {
 
     void writeGripperState();
     void homeGripper();
-    void graspObject();
-    void releaseObject();
+    
+    void toggleGrip(std::function<void ()> onToggle = NULL);
+    void graspObject(std::function<void ()> onGrasp = NULL);
+    void releaseObject(std::function<void ()> onRelease = NULL);
 
     struct shared_data {
     public:
@@ -66,6 +68,9 @@ namespace PandaController {
         std::array<double, 42> jacobian{};
         std::array<double, 42> jacobian_pinv{};
         std::array<double, 7> lastJointAcceleration{};
+
+        bool isGripperMoving = false;
+        bool grasped = false;
         
 
         shared_data() {

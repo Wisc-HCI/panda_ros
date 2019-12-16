@@ -156,12 +156,7 @@ void pollFalcon(ros::Publisher pose_goal_pub, ros::Publisher command_pub, double
     //Click 
     if(buttons[0] != lastCenterButton){
         std_msgs::String cmd;
-        if(buttons[0]){
-            cmd.data = "grasp";
-        }
-        else{
-            cmd.data = "release";
-        }
+        cmd.data = "toggleGrip";
         command_pub.publish(cmd);
     }
     lastCenterButton = buttons[0];

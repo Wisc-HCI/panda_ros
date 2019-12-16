@@ -14,7 +14,6 @@ class SpaceMouse(object):
         self._twist_pub = rospy.Publisher("/panda/cart_vel",Twist, queue_size=5)
         self._string_pub = rospy.Publisher("/panda/commands",String, queue_size=5)
         self._last_buttons = [0,0]
-        self._grasping = False
         self._last_ax = None
         self._delay = 0
 
@@ -52,9 +51,9 @@ class SpaceMouse(object):
 
         if msg.buttons[0] and not self._last_buttons[0]:
             cmd = String()
-            cmd.data="grasp" if not self._grasping else "release"
+            cmd.data = "toggleGrip"
+            #cmd.data="grasp" if not self._grasping else "release"
             self._string_pub.publish(cmd)
-            self._grasping = not self._grasping
 
         self._last_buttons = msg.buttons
 

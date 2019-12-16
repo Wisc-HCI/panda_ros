@@ -143,7 +143,7 @@ void pollFalcon() {
     //Click 
     if(buttons[0] && buttons[0] != lastCenterButton){
         if(! gripping){
-            PandaController::graspObject();
+            PandaController::graspObject([]() {cout << "Grasped" << endl;});
             gripping = true;
         }
         else{

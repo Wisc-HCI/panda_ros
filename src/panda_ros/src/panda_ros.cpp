@@ -88,6 +88,9 @@ void callbackCommands(const std_msgs::String& msg){
     if(msg.data == "release"){
         PandaController::releaseObject();
     }
+    if(msg.data == "toggleGrip") {
+        PandaController::toggleGrip();
+    }
     
 }
 

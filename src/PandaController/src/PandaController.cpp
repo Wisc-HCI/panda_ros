@@ -18,7 +18,8 @@
 #include <csignal>
 #include <thread>
 #include <cmath>
-#include <sys/prctl.h>
+#include <future>
+#include <functional>
 
 using namespace boost::interprocess;
 using namespace std;
@@ -951,39 +952,54 @@ namespace PandaController {
         }
     }
 
-    void graspObj() {
+    void graspObj(std::function<void ()> onGrasp) {
         try {
             p_gripper->stop();
+            SharedData->isGripperMoving = true;
             p_gripper->grasp(maxGripperWidth/2,0.2,10,0.5,0.5);
+            SharedData->isGripperMoving = false;
+            SharedData->grasped = true;
+            if (onGrasp != NULL) onGrasp();
         } catch (franka::Exception const& e) {
             std::cout << e.what() << std::endl;
+            SharedData->isGripperMoving = false;
         }
     }
 
-    void graspObject(){
-        pid_t pid = fork();
-        if (pid == 0) {
-            prctl(PR_SET_NAME, (unsigned long)("Grasper"));
-            graspObj();
-            _Exit(0);
+    void graspObject(std::function<void ()> onGrasp){
+        if(SharedData->isGripperMoving || SharedData->grasped) {
+            return;
         }
+        thread(graspObj, onGrasp).detach();
     }
-
-    void releaseObj() {
+    void releaseObj(std::function<void ()> onRelease) {
         try {
             p_gripper->stop();
+            SharedData->isGripperMoving = true;
             p_gripper->move(maxGripperWidth,0.2);
+            SharedData->isGripperMoving = false;
+            SharedData->grasped = false;
+            if (onRelease != NULL) onRelease();
         } catch (franka::Exception const& e) {
             std::cout << e.what() << std::endl;
         }
     }
 
-    void releaseObject() {
-        pid_t pid = fork();
-        if (pid == 0) {
-            prctl(PR_SET_NAME, (unsigned long)("Releaser"));
-            releaseObj();
-            _Exit(0);
+    void releaseObject(std::function<void ()> onRelease) {
+        if(SharedData->isGripperMoving || !SharedData->grasped) {
+            return;
+        }
+        thread(releaseObj, onRelease).detach();
+    }
+
+    void toggleGrip(std::function<void ()> onToggle) {
+        if (SharedData->isGripperMoving){
+            return;
+        }
+        if (SharedData->grasped) {
+            releaseObject(onToggle);
+        } else {
+            graspObject(onToggle);
         }
     }
 
