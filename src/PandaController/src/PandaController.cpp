@@ -588,7 +588,7 @@ namespace PandaController {
     void runPositionController(char* ip = NULL){
         try {
             cout << "In runPositionController" << endl;
-            franka::Robot robot(ip);
+            franka::Robot robot(ip, franka::RealtimeConfig::kIgnore);
             cout << "Robot connected" << endl;
             robot.automaticErrorRecovery();
             std::array<double,7> q_goal = {{0.0,-0.4,0.0,-2.0,0.0,1.6,0.8}};
@@ -682,7 +682,7 @@ namespace PandaController {
     void runVelocityController(char* ip = NULL){
         try {
             cout << "In runVelocityController" << endl;
-            franka::Robot robot(ip);
+            franka::Robot robot(ip, franka::RealtimeConfig::kIgnore);
             cout << "Robot connected" << endl;
             robot.automaticErrorRecovery();
             std::array<double,7> q_goal = {{0.0,-0.4,0.0,-2.0,0.0,1.6,0.8}};
@@ -741,7 +741,7 @@ namespace PandaController {
     void runJointPositionController(char* ip = NULL){
         try {
             cout << "In runJointPositionController" << endl;
-            franka::Robot robot(ip);
+            franka::Robot robot(ip, franka::RealtimeConfig::kIgnore);
             cout << "Robot connected" << endl;
             robot.automaticErrorRecovery();
             std::array<double,7> q_goal = {{0.0,-0.4,0.0,-2.0,0.0,1.6,0.8}};
@@ -816,7 +816,7 @@ namespace PandaController {
     void runJointVelocityController(char* ip = NULL){
         try {
             cout << "In runJointVelocityController" << endl;
-            franka::Robot robot(ip);
+            franka::Robot robot(ip, franka::RealtimeConfig::kIgnore);
             cout << "Robot connected" << endl;
             robot.automaticErrorRecovery();
             std::array<double,7> q_goal = {{0.0,-0.4,0.0,-2.0,0.0,1.6,0.8}};
@@ -893,7 +893,7 @@ namespace PandaController {
     void noController(char* ip = NULL){
         try {
             cout << "In noController" << endl;
-            franka::Robot robot(ip);
+            franka::Robot robot(ip, franka::RealtimeConfig::kIgnore);
             cout << "Robot connected" << endl;
             robot.automaticErrorRecovery();
             std::array<double,7> q_goal = {{0.0,-0.4,0.0,-2.0,0.0,1.6,0.8}};
