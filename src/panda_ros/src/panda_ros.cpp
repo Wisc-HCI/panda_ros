@@ -128,7 +128,7 @@ void publishTf(franka::RobotState robot_state){
     geometry_msgs::TransformStamped transformStamped;
     
     transformStamped.header.stamp = ros::Time::now();
-    transformStamped.header.frame_id = "base_link";
+    transformStamped.header.frame_id = "panda_link0";
     transformStamped.child_frame_id = "end_effector";
     transformStamped.transform.translation.x = position[0];
     transformStamped.transform.translation.y = position[1];
