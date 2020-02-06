@@ -1,0 +1,6 @@
+<launch>
+    <node pkg="panda_ros" type="pandaRosWrapper" name="panda_controller" output="screen">
+		<param name="control_mode" value="joint_position" />
+    </node>
+
+</launch>

@@ -168,6 +168,9 @@ void publishTf(franka::RobotState robot_state){
     Eigen::Affine3d transform(Eigen::Matrix4d::Map(robot_state.O_T_EE.data()));
     Eigen::Vector3d position(transform.translation());
     Eigen::Quaterniond orientation(transform.linear());
+    // Align the orientation of the end-effector with panda_link0
+    Eigen::Quaterniond rot(Eigen::AngleAxisd(M_PI,Eigen::Vector3d::UnitX()));
+    orientation *= rot;
     geometry_msgs::TransformStamped transformStamped;
     
     transformStamped.header.stamp = ros::Time::now();
@@ -239,7 +242,6 @@ int main(int argc, char **argv) {
     switch(mode){
         case PandaController::ControlMode::CartesianVelocity:
             sub_position = n.subscribe("/panda/cart_vel", 10, updateCallbackCartVel);
-            cout<<"subscribed"<<endl;
             break;
         case PandaController::ControlMode::JointVelocity:
             //TODO: we don't actually have anything that uses this, not set up correctly in PandaController
@@ -252,7 +254,7 @@ int main(int argc, char **argv) {
             
             break;
         case PandaController::ControlMode::JointPosition:
-            sub_position = n.subscribe("/relaxed_ik/joint_angle_solutions", 10, updateCallbackJointPos);
+            sub_position = n.subscribe("/panda/joint_angles", 10, updateCallbackJointPos);
             break;
         case PandaController::ControlMode::None:
             break;     
