@@ -1175,6 +1175,25 @@ namespace PandaController {
         memoryRegion = new mapped_region(shm, read_write);
         new (memoryRegion->get_address()) shared_data;
         SharedData = (shared_data*)memoryRegion->get_address();
+        
+        //Reset velocity commands
+        std::array<double, 6> velocity;
+        velocity[0] = 0;
+        velocity[1] = 0;
+        velocity[2] = 0;
+        velocity[3] = 0;
+        velocity[4] = 0;
+        velocity[5] = 0;
+        PandaController::writeCommandedVelocity(velocity);
+        std::array<double, 7> default_angles;
+        default_angles[0] = 0.0;
+        default_angles[1] = -0.4;
+        default_angles[2] = 0.0;
+        default_angles[3] = -2.0;
+        default_angles[4] = 0.0;
+        default_angles[5] = 1.6;
+        default_angles[6] = 0.8;
+        PandaController::writeJointAngles(default_angles);
     }
 
     void setup_ft(){
