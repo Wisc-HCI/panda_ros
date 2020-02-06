@@ -72,6 +72,8 @@ namespace PandaController {
     bool isRunning();
 
     void writeGripperState();
+    franka::GripperState readGripperState();
+    
     void homeGripper();
     
     void toggleGrip(std::function<void ()> onToggle = NULL);
@@ -110,6 +112,7 @@ namespace PandaController {
         int lastCommand = 0;
         std::array<double, 6> commanded_velocity;
         franka::RobotState current_state;
+        franka::GripperState gripper_state;
         franka::RobotState buffer[1000];
         std::chrono::system_clock::time_point start_time;
         long timestamps[1000];

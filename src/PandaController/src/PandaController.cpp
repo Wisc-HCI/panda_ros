@@ -1107,12 +1107,6 @@ namespace PandaController {
         }
     }
 
-    void writeGripperState() {
-        franka::GripperState state = p_gripper->readOnce();
-        std::cout << "Printing the gripper state:\n" << "Current width = " << state.width <<
-                     "m\nMax width = " << state.max_width << "m\nIs grasped = " << state.is_grasped << "\n";        
-    }
-
     void homeGripper() {
         try {
             p_gripper->stop();
@@ -1126,9 +1120,10 @@ namespace PandaController {
         try {
             p_gripper->stop();
             SharedData->isGripperMoving = true;
-            p_gripper->grasp(maxGripperWidth/2,0.2,10,0.5,0.5);
+            p_gripper->grasp(maxGripperWidth/2,0.2,20,0.5,0.5);
             SharedData->isGripperMoving = false;
             SharedData->grasped = true;
+            PandaController::writeGripperState();
             if (onGrasp != NULL) onGrasp();
         } catch (franka::Exception const& e) {
             std::cout << e.what() << std::endl;
@@ -1149,6 +1144,7 @@ namespace PandaController {
             p_gripper->move(maxGripperWidth,0.2);
             SharedData->isGripperMoving = false;
             SharedData->grasped = false;
+            PandaController::writeGripperState();
             if (onRelease != NULL) onRelease();
         } catch (franka::Exception const& e) {
             std::cout << e.what() << std::endl;
@@ -1302,16 +1298,13 @@ namespace PandaController {
 
         //Initializing the gripper/ setting the max width
         p_gripper = new franka::Gripper(ip);
-        //if (!homeGripper()){
+        // if (!homeGripper()){
         //     cout << "Could not home gripper\n";
         // }
-         franka::GripperState state = p_gripper->readOnce();
-         maxGripperWidth = state.max_width;
-         p_gripper->move(maxGripperWidth, 0.2);
-         writeGripperState();
-
-
-
+        franka::GripperState state = p_gripper->readOnce();
+        maxGripperWidth = state.max_width;
+        p_gripper->move(maxGripperWidth, 0.2);
+        PandaController::writeGripperState();
         std::cout << "Starting" << std::endl;
         SharedData->running = true;
         SharedData->start_time = std::chrono::system_clock::now();
@@ -1667,6 +1660,18 @@ namespace PandaController {
             SharedData->timestamps[SharedData->buffer_end-1] = (std::chrono::system_clock::now() - SharedData->start_time).count();
         }
         SharedData->current_state = data;
+    }
+    franka::GripperState readGripperState() {
+        if (SharedData == NULL) throw "Must initialize shared memory space first";
+        boost::interprocess::scoped_lock<boost::interprocess::interprocess_mutex> lock(SharedData->mutex);
+        return SharedData->gripper_state;
+    }
+
+    void writeGripperState() {
+        if (SharedData == NULL) return;
+        franka::GripperState state = p_gripper->readOnce(); 
+        boost::interprocess::scoped_lock<boost::interprocess::interprocess_mutex> lock(SharedData->mutex);
+        SharedData->gripper_state = state;
     }
 
     void consumeBuffer(int &count, franka::RobotState* result, long* times){

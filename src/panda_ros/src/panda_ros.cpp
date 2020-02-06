@@ -139,7 +139,9 @@ void callbackCommands(const std_msgs::String& msg){
 }
 
 void publishJointState(franka::RobotState robot_state, ros::Publisher jointPub){
-    const vector<string> joint_names{"panda_joint1", "panda_joint2","panda_joint3","panda_joint4","panda_joint5","panda_joint6","panda_joint7"};
+    const vector<string> joint_names{"panda_joint1", "panda_joint2","panda_joint3","panda_joint4","panda_joint5","panda_joint6","panda_joint7","panda_finger_joint1","panda_finger_joint2"};
+    franka::GripperState gripperState = PandaController::readGripperState();
+
     sensor_msgs::JointState states;
     states.effort.resize(joint_names.size());
     states.name.resize(joint_names.size());
@@ -149,11 +151,14 @@ void publishJointState(franka::RobotState robot_state, ros::Publisher jointPub){
         states.name[i] = joint_names[i];
     }
     states.header.stamp = ros::Time::now();
-    for (size_t i = 0; i < joint_names.size(); i++) {
+    for (size_t i = 0; i < joint_names.size()-2; i++) {
         states.position[i] = robot_state.q[i];
         states.velocity[i] = robot_state.dq[i];
         states.effort[i] = robot_state.tau_J[i];
     }
+    states.position[joint_names.size()-2] = gripperState.width/2.;
+    states.position[joint_names.size()-1] = gripperState.width/2.;
+    
     jointPub.publish(states);
 }
 
