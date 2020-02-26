@@ -1011,6 +1011,72 @@ namespace PandaController {
         SharedData = (shared_data*)memoryRegion->get_address();
     }
 
+    void setup_ft(){
+        double cpt = 1000000;
+        struct sockaddr_in addr;	/* Address of Net F/T. */
+        struct hostent *he;			/* Host entry for Net F/T. */
+        int err;					/* Error status of operations. */
+
+        /* Calculate number of samples, command code, and open socket here. */
+        socketHandle = socket(AF_INET, SOCK_DGRAM, 0);
+        if (socketHandle == -1) {
+            cout << "Can't Get Socket Handle. Exiting." << endl;
+            exit(1);
+        }
+        
+        *(uint16*)&request[0] = htons(0x1234); /* standard header. */
+        *(uint16*)&request[2] = htons(COMMAND); /* per table 9.1 in Net F/T user manual. */
+        *(uint32*)&request[4] = htonl(NUM_SAMPLES); /* see section 9.1 in Net F/T user manual. */
+        
+        /* Sending the request. */
+        he = gethostbyname("192.168.2.2");
+        memcpy(&addr.sin_addr, he->h_addr_list[0], he->h_length);
+        addr.sin_family = AF_INET;
+        addr.sin_port = htons(PORT);
+        
+        err = connect( socketHandle, (struct sockaddr *)&addr, sizeof(addr) );
+        if (err == -1) {
+            cout << "Can't Connect to Socket. Exiting." << endl;
+            exit(2);
+        }
+	
+    }
+
+    void read_ft(){
+        while(PandaController::isRunning()){
+            // Get the current FT reading from the sensor
+            double cpf = 1000000;
+            int i;						/* Generic loop/array index. */
+            RESPONSE resp;				/* The structured response received from the Net F/T. */
+            byte response[36];			/* The raw response data received from the Net F/T. */
+            
+            // Transform into the correct frame based on Panda Pose
+            franka::RobotState state = PandaController::readRobotState();
+
+            // Get feedback from FT sensor - THIS NEEDS TO BE MOVED TO SHARED MEMORY
+            send(socketHandle, request, 8, 0 );
+
+            /* Receiving the response. */
+            recv( socketHandle, response, 36, 0 );
+            resp.rdt_sequence = ntohl(*(uint32*)&response[0]);
+            resp.ft_sequence = ntohl(*(uint32*)&response[4]);
+            resp.status = ntohl(*(uint32*)&response[8]);
+            for( i = 0; i < 6; i++ ) {
+                resp.FTData[i] = ntohl(*(int32*)&response[12 + i * 4]);
+            }
+
+            std::array<double, 6> ft_sensor = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
+            ft_sensor[0]=resp.FTData[0]/cpf;
+            ft_sensor[1]=resp.FTData[1]/cpf;
+            ft_sensor[2]=resp.FTData[2]/cpf;
+            ft_sensor[3]=resp.FTData[3]/cpf;
+            ft_sensor[4]=resp.FTData[4]/cpf;
+            ft_sensor[5]=resp.FTData[5]/cpf;
+            writeFTForces(ft_sensor);
+        }
+    
+    }
+
     pid_t initPandaController(ControlMode mode, char* ip) {
         initializeMemory();
 
@@ -1024,17 +1090,21 @@ namespace PandaController {
 
         //Initializing the gripper/ setting the max width
         p_gripper = new franka::Gripper(ip);
-        // if (!homeGripper()){
+        //if (!homeGripper()){
         //     cout << "Could not home gripper\n";
         // }
-        franka::GripperState state = p_gripper->readOnce();
-        maxGripperWidth = state.max_width;
-        p_gripper->move(maxGripperWidth, 0.2);
-        writeGripperState();
+         franka::GripperState state = p_gripper->readOnce();
+         maxGripperWidth = state.max_width;
+         p_gripper->move(maxGripperWidth, 0.2);
+         writeGripperState();
+
+
 
         std::cout << "Starting" << std::endl;
         SharedData->running = true;
         SharedData->start_time = std::chrono::system_clock::now();
+
+        // Fork process for Panda Controller
         pid_t pid = fork();
         if (pid == 0) {
             switch(mode){
@@ -1057,6 +1127,15 @@ namespace PandaController {
             stopControl();
             exit(0);
         }
+
+        // Fork process for the force torque sensor
+        pid_t pid_child_2 = fork();
+        if (pid_child_2 == 0) {
+            setup_ft();
+            read_ft();
+            exit(0);
+        }
+
         return pid;
     }
 
@@ -1107,8 +1186,19 @@ namespace PandaController {
         boost::interprocess::scoped_lock<boost::interprocess::interprocess_mutex> lock(SharedData->mutex);
         SharedData->commanded_velocity = data;
     }
-    
 
+    std::array<double, 6> readFTForces() {
+        if (SharedData == NULL) throw "Must initialize shared memory space first";
+
+        boost::interprocess::scoped_lock<boost::interprocess::interprocess_mutex> lock(SharedData->mutex);
+        return SharedData->ft_sensor;
+    }
+    void writeFTForces(std::array<double, 6> data){
+        if (SharedData == NULL) return;
+        boost::interprocess::scoped_lock<boost::interprocess::interprocess_mutex> lock(SharedData->mutex);
+        SharedData->ft_sensor = data;
+    }
+    
     std::array<double, 7> readPoseGoal(){
         if (SharedData == NULL) throw "Must initialize shared memory space first";
 

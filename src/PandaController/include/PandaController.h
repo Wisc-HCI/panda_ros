@@ -11,6 +11,21 @@
 #include <eigen3/Eigen/Core>
 #include <franka/gripper.h>
 
+// Socket Libraries for FT sensor readings
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <string.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <netdb.h>
+#include <arpa/inet.h> 
+
+#define PORT 49152 /* Port the Net F/T always uses */
+#define COMMAND 2 /* Command code 2 starts streaming */
+#define NUM_SAMPLES 1 /* Will send 1 sample before stopping */
+
 namespace PandaController {
 
     enum ControlMode {CartesianVelocity, CartesianPosition, JointVelocity, JointPosition, None};
@@ -23,6 +38,9 @@ namespace PandaController {
 
     std::array<double, 6> readCommandedVelocity();
     void writeCommandedVelocity(std::array<double, 6> data);
+
+    std::array<double, 6> readFTForces();
+    void writeFTForces(std::array<double, 6> data);
 
     std::array<double, 7> readPoseGoal();
     void writePoseGoal(std::array<double, 7> data);
@@ -44,6 +62,23 @@ namespace PandaController {
     void toggleGrip(std::function<void ()> onToggle = NULL);
     void graspObject(std::function<void ()> onGrasp = NULL);
     void releaseObject(std::function<void ()> onRelease = NULL);
+
+    /* FT Sensor - Typedefs used so integer sizes are more explicit */
+    typedef unsigned int uint32;
+    typedef int int32;
+    typedef unsigned short uint16;
+    typedef short int16;
+    typedef unsigned char byte;
+    typedef struct response_struct {
+        uint32 rdt_sequence;
+        uint32 ft_sequence;
+        uint32 status;
+        int32 FTData[6];
+    } RESPONSE;
+    // End FT Sensor Socket
+
+    byte request[8]; /* The request data sent to the Net F/T. */
+    int socketHandle;			/* Handle to UDP socket used to communicate with Net F/T. */
 
     struct shared_data {
     public:
@@ -71,6 +106,8 @@ namespace PandaController {
 
         bool isGripperMoving = false;
         bool grasped = false;
+
+        std::array<double, 6> ft_sensor;
         
 
         shared_data() {
