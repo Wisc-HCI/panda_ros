@@ -57,7 +57,6 @@ array<double, 3> force_dimension = {0.0, 0.0, 0.0};
 
 std::ofstream outputfile;
 
-
 void signalHandler(int sig)
 {
     std::cout << "Interrupt " << sig << " recieved in ForceDimension.cpp\n";
@@ -151,38 +150,6 @@ void log_demonstration(double x, double y, double z, double fx, double fy, doubl
     outputfile << x << "," << y << "," << z << "," << fx << "," << fy << "," << fz << "\n";
 }
 
-void setup_ft(){
-    
-	double cpt = 1000000;
-	struct sockaddr_in addr;	/* Address of Net F/T. */
-	struct hostent *he;			/* Host entry for Net F/T. */
-	int err;					/* Error status of operations. */
-
-	/* Calculate number of samples, command code, and open socket here. */
-	socketHandle = socket(AF_INET, SOCK_DGRAM, 0);
-	if (socketHandle == -1) {
-        cout << "Can't Get Socket Handle. Exiting." << endl;
-		exit(1);
-	}
-	
-	*(uint16*)&request[0] = htons(0x1234); /* standard header. */
-	*(uint16*)&request[2] = htons(COMMAND); /* per table 9.1 in Net F/T user manual. */
-	*(uint32*)&request[4] = htonl(NUM_SAMPLES); /* see section 9.1 in Net F/T user manual. */
-	
-	/* Sending the request. */
-	he = gethostbyname("192.168.2.2");
-	memcpy(&addr.sin_addr, he->h_addr_list[0], he->h_length);
-	addr.sin_family = AF_INET;
-	addr.sin_port = htons(PORT);
-	
-	err = connect( socketHandle, (struct sockaddr *)&addr, sizeof(addr) );
-	if (err == -1) {
-		cout << "Can't Connect to Socket. Exiting." << endl;
-        exit(2);
-	}
-	
-}
-
 void feedback_ft_forcedimension(bool buttonPressed, double velcenterx, double velcentery, double velcenterz,
 double *x, double *y, double *z, double *fx, double *fy, double *fz){
 
@@ -237,7 +204,7 @@ int main() {
     //Setup the signal handler for exiting
     signal(SIGINT, signalHandler);
 
-    setup_ft();
+    //setup_ft();
 
     if (!init_forcedimension()) {
         cout << endl << "Failed to init force dimension" << endl;
