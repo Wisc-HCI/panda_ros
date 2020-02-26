@@ -11,6 +11,8 @@ SET(relaxed_ik_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../../devel/share/relaxed_ik/cmak
 find_package(catkin REQUIRED COMPONENTS roscpp rospy std_msgs genmsg relaxed_ik)
 find_package(Eigen3 REQUIRED)
 find_library(LIBNIFALCON nifalcon REQUIRED)
+find_library(DHDC libdhd.so.3.8.0 REQUIRED)
+find_library(DRDC libdrd.so.3.8.0 REQUIRED)
 
 
 install(DIRECTORY
@@ -30,6 +32,14 @@ add_executable(falconRosWrapper ${CMAKE_CURRENT_SOURCE_DIR}/src/falcon_ros.cpp)
 target_link_libraries(falconRosWrapper ${LIBNIFALCON}  ${catkin_LIBRARIES})
 target_include_directories(falconRosWrapper PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include ${CMAKE_CURRENT_SOURCE_DIR}/../../devel/include)
 
+add_executable(forcedimensionRosWrapper ${CMAKE_CURRENT_SOURCE_DIR}/src/forcedimension_ros.cpp)
+target_link_libraries(forcedimensionRosWrapper ${LIBNIFALCON}  ${catkin_LIBRARIES} ${DRDC} ${DHDC})
+target_include_directories(forcedimensionRosWrapper PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include ${CMAKE_CURRENT_SOURCE_DIR}/../../devel/include)
+
 install(TARGETS falconRosWrapper
   RUNTIME DESTINATION lib/falcon_ros
+)
+
+install(TARGETS forcedimensionRosWrapper
+  RUNTIME DESTINATION lib/forcedimension_ros
 )
