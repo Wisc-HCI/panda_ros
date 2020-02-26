@@ -144,7 +144,8 @@ void publishTf(franka::RobotState robot_state){
 
 void publishWrench(franka::RobotState robot_state, ros::Publisher wrenchPub){
     std::array<double, 6> forces;
-    forces = robot_state.O_F_ext_hat_K;
+    //forces = robot_state.O_F_ext_hat_K;
+    forces = PandaController::readFTForces();
 
     geometry_msgs::Wrench wrench;
     wrench.force.x = forces[0];
