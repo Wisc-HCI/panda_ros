@@ -90,7 +90,7 @@ bool init_forcedimension() {
         }
 }
 
-void poll_forcedimension(bool buttonPressed, double velcenterx, double velcentery,double velcenterz) {
+void poll_forcedimension(bool buttonPressed, bool resetCenter, double velcenterx, double velcentery,double velcenterz) {
 
     // Scaling Values
     array<double,3> scaling_factors = {-3.0, -3.0, 3.0};
@@ -113,8 +113,13 @@ void poll_forcedimension(bool buttonPressed, double velcenterx, double velcenter
 
     else{
         dhdGetPosition (&force_dimension[0], &force_dimension[1], &force_dimension[2]);
+        if(resetCenter){
+            cout << "Reset Center" << endl;
+            workspace_center[0]=workspace_center[0]-scaling_factors[0]*(force_dimension[0]-velcenterx);
+            workspace_center[1]=workspace_center[1]-scaling_factors[1]*(force_dimension[1]-velcentery);
+            workspace_center[2]=workspace_center[2]-scaling_factors[2]*(force_dimension[2]-velcenterz);
+        }
     }
-
 
     panda_pos[0] = scaling_factors[0] * force_dimension[0] + workspace_center[0];
     panda_pos[1] = scaling_factors[1] * force_dimension[1] + workspace_center[1];
@@ -196,6 +201,8 @@ double *x, double *y, double *z, double *fx, double *fy, double *fz){
     *fy = -state.O_F_ext_hat_K[1];
     *fz = -state.O_F_ext_hat_K[2];
 
+    // TODO: Fix this to be the forces from the actual force torque sensor
+
     //cout << "FT: " << -FTData[0] * scale -vx*b  << "," << -FTData[1]* scale << "," << FTData[2]* scale -vz*b << endl;
 
 }
@@ -245,7 +252,7 @@ int main() {
     if (pid < 0) {
        cout << "Failed to start panda process" << endl;
     }
-    poll_forcedimension(false,0.0,0.0,0.0);
+    poll_forcedimension(false,false,0.0,0.0,0.0);
 
     // State flow based on button presses
     bool exit=false;
@@ -268,19 +275,24 @@ int main() {
     auto start = high_resolution_clock::now(); 
     bool gripping = false;
     bool recording = false;
+    bool resetCenter = false;
 
     int file_iter = 0;
 
     while (PandaController::isRunning()) {
-        poll_forcedimension(velocity_mode, velcenterx,velcentery,velcenterz);
+        poll_forcedimension(velocity_mode,resetCenter, velcenterx,velcentery,velcenterz);
+
+        if (resetCenter){ //only allow one correction
+            resetCenter=false;
+        }
         //feedback_forcedimension(&x,&y,&z,&fx,&fy,&fz,buttonPressed);
         feedback_ft_forcedimension(velocity_mode, velcenterx, velcentery, velcenterz,&x,&y,&z,&fx,&fy,&fz);
 
 
-        // If button pressed and released in less than 0.5 seconds,
+        // If button pressed and released in less than 0.3 seconds,
         // it is a gripping action
 
-        // If held greater than 0.5 seconds, it is a velocity control action
+        // If held greater than 0.3 seconds, it is a velocity control action
 
         if(!buttonPressed && dhdGetButton(0)==1) // button initially pressed
         {
@@ -335,10 +347,8 @@ int main() {
                 double tempx;
                 double tempy;
                 double tempz;
-                dhdGetPosition (&tempx, &tempy, &tempz);
-                workspace_center[0]=workspace_center[0]+(tempx-velcenterx);
-                workspace_center[1]=workspace_center[1]+(tempy-velcentery);
-                workspace_center[2]=workspace_center[2]-(tempz-velcenterz);
+                resetCenter=true;
+
                 velocity_mode=false;
             }
         }
