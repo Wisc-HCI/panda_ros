@@ -73,6 +73,9 @@ namespace PandaController {
 
     void writeGripperState();
     franka::GripperState readGripperState();
+
+    void writeMaxForce(double val);
+    double readMaxForce();
     
     void homeGripper();
     
@@ -145,6 +148,7 @@ namespace PandaController {
         std::array<double, 6> ft_sensor;
         std::array<double, 6> ft_bias;
         
+	double maxForce = 15;
 
         shared_data() {
             writeCommandedVelocity({0,0,0,0,0,0});

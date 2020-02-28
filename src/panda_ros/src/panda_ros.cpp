@@ -16,6 +16,7 @@
 #include <eigen3/Eigen/Dense>
 #include <csignal>
 #include <deque>
+#include <boost/algorithm/string.hpp>
 
 using namespace std;
 
@@ -124,7 +125,8 @@ void updateCallbackCartVel(const geometry_msgs::Twist::ConstPtr& msg){
 }
 
 void callbackCommands(const std_msgs::String& msg){
-
+    std::vector<std::string> command;
+    boost::split(command, msg.data, [](char c){return c == ';';});
     if(msg.data == "grasp"){
         cout<<"Grasping"<<endl;
         PandaController::graspObject();
@@ -134,6 +136,11 @@ void callbackCommands(const std_msgs::String& msg){
     }
     if(msg.data == "toggleGrip") {
         PandaController::toggleGrip();
+    }
+    if(command[0] == "setMaxForce") {
+        cout<<"Setting max force to "<<command[1]<<endl;
+        PandaController::writeMaxForce(stod(command[1]));
+        cout<<PandaController::readMaxForce()<<endl;
     }
     
 }

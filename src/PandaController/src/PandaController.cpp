@@ -566,7 +566,7 @@ namespace PandaController {
     }
 
     void constrainForces(Eigen::VectorXd & velocity, const franka::RobotState & robot_state) {
-        double maxForce = 15;
+        double maxForce = readMaxForce();
         for (int i = 0; i < 3; i++){
             // If the force is too high, and the velocity would increase the force,
             // Then remove that velocity.
@@ -1680,6 +1680,7 @@ namespace PandaController {
         }
         SharedData->current_state = data;
     }
+    
     franka::GripperState readGripperState() {
         if (SharedData == NULL) throw "Must initialize shared memory space first";
         boost::interprocess::scoped_lock<boost::interprocess::interprocess_mutex> lock(SharedData->mutex);
@@ -1691,6 +1692,18 @@ namespace PandaController {
         franka::GripperState state = p_gripper->readOnce(); 
         boost::interprocess::scoped_lock<boost::interprocess::interprocess_mutex> lock(SharedData->mutex);
         SharedData->gripper_state = state;
+    }
+
+    double readMaxForce() {
+        if (SharedData == NULL) throw "Must initialize shared memory space first";
+        boost::interprocess::scoped_lock<boost::interprocess::interprocess_mutex> lock(SharedData->mutex);
+        return SharedData->maxForce;
+    }
+
+    void writeMaxForce(double val) {
+        if (SharedData == NULL) return;
+        boost::interprocess::scoped_lock<boost::interprocess::interprocess_mutex> lock(SharedData->mutex);
+        SharedData->maxForce = val;
     }
 
     void consumeBuffer(int &count, franka::RobotState* result, long* times){
