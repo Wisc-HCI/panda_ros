@@ -10,6 +10,7 @@
 #include <franka/model.h>
 #include <eigen3/Eigen/Core>
 #include <franka/gripper.h>
+#include <deque>
 
 // Socket Libraries for FT sensor readings
 #include <stdio.h>
@@ -33,8 +34,9 @@ namespace PandaController {
     void stopControl();
     pid_t initPandaController(ControlMode, char* = NULL);
 
-    std::array<double, 6> readCommandedPosition();
+    std::array<double, 6> readCommandedPosition(double & scaleFactor);
     void writeCommandedPosition(std::array<double, 6> data);
+    void writeCommandedPath(const std::array<double, 7>* data, const int & length);
 
     std::array<double, 6> readCommandedVelocity();
     void writeCommandedVelocity(std::array<double, 6> data);
@@ -83,7 +85,9 @@ namespace PandaController {
     struct shared_data {
     public:
 
-        std::array<double, 6> commanded_position;
+        std::array<double, 7> commanded_position[1000]; // time, pose
+        int currentCommand = 0;
+        int lastCommand = 0;
         std::array<double, 6> commanded_velocity;
         franka::RobotState current_state;
         franka::RobotState buffer[1000];
@@ -112,6 +116,7 @@ namespace PandaController {
 
         shared_data() {
             writeCommandedVelocity({0,0,0,0,0,0});
+            writeCommandedPosition({0,0,0,0,0,0});
         }
     }; //end struct shared_data
 

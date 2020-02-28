@@ -3,6 +3,7 @@
 #include <tf2/LinearMath/Quaternion.h>
 #include <geometry_msgs/TransformStamped.h>
 #include <sensor_msgs/JointState.h>
+#include <nav_msgs/Path.h>
 #include <signal.h>
 #include "PandaController.h"
 #include "std_msgs/String.h"
@@ -13,6 +14,7 @@
 #include <eigen3/Eigen/Core>
 #include <eigen3/Eigen/Dense>
 #include <csignal>
+#include <deque>
 
 using namespace std;
 
@@ -50,6 +52,31 @@ void updateCallbackCartPos(const geometry_msgs::Pose::ConstPtr& msg){
         position[5] = 0;
         
         PandaController::writeCommandedPosition(position);
+    }
+}
+
+void updateCallbackPath(const nav_msgs::Path::ConstPtr& msg) {
+    if (PandaController::isRunning()){
+        std::array<double, 7> commandedPath[msg->poses.size()]; 
+        for (size_t i = 0; i < msg->poses.size(); i++) {
+            auto poseStamped = msg->poses[i];
+            long secs = poseStamped.header.stamp.sec;
+            long nsecs = poseStamped.header.stamp.nsec;
+
+            std::array<double, 7> command;
+            command[0] = secs * 1000 + nsecs / 1000000;
+            
+            command[1] = poseStamped.pose.position.x;
+            command[2] = poseStamped.pose.position.y;
+            command[3] = poseStamped.pose.position.z;
+            //TODO(?) update with quat
+            command[4] = 0;
+            command[5] = 0;
+            command[6] = 0;
+            commandedPath[i] = command;
+        }
+        
+        PandaController::writeCommandedPath(commandedPath, msg->poses.size());
     }
 }
 
@@ -170,7 +197,7 @@ int main(int argc, char **argv) {
     ros::NodeHandle n("~");
     std::string mode_str;
     //Always specify parameter, it uses cached parameter instead of default value.
-    n.param<std::string>("control_mode", mode_str,"none");
+    n.param<std::string>("control_mode", mode_str, "none");
     PandaController::ControlMode mode;
 
     if(mode_str == "cartesian_velocity")
@@ -191,6 +218,7 @@ int main(int argc, char **argv) {
     
     ros::Subscriber sub_commands = n.subscribe("/panda/commands", 10, callbackCommands);
     ros::Subscriber sub_position;
+    ros::Subscriber sub_trajectory;
     switch(mode){
         case PandaController::ControlMode::CartesianVelocity:
             sub_position = n.subscribe("/panda/cart_vel", 10, updateCallbackCartVel);
@@ -202,6 +230,7 @@ int main(int argc, char **argv) {
             break;
         case PandaController::ControlMode::CartesianPosition:
             sub_position = n.subscribe("/panda/cart_pose", 10, updateCallbackCartPos);
+            sub_position = n.subscribe("/panda/path", 10, updateCallbackPath);
             break;
         case PandaController::ControlMode::JointPosition:
             sub_position = n.subscribe("/relaxed_ik/joint_angle_solutions", 10, updateCallbackJointPos);

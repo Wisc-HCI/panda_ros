@@ -20,6 +20,7 @@
 #include <cmath>
 #include <future>
 #include <functional>
+#include <deque>
 
 using namespace boost::interprocess;
 using namespace std;
@@ -603,15 +604,27 @@ namespace PandaController {
             cout << "Model loaded" << endl;
 
             writeRobotState(robot.readOnce());
+            std::array<double, 6> positionArray;
+            Eigen::Affine3d transformMatrix(Eigen::Matrix4d::Map(SharedData->current_state.O_T_EE.data()));
+            Eigen::Vector3d positionVector(transformMatrix.translation());
+            for (size_t i = 0; i < 3; i++) {
+                positionArray[i] = positionVector[i];
+            }
+            for (size_t i = 0; i < 3; i++) {
+                positionArray[3 + i] = 0;
+            }
+            writeCommandedPosition(positionArray);
+    
             cout << "About to start" << endl;
 
             robot.control([=, &count](const franka::RobotState& robot_state,
                                     franka::Duration period) -> franka::JointVelocities {
                 writeRobotState(robot_state);
 
-                array<double, 6> commandedPosition = readCommandedPosition();
+                double duration_s;
+                array<double, 6> commandedPosition = readCommandedPosition(duration_s);
+
                 
-                double scaling_factor = 0.2;
                 Eigen::Affine3d transform(Eigen::Matrix4d::Map(robot_state.O_T_EE.data()));
                 Eigen::Vector3d position(transform.translation());
                 Eigen::Quaterniond orientation(transform.linear());
@@ -633,12 +646,13 @@ namespace PandaController {
 
                 EulerAngles difference_a = quaternionToEuler(difference);
 
-                double v_x = (commandedPosition[0] - position[0]) / scaling_factor;
-                double v_y = (commandedPosition[1] - position[1]) / scaling_factor;
-                double v_z = (commandedPosition[2] - position[2]) / scaling_factor;
-                double v_roll = difference_a.roll / scaling_factor;
-                double v_pitch = difference_a.pitch / scaling_factor;
-                double v_yaw = difference_a.yaw / scaling_factor;
+                double scaling_factor = 1;
+                double v_x = (commandedPosition[0] - position[0]) * scaling_factor / duration_s;
+                double v_y = (commandedPosition[1] - position[1]) * scaling_factor / duration_s;
+                double v_z = (commandedPosition[2] - position[2]) * scaling_factor / duration_s;
+                double v_roll = difference_a.roll * scaling_factor / duration_s;
+                double v_pitch = difference_a.pitch * scaling_factor / duration_s;
+                double v_yaw = difference_a.yaw * scaling_factor / duration_s;
 
                 Eigen::VectorXd v(6);
                 v << v_x, v_y, v_z, v_roll, v_pitch, v_yaw;
@@ -1163,16 +1177,86 @@ namespace PandaController {
         return SharedData->running;
     }
 
-    std::array<double, 6> readCommandedPosition(){
+    bool isMotionDone(std::array<double, 7> command) {
+        long timePoint = (long)command[0];
+        long deltaT = std::chrono::duration_cast<std::chrono::milliseconds>(
+                std::chrono::time_point<std::chrono::system_clock>(std::chrono::milliseconds(timePoint)) - std::chrono::system_clock::now()
+        ).count();
+        // If the waypoint is in the future. 
+        // Then we aren't done yet
+        if (deltaT < 0) {
+            return false;
+        }
+        // If it is sufficiently far in the past
+        // Then lets forget about it.
+        if (deltaT > 1000){
+            return true;
+        }
+
+        Eigen::Affine3d transform(Eigen::Matrix4d::Map(SharedData->current_state.O_T_EE.data()));
+        Eigen::Vector3d position(transform.translation());
+        double distance = (position[0] - command[1]) * (position[0] - command[1]) +
+                            (position[1] - command[2]) * (position[1] - command[2]) + 
+                            (position[2] - command[3]) * (position[2] - command[3]);
+
+        // If distance^2 is less than 1mm^2, then were good. 
+        if (distance < 0.00001){
+            return true;
+        }
+
+        return false;
+    }
+
+    std::array<double, 6> readCommandedPosition(double & targetDuration){
         if (SharedData == NULL) throw "Must initialize shared memory space first";
 
         boost::interprocess::scoped_lock<boost::interprocess::interprocess_mutex> lock(SharedData->mutex);
-        return SharedData->commanded_position;
+
+        auto command = SharedData->commanded_position[SharedData->currentCommand];
+        while (SharedData->currentCommand < SharedData->lastCommand && !isMotionDone(command)) {
+            SharedData->currentCommand ++;
+            command = SharedData->commanded_position[SharedData->currentCommand];
+        }
+
+        long timePoint = (long)command[0];
+        double deltaT = std::chrono::duration_cast<std::chrono::milliseconds>(
+                std::chrono::time_point<std::chrono::system_clock>(std::chrono::milliseconds(timePoint)) - std::chrono::system_clock::now()
+        ).count();
+        // deltaT is the number of ms that we should complete the command in.
+        // PandaController tries to be at the target position 1ms later. 
+        targetDuration = 1.0;
+        if (deltaT > 1) {
+            targetDuration = deltaT / 1000.0;
+        }
+        std::array<double, 6> positionCommand;
+        for (size_t i = 0; i < 6; i++) {
+            positionCommand[i] = command[i+1];
+        }
+        
+        return positionCommand;
     }
+
     void writeCommandedPosition(std::array<double, 6> data){
         if (SharedData == NULL) return;
         boost::interprocess::scoped_lock<boost::interprocess::interprocess_mutex> lock(SharedData->mutex);
-        SharedData->commanded_position = data;
+        std::array<double, 7> timeStamped;
+        timeStamped[0] = -1;
+        for (size_t i = 0; i < 6; i++) {
+            timeStamped[i+1] = data[i];
+        }
+
+        SharedData->commanded_position[0] = timeStamped;
+        SharedData->lastCommand = 0;
+    }
+
+    void writeCommandedPath(const std::array<double, 7>* data, const int & length) {
+        if (SharedData == NULL) return;
+        boost::interprocess::scoped_lock<boost::interprocess::interprocess_mutex> lock(SharedData->mutex);
+        for (int i = 0; i < length; i++ ) {
+            SharedData->commanded_position[i] = data[i];
+        }
+        SharedData->currentCommand = 0;
+        SharedData->lastCommand = length - 1;
     }
 
     std::array<double, 6> readCommandedVelocity() {
