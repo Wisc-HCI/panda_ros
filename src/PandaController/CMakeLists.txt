@@ -7,7 +7,6 @@ SET(CMAKE_SKIP_RPATH False)
 SET(CMAKE_INSTALL_RPATH ../lib)
 SET( CMAKE_INSTALL_PREFIX ../../../devel )
 
-
 find_library(franka libfranka.so.0.7.1 REQUIRED)
 find_package(Eigen3 REQUIRED)
 find_library(LIBNIFALCON nifalcon REQUIRED)
@@ -36,6 +35,7 @@ target_include_directories(Falcon PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
 add_executable(ForceDimension ${CMAKE_CURRENT_SOURCE_DIR}/src/ForceDimension.cpp)
 target_link_libraries(ForceDimension franka ${LIBNIFALCON} PandaController ${DRDC} ${DHDC})
 target_include_directories(ForceDimension PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
+
 
 message(${CMAKE_INSTALL_PREFIX})
 set(CMAKE_INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/lib")

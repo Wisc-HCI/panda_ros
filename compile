@@ -8,5 +8,6 @@ make install
 cd ../../..
 catkin_make --only-pkg-with-deps relaxed_ik -j12
 catkin_make --only-pkg-with-deps panda_ros -j12
+catkin_make --only-pkg-with-deps dmp_deformations -j12
 catkin_make --only-pkg-with-deps inputs_ros -j12
 catkin_make --only-pkg-with-deps controller -j12
