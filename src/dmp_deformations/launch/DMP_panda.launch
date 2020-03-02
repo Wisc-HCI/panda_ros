@@ -1,0 +1,9 @@
+<launch>
+    <node type="rviz" name="rviz" pkg="rviz" args="-d $(find dmp_deformations)/rviz/view_dmp.rviz">
+    </node>
+    <node
+        name="dmp_runner"
+        pkg="dmp_deformations"
+        type="DMP_rviz.py"
+    />
+</launch>
