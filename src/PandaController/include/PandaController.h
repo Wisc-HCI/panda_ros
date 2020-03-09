@@ -9,6 +9,7 @@
 #include <franka/robot_state.h>
 #include <franka/model.h>
 #include <eigen3/Eigen/Core>
+#include <eigen3/Eigen/Dense>
 #include <franka/gripper.h>
 #include <deque>
 
@@ -29,6 +30,10 @@
 
 namespace PandaController {
 
+    struct EulerAngles {
+        double roll, pitch, yaw;
+    };
+
     enum ControlMode {CartesianVelocity, CartesianPosition, JointVelocity, JointPosition, None};
 
     void stopControl();
@@ -37,6 +42,8 @@ namespace PandaController {
     std::array<double, 6> readCommandedPosition(double & scaleFactor);
     void writeCommandedPosition(std::array<double, 6> data);
     void writeCommandedPath(const std::array<double, 7>* data, const int & length);
+    void setControlCamera(const bool & controlCamera);
+    EulerAngles quaternionToEuler(Eigen::Quaterniond q);
 
     std::array<double, 6> readCommandedVelocity();
     void writeCommandedVelocity(std::array<double, 6> data);
@@ -82,9 +89,12 @@ namespace PandaController {
     byte request[8]; /* The request data sent to the Net F/T. */
     int socketHandle;			/* Handle to UDP socket used to communicate with Net F/T. */
 
+
+
     struct shared_data {
     public:
 
+        bool controlCamera = false;
         std::array<double, 7> commanded_position[1000]; // time, pose
         int currentCommand = 0;
         int lastCommand = 0;

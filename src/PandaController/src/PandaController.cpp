@@ -33,10 +33,6 @@ namespace PandaController {
         double maxGripperWidth;
     } 
 
-    struct EulerAngles {
-        double roll, pitch, yaw;
-    };
-
     //Adapted from https://en.wikipedia.org/wiki/Conversion_between_quaternions_and_Euler_angles
     Eigen::Quaterniond eulerToQuaternion(EulerAngles angle) // roll (X), pitch (Y), yaw (Z)
     {
@@ -592,7 +588,8 @@ namespace PandaController {
             franka::Robot robot(ip, franka::RealtimeConfig::kIgnore);
             cout << "Robot connected" << endl;
             robot.automaticErrorRecovery();
-            std::array<double,7> q_goal = {{0.0,-0.4,0.0,-2.0,0.0,1.6,0.8}};
+            double lastJointHome = 0.8;
+            std::array<double,7> q_goal = {{0.0,-0.4,0.0,-2.0,0.0,1.6,lastJointHome}};
             MotionGenerator motion_generator(0.5, q_goal);
             cout << "Starting homing" << endl;
             robot.control(motion_generator);
@@ -617,7 +614,7 @@ namespace PandaController {
     
             cout << "About to start" << endl;
 
-            robot.control([=, &count](const franka::RobotState& robot_state,
+            robot.control([=, &count, &lastJointHome](const franka::RobotState& robot_state,
                                     franka::Duration period) -> franka::JointVelocities {
                 writeRobotState(robot_state);
 
@@ -646,7 +643,7 @@ namespace PandaController {
 
                 EulerAngles difference_a = quaternionToEuler(difference);
 
-                double scaling_factor = 1;
+                double scaling_factor = 5;
                 double v_x = (commandedPosition[0] - position[0]) * scaling_factor / duration_s;
                 double v_y = (commandedPosition[1] - position[1]) * scaling_factor / duration_s;
                 double v_z = (commandedPosition[2] - position[2]) * scaling_factor / duration_s;
@@ -657,24 +654,34 @@ namespace PandaController {
                 Eigen::VectorXd v(6);
                 v << v_x, v_y, v_z, v_roll, v_pitch, v_yaw;
                 constrainForces(v, robot_state);
-                Eigen::VectorXd jointVelocities = Eigen::Map<Eigen::MatrixXd>(SharedData->jacobian.data(), 6, 7).completeOrthogonalDecomposition().solve(v);
-                
-                //constrainJointVelocity(jointVelocities, robot_state);
-                //v = Eigen::Map<Eigen::MatrixXd>(SharedData->jacobian.data(), 6, 7) * jointVelocities;
-                
-                franka::JointVelocities output = {{
-                    jointVelocities[0], 
-                    jointVelocities[1], 
-                    jointVelocities[2], 
-                    jointVelocities[3], 
-                    jointVelocities[4], 
-                    jointVelocities[5], 
-                    jointVelocities[6]}};
-                Eigen::VectorXd lastJointAcceleration = (jointVelocities - Eigen::Map<const Eigen::VectorXd>(robot_state.dq_d.data(), 7)) * 1000;
-                for(int i = 0; i < 7; i++) {
-                    SharedData->lastJointAcceleration[i] = lastJointAcceleration[i];
+
+                franka::JointVelocities output {0,0,0,0,0,0,0};
+                if (SharedData->controlCamera) {
+                    // If we are supposed to control the camera, (second to last link of the panda)
+                    // Then we should use a truncate jacobian to solve the inverse kinematics.
+                    // Then we try to home the last joint so you can see with the camera.
+                    Eigen::VectorXd jointVelocities = Eigen::Map<Eigen::MatrixXd>(SharedData->jacobian.data(), 6, 7).topLeftCorner(6,6).completeOrthogonalDecomposition().solve(v);
+                    output = {{
+                        jointVelocities[0], 
+                        jointVelocities[1], 
+                        jointVelocities[2], 
+                        jointVelocities[3], 
+                        jointVelocities[4], 
+                        jointVelocities[5], 
+                        lastJointHome - robot_state.q[6]
+                    }};
+                } else {
+                    Eigen::VectorXd jointVelocities = Eigen::Map<Eigen::MatrixXd>(SharedData->jacobian.data(), 6, 7).completeOrthogonalDecomposition().solve(v);
+                    output = {{
+                        jointVelocities[0], 
+                        jointVelocities[1], 
+                        jointVelocities[2], 
+                        jointVelocities[3], 
+                        jointVelocities[4], 
+                        jointVelocities[5], 
+                        jointVelocities[6]
+                    }};
                 }
-                
                 if (!isRunning()) {
                     cout << endl << "Finished motion, shutting down example" << endl;
 
@@ -720,7 +727,8 @@ namespace PandaController {
                 Eigen::VectorXd v = Eigen::Map<Eigen::VectorXd>(readCommandedVelocity().data(), 6);
                 addNoise(v);
                 constrainForces(v, robot_state);
-                Eigen::VectorXd jointVelocities = Eigen::Map<Eigen::MatrixXd>(SharedData->jacobian.data(), 6, 7).completeOrthogonalDecomposition().solve(v);
+                Eigen::MatrixXd jacobian = Eigen::Map<Eigen::MatrixXd>(SharedData->jacobian.data(), 6, 7);
+                Eigen::VectorXd jointVelocities = jacobian.completeOrthogonalDecomposition().solve(v);
                 constrainJointVelocity(jointVelocities, robot_state);
                 franka::JointVelocities output = {{
                     jointVelocities[0], 
@@ -728,7 +736,7 @@ namespace PandaController {
                     jointVelocities[2], 
                     jointVelocities[3], 
                     jointVelocities[4], 
-                    jointVelocities[5], 
+                    jointVelocities[5],
                     jointVelocities[6]}};
                 Eigen::VectorXd lastJointAcceleration = (jointVelocities - Eigen::Map<const Eigen::VectorXd>(robot_state.dq_d.data(), 7)) * 1000;
                 for(int i = 0; i < 7; i++) {
@@ -1226,7 +1234,7 @@ namespace PandaController {
         // PandaController tries to be at the target position 1ms later. 
         targetDuration = 1.0;
         if (deltaT > 1) {
-            targetDuration = deltaT / 1000.0;
+            targetDuration = 5 * deltaT / 1000.0;
         }
         std::array<double, 6> positionCommand;
         for (size_t i = 0; i < 6; i++) {
@@ -1257,6 +1265,10 @@ namespace PandaController {
         }
         SharedData->currentCommand = 0;
         SharedData->lastCommand = length - 1;
+    }
+
+    void setControlCamera(const bool & controlCamera) {
+        SharedData->controlCamera = controlCamera;
     }
 
     std::array<double, 6> readCommandedVelocity() {
