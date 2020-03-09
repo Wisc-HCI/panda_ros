@@ -14,7 +14,6 @@ find_library(LIBNIFALCON nifalcon REQUIRED)
 find_library(DHDC libdhd.so.3.8.0 REQUIRED)
 find_library(DRDC libdrd.so.3.8.0 REQUIRED)
 
-
 install(DIRECTORY
     launch/
     DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}/launch
@@ -27,6 +26,7 @@ catkin_install_python(PROGRAMS
 
 include_directories(${catkin_INCLUDE_DIRS})
 catkin_package(CATKIN_DEPENDS relaxed_ik)
+
 
 add_executable(falconRosWrapper ${CMAKE_CURRENT_SOURCE_DIR}/src/falcon_ros.cpp)
 target_link_libraries(falconRosWrapper ${LIBNIFALCON}  ${catkin_LIBRARIES})

@@ -6,6 +6,9 @@
 #include <fstream>
 #include <chrono>
 
+ #include <ros/ros.h>
+ #include "std_msgs/String.h"
+
 // Panda
 #include "PandaController.h"
 #include <franka/robot_state.h>
@@ -184,9 +187,16 @@ double *x, double *y, double *z, double *fx, double *fy, double *fz){
 
 }
 
-int main() {
+int main(int argc, char **argv) {
     //Setup the signal handler for exiting
     signal(SIGINT, signalHandler);
+
+    ros::init(argc, argv, "ForceDimensionDMP");
+    ros::NodeHandle n("~");  
+    ros::Publisher file_pub = 
+        n.advertise<std_msgs::String>("/dmp/filepub", 5);
+    ros::Publisher reset_pub = 
+        n.advertise<std_msgs::String>("/dmp/reset", 5);
 
     //setup_ft();
 
@@ -256,7 +266,7 @@ int main() {
 
     int file_iter = 0;
 
-    while (PandaController::isRunning()) {
+    while (PandaController::isRunning() && ros::ok()) {
         poll_forcedimension(velocity_mode,resetCenter, velcenterx,velcentery,velcenterz);
 
         if (resetCenter){ //only allow one correction
@@ -331,7 +341,9 @@ int main() {
         }
 
         if (dhdKbHit()) {
-            if (dhdKbGet() == 'r'){
+            
+            char keypress = dhdKbGet();
+            if (keypress == 'r'){
                 if(recording==false){
                     string filename = {"panda_demo_"+to_string(file_iter)+".csv"};
                     remove( filename.c_str() );
@@ -344,15 +356,23 @@ int main() {
                     outputfile.close();
                     cout << "Ending Recording" << endl;
                     recording=false;
+                    // Let ROS know a file has been published to update the DMP
+                    file_pub.publish("panda_demo_"+to_string(file_iter-1)+".csv");
                 }
-            } 
+            
+            }
+
+            if (keypress == 'x'){
+                reset_pub.publish('Reset');
+                cout << "RESET DMP" << endl;
+                } 
         }
 
         if (recording){
             log_demonstration(x,y,z,fx,fy,fz);
         }
         
-
+    ros::spinOnce();
 
       
     }
@@ -360,6 +380,7 @@ int main() {
     dhdEnableForce (DHD_OFF);
     cout << "Closing Panda" << endl;
     PandaController::stopControl();
+    dhdClose();
     
     return 0;
 }
