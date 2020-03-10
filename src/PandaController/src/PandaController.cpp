@@ -624,7 +624,14 @@ namespace PandaController {
                 double duration_s;
                 array<double, 6> commandedPosition = readCommandedPosition(duration_s);
 
-                
+                cout << "TAUJ: " << robot_state.tau_J[0] << endl <<
+                robot_state.tau_J[1] << endl <<
+                robot_state.tau_J[2] << endl <<
+                robot_state.tau_J[3] << endl <<
+                robot_state.tau_J[4] << endl <<
+                robot_state.tau_J[5] << endl <<
+                robot_state.tau_J[6] << endl;
+
                 Eigen::Affine3d transform(Eigen::Matrix4d::Map(robot_state.O_T_EE.data()));
                 Eigen::Vector3d position(transform.translation());
                 Eigen::Quaterniond orientation(transform.linear());
@@ -646,7 +653,7 @@ namespace PandaController {
 
                 EulerAngles difference_a = quaternionToEuler(difference);
 
-                double scaling_factor = 1;
+                double scaling_factor = 5;
                 double v_x = (commandedPosition[0] - position[0]) * scaling_factor / duration_s;
                 double v_y = (commandedPosition[1] - position[1]) * scaling_factor / duration_s;
                 double v_z = (commandedPosition[2] - position[2]) * scaling_factor / duration_s;
@@ -654,10 +661,14 @@ namespace PandaController {
                 double v_pitch = difference_a.pitch * scaling_factor / duration_s;
                 double v_yaw = difference_a.yaw * scaling_factor / duration_s;
 
+                
+
                 Eigen::VectorXd v(6);
                 v << v_x, v_y, v_z, v_roll, v_pitch, v_yaw;
+
                 constrainForces(v, robot_state);
                 Eigen::VectorXd jointVelocities = Eigen::Map<Eigen::MatrixXd>(SharedData->jacobian.data(), 6, 7).completeOrthogonalDecomposition().solve(v);
+                
                 
                 //constrainJointVelocity(jointVelocities, robot_state);
                 //v = Eigen::Map<Eigen::MatrixXd>(SharedData->jacobian.data(), 6, 7) * jointVelocities;
@@ -692,6 +703,156 @@ namespace PandaController {
             cout << e.what() << endl;
         }
     }
+
+
+    void runHybridController(char* ip = NULL){
+        try {
+            cout << "In runPositionController" << endl;
+            franka::Robot robot(ip, franka::RealtimeConfig::kIgnore);
+            cout << "Robot connected" << endl;
+            robot.automaticErrorRecovery();
+            std::array<double,7> q_goal = {{0.0754606,-0.337453,0.150729,-2.46194,0.0587094,2.12597,0.972193}};
+
+            MotionGenerator motion_generator(0.5, q_goal);
+            cout << "Starting homing" << endl;
+            robot.control(motion_generator);
+            cout << "Motion complete" << endl;
+            setDefaultBehavior(robot);
+            cout << "Default behavior set" << endl;
+
+            int count = 0;
+            cout << "Model loaded" << endl;
+
+            writeRobotState(robot.readOnce());
+            std::array<double, 6> positionArray;
+            Eigen::Affine3d transformMatrix(Eigen::Matrix4d::Map(SharedData->current_state.O_T_EE.data()));
+            Eigen::Vector3d positionVector(transformMatrix.translation());
+            for (size_t i = 0; i < 3; i++) {
+                positionArray[i] = positionVector[i];
+            }
+            for (size_t i = 0; i < 3; i++) {
+                positionArray[3 + i] = 0;
+            }
+            writeCommandedPosition(positionArray);
+    
+            cout << "About to start" << endl;
+
+            robot.control([=, &count](const franka::RobotState& robot_state,
+                                    franka::Duration period) -> franka::JointVelocities {
+                writeRobotState(robot_state);
+
+                // Selection vector represents directions for position (admittance) control
+                array<double, 3> currentSelectionMatrix = readSelectionVector();
+                Eigen::VectorXd selection_vector(3);
+                selection_vector << currentSelectionMatrix[0], currentSelectionMatrix[1], currentSelectionMatrix[2]; // Currently just cartesian directions and assumed no rotation
+                Eigen::Matrix< double, 3, 3> position_selection_matrix = selection_vector.array().matrix().asDiagonal();
+                
+                Eigen::Matrix< double, 3, 3> force_selection_matrix;
+                Eigen::MatrixXd eye3 = Eigen::MatrixXd::Identity(3, 3);
+                force_selection_matrix =  eye3 - position_selection_matrix;
+                
+                // COME BACK TO THIS!!!
+
+                double duration_s;
+                array<double, 6> commandedPosition = readCommandedPosition(duration_s);
+                array<double, 6> commandedWrench = readCommandedFT();
+
+                // TEMP FORCE THE COMMANDED POSITION TO BE THE SAME!!!
+                //commandedPosition = {0.42, 0.1, 0.25, 0.0, 0.0, 0.0};
+
+                Eigen::Affine3d transform(Eigen::Matrix4d::Map(robot_state.O_T_EE.data()));
+                Eigen::Vector3d position(transform.translation());
+                Eigen::Quaterniond orientation(transform.linear());
+
+                array<double, 6> currentWrench = readFTForces();
+                //cout << "Current Z Force: " << currentWrench[2] << endl;
+                
+                // Eigen initialise quaternions as w, x, y, z
+                EulerAngles desired_a;
+                //Adding pi as panda control consider pi, 0, 0 to be the vertical orientation
+                desired_a.roll = commandedPosition[3]+M_PI;
+                desired_a.pitch = commandedPosition[4];
+                desired_a.yaw = commandedPosition[5];
+
+                Eigen::Quaterniond desired_q=eulerToQuaternion(desired_a);
+                
+                Eigen::Quaterniond difference(desired_q*orientation.inverse());
+                
+                // Not working for all configuration 
+                //https://stackoverflow.com/questions/31589901/euler-to-quaternion-quaternion-to-euler-using-eigen
+                //auto euler = difference.toRotationMatrix().eulerAngles(0, 1, 2);
+
+                EulerAngles difference_a = quaternionToEuler(difference);
+
+                double scaling_factor = 5;
+                double v_x = (commandedPosition[0] - position[0]) * scaling_factor / duration_s;
+                double v_y = (commandedPosition[1] - position[1]) * scaling_factor / duration_s;
+                double v_z = (commandedPosition[2] - position[2]) * scaling_factor / duration_s;
+                double v_roll = difference_a.roll * scaling_factor / duration_s;
+                double v_pitch = difference_a.pitch * scaling_factor / duration_s;
+                double v_yaw = difference_a.yaw * scaling_factor / duration_s;
+
+
+                // Force Control Law - P controller w/ very low gain
+                double Kfp = 0.0005;
+                double v_x_f = Kfp*(commandedWrench[0]-currentWrench[0]);
+                double v_y_f = Kfp*(commandedWrench[1]-currentWrench[1]);
+                double v_z_f = Kfp*(commandedWrench[2]-currentWrench[2]);
+                
+
+                Eigen::VectorXd v_position(3);
+                v_position << v_x, v_y, v_z;
+                Eigen::VectorXd v_force(3);
+                v_force << v_x_f, v_y_f, v_z_f;
+
+                Eigen::VectorXd v_hybrid(3);
+                v_hybrid = position_selection_matrix * v_position + force_selection_matrix * v_force;
+
+                //cout << "HYBRID V: " << v_hybrid << endl;
+
+                Eigen::VectorXd v_hybrid_expanded(6);
+                v_hybrid_expanded << v_hybrid[0], v_hybrid[1], v_hybrid[2], v_roll, v_pitch, v_yaw;
+
+
+                constrainForces(v_hybrid_expanded, robot_state);
+                Eigen::VectorXd jointVelocities = Eigen::Map<Eigen::MatrixXd>(SharedData->jacobian.data(), 6, 7).completeOrthogonalDecomposition().solve(v_hybrid_expanded);
+                
+                //constrainJointVelocity(jointVelocities, robot_state);
+                //v = Eigen::Map<Eigen::MatrixXd>(SharedData->jacobian.data(), 6, 7) * jointVelocities;
+                
+                franka::JointVelocities output = {{
+                    jointVelocities[0], 
+                    jointVelocities[1], 
+                    jointVelocities[2], 
+                    jointVelocities[3], 
+                    jointVelocities[4], 
+                    jointVelocities[5], 
+                    jointVelocities[6]}};
+                Eigen::VectorXd lastJointAcceleration = (jointVelocities - Eigen::Map<const Eigen::VectorXd>(robot_state.dq_d.data(), 7)) * 1000;
+                for(int i = 0; i < 7; i++) {
+                    SharedData->lastJointAcceleration[i] = lastJointAcceleration[i];
+                }
+                
+                if (!isRunning()) {
+                    cout << endl << "Finished motion, shutting down example" << endl;
+
+                    return franka::MotionFinished(output);
+                }
+                count =  count + 1;
+                if (count < 5) return {{0,0,0,0,0,0,0}};
+                return output;
+            });
+        } catch (const franka::ControlException& e) {
+            cout << e.what() << endl;
+        } catch (const franka::Exception& e){  
+            cout << e.what() << endl;
+        } catch(const exception& e) {
+            cout << e.what() << endl;
+        }
+    }
+
+
+
     //Input Cartesian velocity, control with joint velocities
     void runVelocityController(char* ip = NULL){
         try {
@@ -1056,10 +1217,9 @@ namespace PandaController {
 	
     }
 
-    void read_ft(){
-        while(PandaController::isRunning()){
-            // Get the current FT reading from the sensor
-            double cpf = 1000000;
+    void bias_ft(){
+        // Read once
+         double cpf = 1000000;
             int i;						/* Generic loop/array index. */
             RESPONSE resp;				/* The structured response received from the Net F/T. */
             byte response[36];			/* The raw response data received from the Net F/T. */
@@ -1086,6 +1246,49 @@ namespace PandaController {
             ft_sensor[3]=resp.FTData[3]/cpf;
             ft_sensor[4]=resp.FTData[4]/cpf;
             ft_sensor[5]=resp.FTData[5]/cpf;
+            PandaController::SharedData->ft_bias = ft_sensor;
+            cout << "Force Torque Sensor Bias: " << endl <<
+             ft_sensor[0] << endl <<
+             ft_sensor[1] << endl <<
+             ft_sensor[2] << endl <<
+             ft_sensor[3] << endl <<
+             ft_sensor[4] << endl <<
+             ft_sensor[5] << endl;
+
+
+    }
+
+    void read_ft(){
+        while(PandaController::isRunning()){
+            // Get the current FT reading from the sensor
+            double cpf = 1000000;
+            int i;						/* Generic loop/array index. */
+            RESPONSE resp;				/* The structured response received from the Net F/T. */
+            byte response[36];			/* The raw response data received from the Net F/T. */
+            
+            // Transform into the correct frame based on Panda Pose
+            franka::RobotState state = PandaController::readRobotState();
+
+            // Get feedback from FT sensor - THIS NEEDS TO BE MOVED TO SHARED MEMORY
+            send(socketHandle, request, 8, 0 );
+
+            /* Receiving the response. */
+            recv( socketHandle, response, 36, 0 );
+            resp.rdt_sequence = ntohl(*(uint32*)&response[0]);
+            resp.ft_sequence = ntohl(*(uint32*)&response[4]);
+            resp.status = ntohl(*(uint32*)&response[8]);
+            for( i = 0; i < 6; i++ ) {
+                resp.FTData[i] = ntohl(*(int32*)&response[12 + i * 4]);
+            }
+
+            std::array<double, 6> ft_sensor = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
+            std::array<double, 6> ft_bias = PandaController::SharedData->ft_bias;
+            ft_sensor[0]=resp.FTData[0]/cpf-ft_bias[0];
+            ft_sensor[1]=resp.FTData[1]/cpf-ft_bias[1];
+            ft_sensor[2]=resp.FTData[2]/cpf-ft_bias[2];
+            ft_sensor[3]=resp.FTData[3]/cpf-ft_bias[3];
+            ft_sensor[4]=resp.FTData[4]/cpf-ft_bias[4];
+            ft_sensor[5]=resp.FTData[5]/cpf-ft_bias[5];
             writeFTForces(ft_sensor);
         }
     
@@ -1134,6 +1337,9 @@ namespace PandaController {
                 case PandaController::ControlMode::JointPosition:
                     runJointPositionController(ip);
                     break;
+                case PandaController::ControlMode::HybridControl:
+                    runHybridController(ip);
+                    break;
                 case PandaController::ControlMode::None:
                     noController(ip);
                     break;
@@ -1146,6 +1352,7 @@ namespace PandaController {
         pid_t pid_child_2 = fork();
         if (pid_child_2 == 0) {
             setup_ft();
+            bias_ft();
             read_ft();
             exit(0);
         }
@@ -1226,7 +1433,7 @@ namespace PandaController {
         // PandaController tries to be at the target position 1ms later. 
         targetDuration = 1.0;
         if (deltaT > 1) {
-            targetDuration = deltaT / 1000.0;
+            targetDuration = 5* deltaT / 1000.0;
         }
         std::array<double, 6> positionCommand;
         for (size_t i = 0; i < 6; i++) {
@@ -1234,6 +1441,23 @@ namespace PandaController {
         }
         
         return positionCommand;
+    }
+
+
+    std::array<double, 6> readCommandedFT(){
+        if (SharedData == NULL) throw "Must initialize shared memory space first";
+
+        boost::interprocess::scoped_lock<boost::interprocess::interprocess_mutex> lock(SharedData->mutex);
+
+       return SharedData->FT_command;
+    }
+
+     void writeCommandedFT(std::array<double, 6> data){
+        if (SharedData == NULL) throw "Must initialize shared memory space first";
+
+        boost::interprocess::scoped_lock<boost::interprocess::interprocess_mutex> lock(SharedData->mutex);
+
+        SharedData->FT_command = data;
     }
 
     void writeCommandedPosition(std::array<double, 6> data){
@@ -1289,6 +1513,22 @@ namespace PandaController {
         boost::interprocess::scoped_lock<boost::interprocess::interprocess_mutex> lock(SharedData->mutex);
         return SharedData->pose_goal;
     }
+
+    std::array<double, 3> readSelectionVector(){
+        if (SharedData == NULL) throw "Must initialize shared memory space first";
+
+        boost::interprocess::scoped_lock<boost::interprocess::interprocess_mutex> lock(SharedData->mutex);
+        return SharedData->selection_vector;
+    }
+
+    void writeSelectionVector(std::array<double, 3> data){
+        if (SharedData == NULL) throw "Must initialize shared memory space first";
+
+        boost::interprocess::scoped_lock<boost::interprocess::interprocess_mutex> lock(SharedData->mutex);
+        SharedData->selection_vector = data;
+    }
+    
+
     void writePoseGoals(std::array<double, 7> data){
         if (SharedData == NULL) return;
         boost::interprocess::scoped_lock<boost::interprocess::interprocess_mutex> lock(SharedData->mutex);

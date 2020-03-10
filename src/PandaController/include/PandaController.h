@@ -29,7 +29,7 @@
 
 namespace PandaController {
 
-    enum ControlMode {CartesianVelocity, CartesianPosition, JointVelocity, JointPosition, None};
+    enum ControlMode {CartesianVelocity, CartesianPosition, JointVelocity, JointPosition, HybridControl, None};
 
     void stopControl();
     pid_t initPandaController(ControlMode, char* = NULL);
@@ -49,6 +49,12 @@ namespace PandaController {
 
     std::array<double, 7> readJointAngles();
     void writeJointAngles(std::array<double, 7> data);
+
+    std::array<double, 3> readSelectionVector();
+    void writeSelectionVector(std::array<double, 3> data);
+
+    std::array<double, 6> readCommandedFT();
+    void writeCommandedFT(std::array<double, 6> data);
 
     franka::RobotState readRobotState();
     void writeRobotState(franka::RobotState data);
@@ -108,10 +114,19 @@ namespace PandaController {
         std::array<double, 42> jacobian_pinv{};
         std::array<double, 7> lastJointAcceleration{};
 
+        std::array<double, 3> selection_vector{};
+        std::array<double, 6> FT_command{};
+        
+        // Terms for storing filtered derivative
+        std::array<double, 7> last_qe_dot{}; //<x, y, z, x, y, z, w>
+        std::array<double, 7> last_qe{}; 
+
+
         bool isGripperMoving = false;
         bool grasped = false;
 
         std::array<double, 6> ft_sensor;
+        std::array<double, 6> ft_bias;
         
 
         shared_data() {
