@@ -7,6 +7,7 @@
 #include <signal.h>
 #include "PandaController.h"
 #include "std_msgs/String.h"
+#include "std_msgs/Bool.h"
 #include "geometry_msgs/Pose.h"
 #include "geometry_msgs/Twist.h"
 #include "geometry_msgs/Wrench.h"
@@ -69,15 +70,25 @@ void updateCallbackPath(const nav_msgs::Path::ConstPtr& msg) {
             command[1] = poseStamped.pose.position.x;
             command[2] = poseStamped.pose.position.y;
             command[3] = poseStamped.pose.position.z;
-            //TODO(?) update with quat
-            command[4] = 0;
-            command[5] = 0;
-            command[6] = 0;
+            PandaController::EulerAngles angles = 
+                PandaController::quaternionToEuler(Eigen::Quaternion<double>(
+                    poseStamped.pose.orientation.w,
+                    poseStamped.pose.orientation.x,
+                    poseStamped.pose.orientation.y,
+                    poseStamped.pose.orientation.z
+                ));
+            command[4] = angles.roll;
+            command[5] = angles.pitch;
+            command[6] = angles.yaw;
             commandedPath[i] = command;
         }
         
         PandaController::writeCommandedPath(commandedPath, msg->poses.size());
     }
+}
+
+void updateCallbackControlCamera(const std_msgs::Bool::ConstPtr & msg) {
+    PandaController::setControlCamera(msg->data);
 }
 
 void updateCallbackJointPos(const relaxed_ik::JointAngles::ConstPtr& msg){
@@ -219,6 +230,7 @@ int main(int argc, char **argv) {
     ros::Subscriber sub_commands = n.subscribe("/panda/commands", 10, callbackCommands);
     ros::Subscriber sub_position;
     ros::Subscriber sub_trajectory;
+    ros::Subscriber sub_controlCamera;
     switch(mode){
         case PandaController::ControlMode::CartesianVelocity:
             sub_position = n.subscribe("/panda/cart_vel", 10, updateCallbackCartVel);
@@ -230,7 +242,9 @@ int main(int argc, char **argv) {
             break;
         case PandaController::ControlMode::CartesianPosition:
             sub_position = n.subscribe("/panda/cart_pose", 10, updateCallbackCartPos);
-            sub_position = n.subscribe("/panda/path", 10, updateCallbackPath);
+            sub_trajectory = n.subscribe("/panda/path", 10, updateCallbackPath);
+            sub_controlCamera = n.subscribe("/panda/controlCamera", 10, updateCallbackControlCamera);
+            
             break;
         case PandaController::ControlMode::JointPosition:
             sub_position = n.subscribe("/relaxed_ik/joint_angle_solutions", 10, updateCallbackJointPos);
