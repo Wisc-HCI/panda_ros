@@ -25,9 +25,32 @@
 #include <arpa/inet.h> 
 #include <eigen3/Eigen/Geometry>
 
+#define PORT 49152 /* Port the Net F/T always uses */
+#define COMMAND 2 /* Command code 2 starts streaming */
+#define NUM_SAMPLES 1 /* Will send 1 sample before stopping */
+
+/* Typedefs used so integer sizes are more explicit */
+typedef unsigned int uint32;
+typedef int int32;
+typedef unsigned short uint16;
+typedef short int16;
+typedef unsigned char byte;
+typedef struct response_struct {
+	uint32 rdt_sequence;
+	uint32 ft_sequence;
+	uint32 status;
+	int32 FTData[6];
+} RESPONSE;
+// End FT Sensor Socket
 
 using namespace std;
 using namespace std::chrono;
+//using namespace libnifalcon;
+//using namespace StamperKinematicImpl;
+
+//FalconDevice m_falconDevice;
+byte request[8]; /* The request data sent to the Net F/T. */
+int socketHandle;			/* Handle to UDP socket used to communicate with Net F/T. */
 
 array<double,3> workspace_center = {0.42, 0.1, 0.25};
 array<double, 3> force_dimension = {0.0, 0.0, 0.0};
@@ -70,7 +93,7 @@ bool init_forcedimension() {
 void poll_forcedimension(bool buttonPressed, bool resetCenter, double velcenterx, double velcentery,double velcenterz) {
 
     // Scaling Values
-    array<double,3> scaling_factors = {-5.0, -5.0, 5.0};
+    array<double,3> scaling_factors = {-3.0, -3.0, 3.0};
 
     array<double, 6> panda_pos = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
     
@@ -82,9 +105,9 @@ void poll_forcedimension(bool buttonPressed, bool resetCenter, double velcenterx
     if (buttonPressed){
         array<double, 3> force_dimension_temp = {0.0, 0.0, 0.0};
         dhdGetPosition (&force_dimension_temp[0], &force_dimension_temp[1], &force_dimension_temp[2]);
-        workspace_center[0]=workspace_center[0]-scaling*(force_dimension_temp[0]-velcenterx);
-        workspace_center[1]=workspace_center[1]-scaling*(force_dimension_temp[1]-velcentery);
-        workspace_center[2]=workspace_center[2]+scaling*(force_dimension_temp[2]-velcenterz);
+        panda_pos[0] = scaling_factors[0] * velcenterx + workspace_center[0];
+        panda_pos[1] = scaling_factors[1] * velcentery + workspace_center[1];
+        panda_pos[2] = scaling_factors[2] * velcenterz + workspace_center[2];
 
     }
 
@@ -96,6 +119,7 @@ void poll_forcedimension(bool buttonPressed, bool resetCenter, double velcenterx
             workspace_center[1]=workspace_center[1]-scaling_factors[1]*(force_dimension[1]-velcentery);
             workspace_center[2]=workspace_center[2]-scaling_factors[2]*(force_dimension[2]-velcenterz);
         }
+        
     }
 
     panda_pos[0] = scaling_factors[0] * force_dimension[0] + workspace_center[0];
@@ -166,8 +190,7 @@ double *x, double *y, double *z, double *fx, double *fy, double *fz){
     }
 
     else{
-        dhdSetForceAndTorque(-vel_mode_stiffness*(fd_x-velcenterx)*abs(fd_x-velcenterx),-vel_mode_stiffness*(fd_y-velcentery)*abs(fd_y-velcentery),
-        -vel_mode_stiffness*(fd_z-velcenterz)*abs(fd_z-velcenterz),0.0,0.0,0.0);
+        dhdSetForceAndTorque(0.0,0.0,0.0,0.0,0.0,0.0);
     }
     
     franka::RobotState state = PandaController::readRobotState();
@@ -225,7 +248,6 @@ int main() {
 
 
     // Start Panda controller and poll force dimension to make sure it has reasonable starting values
-    //CartesianPosition
     pid_t pid = PandaController::initPandaController(PandaController::ControlMode::HybridControl);
     if (pid < 0) {
        cout << "Failed to start panda process" << endl;
@@ -236,7 +258,6 @@ int main() {
     std::array<double, 6> FT_command = {0.0, 0.0, -10.0, 0.0, 0.0, 0.0};
     PandaController::writeSelectionVector(selectionVector);
     PandaController::writeCommandedFT(FT_command);
-
 
     poll_forcedimension(false,false,0.0,0.0,0.0);
 
@@ -261,15 +282,12 @@ int main() {
     auto start = high_resolution_clock::now(); 
     bool gripping = false;
     bool recording = false;
-    
+    bool resetCenter = true;
 
     int file_iter = 0;
 
-    // Reset center at first sample to avoid lurching
-    bool resetCenter = true;
-
     while (PandaController::isRunning()) {
-        poll_forcedimension(velocity_mode,resetCenter, velcenterx,velcentery,velcenterz);
+        poll_forcedimension(velocity_mode,resetCenter,velcenterx,velcentery,velcenterz);
 
         if (resetCenter){ //only allow one correction
             resetCenter=false;
@@ -287,6 +305,8 @@ int main() {
         {
             buttonPressed = true;
             start = high_resolution_clock::now(); 
+            // When starting a potential velocity mode action
+            // Need to see where the current center value is
         }
 
         
@@ -300,9 +320,8 @@ int main() {
                 if (velocity_mode==false)
                 {
                     velocity_mode=true;
-                    // When starting a potential velocity mode action
-                    // Need to see where the current center value is
                     dhdGetPosition (&velcenterx, &velcentery, &velcenterz);
+                    
                     cout << "Velocity Mode" << endl;
                 }
                
@@ -336,8 +355,8 @@ int main() {
                 double tempx;
                 double tempy;
                 double tempz;
-                resetCenter=true;
-
+                cout << "DISCONT" << endl;
+                resetCenter = true;
                 velocity_mode=false;
             }
         }
