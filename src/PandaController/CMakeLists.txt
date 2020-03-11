@@ -36,10 +36,14 @@ add_executable(ForceDimension ${CMAKE_CURRENT_SOURCE_DIR}/src/ForceDimension.cpp
 target_link_libraries(ForceDimension franka ${LIBNIFALCON} PandaController ${DRDC} ${DHDC})
 target_include_directories(ForceDimension PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
+add_executable(ForceDimensionClutch ${CMAKE_CURRENT_SOURCE_DIR}/src/ForceDimension_clutch.cpp)
+target_link_libraries(ForceDimensionClutch franka ${LIBNIFALCON} PandaController ${DRDC} ${DHDC})
+target_include_directories(ForceDimensionClutch PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
+
 
 message(${CMAKE_INSTALL_PREFIX})
 set(CMAKE_INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/lib")
-install(TARGETS PandaController Falcon ForceDimension common
+install(TARGETS PandaController Falcon ForceDimension ForceDimensionClutch common
   LIBRARY DESTINATION lib
   RUNTIME DESTINATION bin
 )

@@ -20,7 +20,7 @@ class DMP:
     dt = 0.01 # sample time of DMP
     num_variables = 3 # number of independent DMPs
     gmm_states = 40
-    s_alpha = 0.1/(num_points*dt);  # decay factor for forcing term - 3 tau i.e., 95%
+    s_alpha = 2/(num_points*dt);  # decay factor for forcing term - 3 tau i.e., 95%
     number_demos = 0
 
     k = 50
@@ -150,6 +150,9 @@ class DMP:
         for xx in range(0, self.num_variables):
             currF = self.DMP_forcing[xx]
 
+            if xx==2:
+                print "FORCES:",self.DMP_forcing[xx]
+
             # Initial conditions for numerical integration
             dx=0
             x = self.starting_points[xx]
@@ -168,6 +171,15 @@ class DMP:
             #    plt.show()
 
         return return_trajectory
+
+    def getForces(self):
+
+        return_forces = []
+
+        for xx in range(0, self.num_variables):
+            return_forces.append(np.multiply(self.DMP_forcing[xx],self.s))
+
+        return self.starting_points, self.attractor_points, return_forces
 
 
 if __name__ == "__main__":

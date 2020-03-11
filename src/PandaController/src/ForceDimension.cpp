@@ -29,7 +29,7 @@
 using namespace std;
 using namespace std::chrono;
 
-array<double,3> workspace_center = {0.42, 0., 0.19};
+array<double,3> workspace_center = {0.42, 0.1, 0.25};
 array<double, 3> force_dimension = {0.0, 0.0, 0.0};
 
 std::ofstream outputfile;
@@ -70,7 +70,7 @@ bool init_forcedimension() {
 void poll_forcedimension(bool buttonPressed, bool resetCenter, double velcenterx, double velcentery,double velcenterz) {
 
     // Scaling Values
-    array<double,3> scaling_factors = {-3.0, -3.0, 3.0};
+    array<double,3> scaling_factors = {-5.0, -5.0, 5.0};
 
     array<double, 6> panda_pos = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
     
@@ -225,10 +225,19 @@ int main() {
 
 
     // Start Panda controller and poll force dimension to make sure it has reasonable starting values
-    pid_t pid = PandaController::initPandaController(PandaController::ControlMode::CartesianPosition);
+    //CartesianPosition
+    pid_t pid = PandaController::initPandaController(PandaController::ControlMode::HybridControl);
     if (pid < 0) {
        cout << "Failed to start panda process" << endl;
     }
+
+    // Initialize Hybrid Controller
+    std::array<double, 3> selectionVector = {1.0, 1.0, 1.0};
+    std::array<double, 6> FT_command = {0.0, 0.0, -10.0, 0.0, 0.0, 0.0};
+    PandaController::writeSelectionVector(selectionVector);
+    PandaController::writeCommandedFT(FT_command);
+
+
     poll_forcedimension(false,false,0.0,0.0,0.0);
 
     // State flow based on button presses
@@ -252,9 +261,12 @@ int main() {
     auto start = high_resolution_clock::now(); 
     bool gripping = false;
     bool recording = false;
-    bool resetCenter = false;
+    
 
     int file_iter = 0;
+
+    // Reset center at first sample to avoid lurching
+    bool resetCenter = true;
 
     while (PandaController::isRunning()) {
         poll_forcedimension(velocity_mode,resetCenter, velcenterx,velcentery,velcenterz);

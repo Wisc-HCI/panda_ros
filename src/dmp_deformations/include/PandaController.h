@@ -10,6 +10,7 @@
 #include <franka/model.h>
 #include <eigen3/Eigen/Core>
 #include <franka/gripper.h>
+#include <deque>
 
 // Socket Libraries for FT sensor readings
 #include <stdio.h>
@@ -28,13 +29,14 @@
 
 namespace PandaController {
 
-    enum ControlMode {CartesianVelocity, CartesianPosition, JointVelocity, JointPosition, None};
+    enum ControlMode {CartesianVelocity, CartesianPosition, JointVelocity, JointPosition, HybridControl, None};
 
     void stopControl();
     pid_t initPandaController(ControlMode, char* = NULL);
 
-    std::array<double, 6> readCommandedPosition();
+    std::array<double, 6> readCommandedPosition(double & scaleFactor);
     void writeCommandedPosition(std::array<double, 6> data);
+    void writeCommandedPath(const std::array<double, 7>* data, const int & length);
 
     std::array<double, 6> readCommandedVelocity();
     void writeCommandedVelocity(std::array<double, 6> data);
@@ -47,6 +49,12 @@ namespace PandaController {
 
     std::array<double, 7> readJointAngles();
     void writeJointAngles(std::array<double, 7> data);
+
+    std::array<double, 3> readSelectionVector();
+    void writeSelectionVector(std::array<double, 3> data);
+
+    std::array<double, 6> readCommandedFT();
+    void writeCommandedFT(std::array<double, 6> data);
 
     franka::RobotState readRobotState();
     void writeRobotState(franka::RobotState data);
@@ -83,7 +91,9 @@ namespace PandaController {
     struct shared_data {
     public:
 
-        std::array<double, 6> commanded_position;
+        std::array<double, 7> commanded_position[1000]; // time, pose
+        int currentCommand = 0;
+        int lastCommand = 0;
         std::array<double, 6> commanded_velocity;
         franka::RobotState current_state;
         franka::RobotState buffer[1000];
@@ -104,6 +114,14 @@ namespace PandaController {
         std::array<double, 42> jacobian_pinv{};
         std::array<double, 7> lastJointAcceleration{};
 
+        std::array<double, 3> selection_vector{};
+        std::array<double, 6> FT_command{};
+        
+        // Terms for storing filtered derivative
+        std::array<double, 7> last_qe_dot{}; //<x, y, z, x, y, z, w>
+        std::array<double, 7> last_qe{}; 
+
+
         bool isGripperMoving = false;
         bool grasped = false;
 
@@ -112,6 +130,7 @@ namespace PandaController {
 
         shared_data() {
             writeCommandedVelocity({0,0,0,0,0,0});
+            writeCommandedPosition({0,0,0,0,0,0});
         }
     }; //end struct shared_data
 
