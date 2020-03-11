@@ -17,6 +17,7 @@ from std_msgs.msg import String
 from nav_msgs.msg import Path
 from geometry_msgs.msg import PoseStamped
 from visualization_msgs.msg import MarkerArray, Marker
+import csv
 
 demonstrations = []
 
@@ -183,6 +184,59 @@ def calculateDMP(demonstration_data):
     print "MAX Force DMP: " , np.max(trajectories[2]) , " (N)"
 
     plot_paths_rviz(demonstration_data_trimmed,trajectories)
+
+
+    # Figure out how long the demonstration should be based on max difference (velocity)
+    # and interpolate such that this is sent at 1000 Hz.
+
+    max_vel = 0.1 # m/s
+    panda_delta_T = 0.001 # 1 ms
+
+    max_x = np.average(np.diff(np.array(trajectories[0]),axis=0))
+    max_y = np.average(np.diff(np.array(trajectories[1]),axis=0))
+
+    average_vel = np.sqrt(np.power(max_x,2)+np.power(max_y,2))
+    
+    delta_T = average_vel / max_vel
+    num_interp_pts = int(round(delta_T / panda_delta_T))
+
+
+    print "Delta T:", delta_T
+    print "# interp:", num_interp_pts
+
+    # Don't allow zero
+    if num_interp_pts == int(0):
+        num_interp_pts = int(1)
+
+    # Actually interpolate the forces
+    starting_points, attractor_points, return_forces = dmp.getForces()
+
+    print "SHAPE: ",np.shape(return_forces)
+
+    # Write a CSV with the final trajectory which can be read and executed
+    with open('/home/hcilab/Documents/MikePanda/devel/lib/dmp_deformations/learneddmp.csv', 'w') as csvfile:
+
+        
+        # Write to file for potential replay
+        print "Writing to DMP file"
+
+        # First write the starting and attractor points
+        csvfile.write(str(starting_points[0])+','+str(starting_points[1])+','+str(starting_points[2]))
+        csvfile.write('\n')
+        csvfile.write(str(attractor_points[0])+','+str(attractor_points[1])+','+str(attractor_points[2]))
+        csvfile.write('\n')
+
+        for ii in range(0,len(return_forces[0])-1):
+            # print trajectories[0][ii][0]
+            for jj in range(0,num_interp_pts):
+                interp_x = return_forces[0][ii]+(float(jj)/float(num_interp_pts))*(return_forces[0][ii+1]-return_forces[0][ii])
+                interp_y = return_forces[1][ii]+(float(jj)/float(num_interp_pts))*(return_forces[1][ii+1]-return_forces[1][ii])
+                interp_z = return_forces[2][ii]+(float(jj)/float(num_interp_pts))*(return_forces[2][ii+1]-return_forces[2][ii])
+                csvfile.write(str(interp_x)+','+str(interp_y)+','+str(interp_z))
+                # print "NORMAL: ",trajectories[0][ii][0]
+                # print "INTERP: ",interp_x
+                csvfile.write('\n')
+
     
 
 def main():

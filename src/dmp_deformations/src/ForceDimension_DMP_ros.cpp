@@ -15,6 +15,7 @@
 
 // Force Dimension
 #include "dhdc.h"
+#include "drdc.h"
 
 // Socket Libraries for FT sensor readings
 #include <stdio.h>
@@ -27,12 +28,13 @@
 #include <netdb.h>
 #include <arpa/inet.h> 
 #include <eigen3/Eigen/Geometry>
+#include <thread> 
 
 
 using namespace std;
 using namespace std::chrono;
 
-array<double,3> workspace_center = {0.42, 0., 0.19};
+array<double,3> workspace_center = {0.42, 0.1, 0.25};
 array<double, 3> force_dimension = {0.0, 0.0, 0.0};
 
 std::ofstream outputfile;
@@ -68,6 +70,196 @@ bool init_forcedimension() {
         {
             buttonPressed = true;
         }
+}
+
+
+void fd_neutral_position(double *x_curr, double *y_curr, double *z_curr){
+    
+    double x_d = 0.0;
+    double y_d = 0.0;
+    double z_d = 0.0;
+
+    double v_x = 0.0;
+    double v_y = 0.0;
+    double v_z = 0.0;
+
+    double stiffness = 200;
+    double damping = 2*sqrt(stiffness);
+
+    // Get current position and velocity
+    dhdGetPosition (x_curr, y_curr, z_curr);
+    dhdGetLinearVelocity(&v_x,&v_y,&v_z);
+    
+    // Command to that position with P controller
+    dhdSetForceAndTorque(-stiffness*(*x_curr-x_d)-damping*v_x,-stiffness*(*y_curr-y_d)-damping*v_y,
+    -stiffness*(*z_curr-z_d)-damping*v_z,0.0,0.0,0.0);
+
+}
+
+
+void replay_demo(){
+    std::ifstream dmpfile("learneddmp.csv");
+
+    double starting_x;
+    double starting_y;
+    double starting_f;
+
+    double attractor_x;
+    double attractor_y;
+    double attractor_f;
+    
+    double x;
+    double y;
+    double z = 0.03;
+    double z_high = 0.15;
+
+    double f;
+
+    string temp;
+    if(dmpfile.good())
+    {
+        // Read Starting Points
+        getline(dmpfile,temp,',');
+        starting_x = atof(temp.c_str());
+        getline(dmpfile,temp,',');
+        starting_y = atof(temp.c_str());
+        getline(dmpfile,temp);
+        starting_f = -atof(temp.c_str());
+
+        // Read Attractor Points
+        getline(dmpfile,temp,',');
+        attractor_x = atof(temp.c_str());
+        getline(dmpfile,temp,',');
+        attractor_y = atof(temp.c_str());
+        getline(dmpfile,temp);
+        attractor_f = -atof(temp.c_str());
+
+
+        std::array<double, 7> command;
+        // Time to arrive in milliseconds
+        std::array<double, 7> commandedPath[1]; 
+        command[0] = std::chrono::system_clock::now().time_since_epoch()/std::chrono::milliseconds(1) + 2000;
+        command[1] = starting_x;
+        command[2] = starting_y;
+        command[3] = z_high;
+        command[4] = 0;
+        command[5] = 0;
+        command[6] = 0;
+        commandedPath[0] = command;
+
+        // GO ABOVE STARTING POINT
+        PandaController::writeCommandedPath(commandedPath,1);
+        cout << "GOING TO START POSITION" << endl;
+
+        // Allow path
+        dhdSleep(2.1);
+
+        // Go down a bit
+        command[0] = std::chrono::system_clock::now().time_since_epoch()/std::chrono::milliseconds(1) + 2000;
+        command[3] = z;
+        commandedPath[0] = command;
+        PandaController::writeCommandedPath(commandedPath,1);
+
+        // Allow path
+        dhdSleep(2.1);
+
+        // SAFELY ONLOAD THE FORCES
+        cout << "ONLOADING FORCES" << endl;
+        std::array<double, 6> ft = {0.0, 0.0, starting_f, 0.0, 0.0, 0.0};
+        PandaController::writeCommandedFT(ft);
+        std::array<double, 6> pose = {starting_x, starting_y, z, 0.0, 0.0, 0.0};
+        PandaController::writeCommandedPosition(pose);
+        std::array<double, 3> selection = {1.0, 1.0, 0.0};
+        PandaController::writeSelectionVector(selection);
+        dhdSleep(1.0);
+
+        // REPLAY OF MOTION
+        double k=50;
+        double b=sqrt(2*k);
+
+        x = starting_x;
+        y = starting_y;
+        f = starting_f;
+
+        double ddx;
+        double ddy;
+        double ddf;
+
+        double dx = 0.0;
+        double dy = 0.0;
+        double df = 0.0; 
+
+        double f_x;
+        double f_y;
+        double f_f;
+
+        double fd_x;
+        double fd_y;
+        double fd_z;
+
+        for(int i=0; i<1000;i++)
+        {
+            fd_neutral_position(&fd_x,&fd_y,&fd_z);
+            dhdSleep(0.001);
+        }
+
+        cout << "REPLAYING MOTION" << endl;
+
+        while(getline(dmpfile,temp,',')){
+            f_x = atof(temp.c_str());
+            getline(dmpfile,temp,',');
+            f_y = atof(temp.c_str());
+            getline(dmpfile,temp);
+            f_f = -atof(temp.c_str());
+
+            fd_neutral_position(&fd_x,&fd_y,&fd_z);
+
+            // Calculate New X
+            ddx = k*(attractor_x-x)-b*dx+f_x-75*fd_x;
+            dx = dx + ddx*0.001;
+            x = x+dx*0.001;
+
+            // Calculate New Y
+            ddy = k*(attractor_y-y)-b*dy+f_y-75*fd_y;
+            dy = dy + ddy*0.001;
+            y = y+dy*0.001;
+
+            // Calculate New F
+            ddf = k*(attractor_f-f)-b*df+f_f+8000*fd_z;
+            df = df + ddf*0.001;
+            f = f+df*0.001;
+
+            cout << "X:" << x << " Y:" << y << " F:" << f << endl;
+
+            ft = {0.0, 0.0, f, 0.0, 0.0, 0.0};
+            pose = {x, y, z, 0.0, 0.0, 0.0};
+            PandaController::writeCommandedPosition(pose);
+            PandaController::writeCommandedFT(ft);
+            dhdSleep(0.001);
+        }
+
+        // Offload FD Forces
+        dhdSetForceAndTorque(0.0,0.0,0.0,0.0,0.0,0.0);
+
+        // Offload Forces
+        command[0] = std::chrono::system_clock::now().time_since_epoch()/std::chrono::milliseconds(1) + 1000;
+        command[1] = x;
+        command[2] = y;
+        command[3] = z_high;
+        command[4] = 0;
+        command[5] = 0;
+        command[6] = 0;
+        commandedPath[0] = command;
+
+        // GO BACK OFF BOARD
+        selection = {1.0, 1.0, 1.0};
+        PandaController::writeSelectionVector(selection);
+        PandaController::writeCommandedPath(commandedPath,1);
+        dhdSleep(1.5);
+
+    }
+
+
 }
 
 void poll_forcedimension(bool buttonPressed, bool resetCenter, double velcenterx, double velcentery,double velcenterz) {
@@ -235,14 +427,20 @@ int main(int argc, char **argv) {
 
 
     // Start Panda controller and poll force dimension to make sure it has reasonable starting values
-    pid_t pid = PandaController::initPandaController(PandaController::ControlMode::CartesianPosition);
+    pid_t pid = PandaController::initPandaController(PandaController::ControlMode::HybridControl);
     if (pid < 0) {
        cout << "Failed to start panda process" << endl;
     }
     poll_forcedimension(false,false,0.0,0.0,0.0);
 
+    // Initialize Hybrid Controller
+    std::array<double, 3> selectionVector = {1.0, 1.0, 1.0};
+    std::array<double, 6> FT_command = {0.0, 0.0, -10.0, 0.0, 0.0, 0.0};
+    PandaController::writeSelectionVector(selectionVector);
+    PandaController::writeCommandedFT(FT_command);
+
+
     // State flow based on button presses
-    bool exit=false;
     bool start_recording = false;
 
     // Initialize data for storage
@@ -262,11 +460,14 @@ int main(int argc, char **argv) {
     auto start = high_resolution_clock::now(); 
     bool gripping = false;
     bool recording = false;
-    bool resetCenter = false;
+    
+    bool replayMode = false;
 
     int file_iter = 0;
 
-    while (PandaController::isRunning() && ros::ok()) {
+    bool resetCenter = true;
+
+    while (PandaController::isRunning() && ros::ok() && !replayMode) {
         poll_forcedimension(velocity_mode,resetCenter, velcenterx,velcentery,velcenterz);
 
         if (resetCenter){ //only allow one correction
@@ -365,6 +566,11 @@ int main(int argc, char **argv) {
             if (keypress == 'x'){
                 reset_pub.publish('Reset');
                 cout << "RESET DMP" << endl;
+                }
+
+            if (keypress == 'p'){
+                cout << "Initiating Replay " << endl;
+                replayMode = true;
                 } 
         }
 
@@ -374,8 +580,38 @@ int main(int argc, char **argv) {
         
     ros::spinOnce();
 
-      
     }
+
+    if(replayMode)
+    {
+        // Replay loop if the correct key has been pressed!
+        cout << "REPLAY MODE: Switching to DRD" << endl;
+           // Fork process for the force torque sensor
+        // pid_t pid_child = fork();
+        // if (pid_child == 0) {
+        //     fd_neutral_position();
+        //     exit(0);
+        // }
+        thread(fd_neutral_position);
+
+
+        while(PandaController::isRunning() && ros::ok() && replayMode){
+            if (dhdKbHit()) {
+                
+                char keypress = dhdKbGet();
+                if (keypress == 'r'){
+                    replay_demo();
+                }
+
+                if (keypress == 'q'){
+                    replayMode=false;
+                }
+
+            }
+        }
+        
+    }
+
 
     dhdEnableForce (DHD_OFF);
     cout << "Closing Panda" << endl;
