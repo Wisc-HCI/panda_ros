@@ -39,7 +39,7 @@ namespace PandaController {
     void stopControl();
     pid_t initPandaController(ControlMode, char* = NULL);
 
-    std::array<double, 6> readCommandedPosition(double & scaleFactor);
+    std::array<double, 6> readCommandedPosition();
     void writeCommandedPosition(std::array<double, 6> data);
     void writeCommandedPath(const std::array<double, 7>* data, const int & length);
     void setControlCamera(const bool & controlCamera);
@@ -96,6 +96,10 @@ namespace PandaController {
 
         bool controlCamera = false;
         std::array<double, 7> commanded_position[1000]; // time, pose
+        long pathStartTime_ms = 0;
+        long pathEndTime_ms = 0;
+        const int maxIntermediatePoints = 3;
+        std::array<double, 36> interpolationCoefficients{};
         int currentCommand = 0;
         int lastCommand = 0;
         std::array<double, 6> commanded_velocity;
