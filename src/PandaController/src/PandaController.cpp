@@ -589,7 +589,7 @@ namespace PandaController {
             cout << "Robot connected" << endl;
             robot.automaticErrorRecovery();
             double lastJointHome = 0.8;
-            std::array<double,7> q_goal = {{0.0,-0.4,0.0,-2.0,0.0,1.6,lastJointHome}};
+            std::array<double,7> q_goal = {{0.0,-0.4,0.0,-2.0,0.0,1.6, lastJointHome}};
             MotionGenerator motion_generator(0.5, q_goal);
             cout << "Starting homing" << endl;
             robot.control(motion_generator);
@@ -604,12 +604,14 @@ namespace PandaController {
             std::array<double, 6> positionArray;
             Eigen::Affine3d transformMatrix(Eigen::Matrix4d::Map(SharedData->current_state.O_T_EE.data()));
             Eigen::Vector3d positionVector(transformMatrix.translation());
+            Eigen::Quaterniond orientationVector(transformMatrix.linear());
+            EulerAngles euler = quaternionToEuler(orientationVector);
             for (size_t i = 0; i < 3; i++) {
                 positionArray[i] = positionVector[i];
             }
-            for (size_t i = 0; i < 3; i++) {
-                positionArray[3 + i] = 0;
-            }
+            positionArray[3] = euler.roll - M_PI;
+            positionArray[4] = euler.pitch;
+            positionArray[5] = euler.yaw;
             writeCommandedPosition(positionArray);
     
             cout << "About to start" << endl;
@@ -617,9 +619,7 @@ namespace PandaController {
             robot.control([=, &count, &lastJointHome](const franka::RobotState& robot_state,
                                     franka::Duration period) -> franka::JointVelocities {
                 writeRobotState(robot_state);
-
-                double duration_s;
-                array<double, 6> commandedPosition = readCommandedPosition(duration_s);
+                array<double, 6> commandedPosition = readCommandedPosition();
 
                 
                 Eigen::Affine3d transform(Eigen::Matrix4d::Map(robot_state.O_T_EE.data()));
@@ -644,15 +644,16 @@ namespace PandaController {
                 EulerAngles difference_a = quaternionToEuler(difference);
 
                 double scaling_factor = 5;
-                double v_x = (commandedPosition[0] - position[0]) * scaling_factor / duration_s;
-                double v_y = (commandedPosition[1] - position[1]) * scaling_factor / duration_s;
-                double v_z = (commandedPosition[2] - position[2]) * scaling_factor / duration_s;
-                double v_roll = difference_a.roll * scaling_factor / duration_s;
-                double v_pitch = difference_a.pitch * scaling_factor / duration_s;
-                double v_yaw = difference_a.yaw * scaling_factor / duration_s;
+                double v_x = (commandedPosition[0] - position[0]) * scaling_factor;
+                double v_y = (commandedPosition[1] - position[1]) * scaling_factor;
+                double v_z = (commandedPosition[2] - position[2]) * scaling_factor;
+                double v_roll = difference_a.roll * scaling_factor;
+                double v_pitch = difference_a.pitch * scaling_factor;
+                double v_yaw = difference_a.yaw * scaling_factor;
 
                 Eigen::VectorXd v(6);
                 v << v_x, v_y, v_z, v_roll, v_pitch, v_yaw;
+                //v.fill(0);
                 constrainForces(v, robot_state);
 
                 franka::JointVelocities output {0,0,0,0,0,0,0};
@@ -1192,12 +1193,12 @@ namespace PandaController {
         ).count();
         // If the waypoint is in the future. 
         // Then we aren't done yet
-        if (deltaT < 0) {
+        if (deltaT > 0) {
             return false;
         }
         // If it is sufficiently far in the past
         // Then lets forget about it.
-        if (deltaT > 1000){
+        if (deltaT < 0){
             return true;
         }
 
@@ -1215,32 +1216,129 @@ namespace PandaController {
         return false;
     }
 
-    std::array<double, 6> readCommandedPosition(double & targetDuration){
+    void updateInterpolationCoefficients() {
+        double now_ms = std::chrono::system_clock::now().time_since_epoch() / std::chrono::milliseconds(1);
+        // Fit to poly of the form w0 + w1 t + w2 t^2 + ...
+        // This has 3 parameters from the position, velocity and acceleration at the beginning.
+        // + 1 parameter for each positional waypoint in the middle.
+        // + 3 more parameters for the end goal position, end velocity (0) and and acceleration (0);
+        // Only interpolate between the next few points.
+        int maxPositionConstraints = 0;
+        int lastCommand = min(SharedData->lastCommand, SharedData->currentCommand + maxPositionConstraints);
+        int nPositionConstraints = lastCommand - SharedData->currentCommand;
+        int m = maxPositionConstraints + 6;
+        // We will chop out some rows and columns of the matrix if we don't 
+        // have the maximum number of intermediate points. This is so we can store the 
+        // coefficients matrix in a static size;
+        int variableM = nPositionConstraints + 6;
+        Eigen::MatrixXd A(m,m); A.fill(0);
+        Eigen::MatrixXd B(m, 6); B.fill(0);
+        // t goes from 0 (now) to 1 (last point)
+        double timeWidth = SharedData->commanded_position[lastCommand][0] - now_ms;
+        // First 3 rows look like:
+        // 1 0 0 0 ...
+        // 0 1 0 0 ...
+        // 0 0 2 0 ...
+        A(0,0) = 1;
+        A(1,1) = 1;
+        A(2,2) = 2;
+
+        Eigen::Affine3d transformMatrix(Eigen::Matrix4d::Map(SharedData->current_state.O_T_EE.data()));
+        Eigen::Vector3d positionVector(transformMatrix.translation());
+        Eigen::Quaterniond orientationVector(transformMatrix.linear());
+        EulerAngles euler = quaternionToEuler(orientationVector);
+        for (size_t i = 0; i < 3; i++) {
+            B(0,i) = positionVector[i];
+        }
+        B(0,3) = euler.roll - M_PI;
+        if (B(0,3) < -M_PI) B(0,3) += 2* M_PI;
+        else if (B(0,3) > M_PI) B(0,3) -= 2 * M_PI;
+        B(0,4) = euler.pitch;
+        B(0,5) = euler.yaw;
+        B.row(1) = Eigen::Map<const Eigen::VectorXd>(SharedData->current_state.O_dP_EE_c.data(), 6);
+        B.row(2) = Eigen::Map<const Eigen::VectorXd>(SharedData->current_state.O_ddP_EE_c.data(), 6);
+
+        // These ones look like
+        // 1 t t^2 t^3 ...
+        // for each time point
+        for (size_t i = 3; i <= 3 + nPositionConstraints; i++) {
+            int commandIdx = i - 3 + SharedData->currentCommand;
+            if (commandIdx > lastCommand) break;
+            double t = (SharedData->commanded_position[commandIdx][0] - now_ms) / timeWidth;
+            double coeff = 1;
+            for (size_t j = 0; j < variableM; j++) {
+                A(i, j) = coeff;
+                coeff *= t;
+            }
+            array<double, 7> command = SharedData->commanded_position[commandIdx];
+            B.row(i) << command[1], command[2], command[3], command[4], command[5], command[6];
+        }
+        // Last two lines look like
+        // 0 1 2 3 4 5 ...
+        // 0 0 6 12 20 ...
+        for (size_t i = 0; i < 2; i++)
+        {
+            for (size_t j = 1; j < variableM; j++)
+            {
+                double coeff = j;
+                for (size_t k = 1; k <= i; k++) {
+                    coeff *= j-k;
+                }
+                A(nPositionConstraints + 4 + i, j) = coeff;
+            }
+            // Assume that the last position in the path is commanding 0 velocity and acceleration.
+            // B.row(nPositionConstraints + 4 + i) = <0...>
+        }
+
+        Eigen::MatrixXd W = A.completeOrthogonalDecomposition().solve(B);
+        for (size_t i = 0; i < (m * 6); i++) {
+            SharedData->interpolationCoefficients[i] = W.data()[i];
+        }
+        SharedData->pathStartTime_ms = (long)now_ms;
+        SharedData->pathEndTime_ms = (long)SharedData->commanded_position[lastCommand][0];
+    }
+
+    std::array<double, 6> readCommandedPosition(){
         if (SharedData == NULL) throw "Must initialize shared memory space first";
 
         boost::interprocess::scoped_lock<boost::interprocess::interprocess_mutex> lock(SharedData->mutex);
 
         auto command = SharedData->commanded_position[SharedData->currentCommand];
-        while (SharedData->currentCommand < SharedData->lastCommand && !isMotionDone(command)) {
+        bool pathChanged = false;
+        while (SharedData->currentCommand < SharedData->lastCommand && isMotionDone(command)) {
             SharedData->currentCommand ++;
             command = SharedData->commanded_position[SharedData->currentCommand];
+            pathChanged = true;
+        }
+        if (pathChanged) updateInterpolationCoefficients();
+
+        double now_ms = std::chrono::system_clock::now().time_since_epoch() / std::chrono::milliseconds(1);
+        double deltaT = command[0] - now_ms;
+        // If we are told to go there *now*, then forget interpolation.
+        if (deltaT < 0){
+            std::array<double, 6> positionCommand;
+            for (size_t i = 0; i < 6; i++) {
+                positionCommand[i] = command[i+1];
+            }
+            return positionCommand;
         }
 
-        long timePoint = (long)command[0];
-        double deltaT = std::chrono::duration_cast<std::chrono::milliseconds>(
-                std::chrono::time_point<std::chrono::system_clock>(std::chrono::milliseconds(timePoint)) - std::chrono::system_clock::now()
-        ).count();
-        // deltaT is the number of ms that we should complete the command in.
-        // PandaController tries to be at the target position 1ms later. 
-        targetDuration = 1.0;
-        if (deltaT > 1) {
-            targetDuration = 5 * deltaT / 1000.0;
-        }
-        std::array<double, 6> positionCommand;
+        // If we have a little time, interpolate between all of the remaining points
+        // to find a reasonable trajectory.
+        // Now compute the position for 1ms in the future.
+
+        double timeWidth = SharedData->pathEndTime_ms - SharedData->pathStartTime_ms;
+        double t = (now_ms - SharedData->pathStartTime_ms) / timeWidth;
+        Eigen::MatrixXd W = Eigen::Map<Eigen::MatrixXd>(SharedData->interpolationCoefficients.data(), 6, 6);
+        double coeff = 1;
+        array<double, 6> positionCommand{};
         for (size_t i = 0; i < 6; i++) {
-            positionCommand[i] = command[i+1];
+            for (size_t j = 0; j < 6; j++) {
+                positionCommand[j] += coeff * W(i, j);
+            }
+            coeff *= t;
         }
-        
+
         return positionCommand;
     }
 
@@ -1265,6 +1363,8 @@ namespace PandaController {
         }
         SharedData->currentCommand = 0;
         SharedData->lastCommand = length - 1;
+        updateInterpolationCoefficients();
+
     }
 
     void setControlCamera(const bool & controlCamera) {
