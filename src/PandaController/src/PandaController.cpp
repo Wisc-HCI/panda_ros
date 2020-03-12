@@ -621,14 +621,6 @@ namespace PandaController {
                 writeRobotState(robot_state);
                 array<double, 6> commandedPosition = readCommandedPosition();
 
-                cout << "TAUJ: " << robot_state.tau_J[0] << endl <<
-                robot_state.tau_J[1] << endl <<
-                robot_state.tau_J[2] << endl <<
-                robot_state.tau_J[3] << endl <<
-                robot_state.tau_J[4] << endl <<
-                robot_state.tau_J[5] << endl <<
-                robot_state.tau_J[6] << endl;
-
                 Eigen::Affine3d transform(Eigen::Matrix4d::Map(robot_state.O_T_EE.data()));
                 Eigen::Vector3d position(transform.translation());
                 Eigen::Quaterniond orientation(transform.linear());
@@ -650,7 +642,7 @@ namespace PandaController {
 
                 EulerAngles difference_a = quaternionToEuler(difference);
 
-                double scaling_factor = 5;
+                double scaling_factor = 3;
                 double v_x = (commandedPosition[0] - position[0]) * scaling_factor;
                 double v_y = (commandedPosition[1] - position[1]) * scaling_factor;
                 double v_z = (commandedPosition[2] - position[2]) * scaling_factor;
@@ -758,9 +750,7 @@ namespace PandaController {
                 force_selection_matrix =  eye3 - position_selection_matrix;
                 
                 // COME BACK TO THIS!!!
-
-                double duration_s;
-                array<double, 6> commandedPosition = readCommandedPosition(duration_s);
+                array<double, 6> commandedPosition = readCommandedPosition();
                 array<double, 6> commandedWrench = readCommandedFT();
 
                 // TEMP FORCE THE COMMANDED POSITION TO BE THE SAME!!!
@@ -791,12 +781,12 @@ namespace PandaController {
                 EulerAngles difference_a = quaternionToEuler(difference);
 
                 double scaling_factor = 5;
-                double v_x = (commandedPosition[0] - position[0]) * scaling_factor / duration_s;
-                double v_y = (commandedPosition[1] - position[1]) * scaling_factor / duration_s;
-                double v_z = (commandedPosition[2] - position[2]) * scaling_factor / duration_s;
-                double v_roll = difference_a.roll * scaling_factor / duration_s;
-                double v_pitch = difference_a.pitch * scaling_factor / duration_s;
-                double v_yaw = difference_a.yaw * scaling_factor / duration_s;
+                double v_x = (commandedPosition[0] - position[0]) * scaling_factor;
+                double v_y = (commandedPosition[1] - position[1]) * scaling_factor;
+                double v_z = (commandedPosition[2] - position[2]) * scaling_factor;
+                double v_roll = difference_a.roll * scaling_factor;
+                double v_pitch = difference_a.pitch * scaling_factor;
+                double v_yaw = difference_a.yaw * scaling_factor;
 
 
                 // Force Control Law - P controller w/ very low gain
@@ -856,8 +846,6 @@ namespace PandaController {
             cout << e.what() << endl;
         }
     }
-
-
 
     //Input Cartesian velocity, control with joint velocities
     void runVelocityController(char* ip = NULL){
@@ -1460,8 +1448,8 @@ namespace PandaController {
         else if (B(0,3) > M_PI) B(0,3) -= 2 * M_PI;
         B(0,4) = euler.pitch;
         B(0,5) = euler.yaw;
-        B.row(1) = Eigen::Map<const Eigen::VectorXd>(SharedData->current_state.O_dP_EE_c.data(), 6);
-        B.row(2) = Eigen::Map<const Eigen::VectorXd>(SharedData->current_state.O_ddP_EE_c.data(), 6);
+        //B.row(1) = Eigen::Map<const Eigen::VectorXd>(SharedData->currentVelocity.data(), 6);
+        //B.row(2) = Eigen::Map<const Eigen::VectorXd>(SharedData->currentAcceleration.data(), 6); // currentAcceleration is currently not set.
 
         // These ones look like
         // 1 t t^2 t^3 ...
@@ -1514,6 +1502,7 @@ namespace PandaController {
             SharedData->currentCommand ++;
             command = SharedData->commanded_position[SharedData->currentCommand];
             pathChanged = true;
+            cout << "path changed" << endl;
         }
         if (pathChanged) updateInterpolationCoefficients();
 
@@ -1662,6 +1651,7 @@ namespace PandaController {
         boost::interprocess::scoped_lock<boost::interprocess::interprocess_mutex> lock(SharedData->mutex);
         return SharedData->current_state;
     }
+
     void writeRobotState(franka::RobotState data){
         if (SharedData == NULL) return;
         boost::interprocess::scoped_lock<boost::interprocess::interprocess_mutex> lock(SharedData->mutex);
@@ -1677,6 +1667,11 @@ namespace PandaController {
             SharedData->timestamps[SharedData->buffer_end-1] = (std::chrono::system_clock::now() - SharedData->start_time).count();
         }
         SharedData->current_state = data;
+        Eigen::MatrixXd jacobian = Eigen::Map<Eigen::MatrixXd>(SharedData->jacobian.data(), 6, 7);
+        Eigen::VectorXd dp = jacobian * Eigen::Map<Eigen::VectorXd>(data.dq.data(),7);
+        for (size_t i = 0; i < 6; i++) {
+            SharedData->currentVelocity[i] = dp[i];
+        }
     }
 
     void consumeBuffer(int &count, franka::RobotState* result, long* times){
