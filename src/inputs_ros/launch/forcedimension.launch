@@ -1,6 +1,6 @@
 <launch>
     <node pkg="panda_ros" type="pandaRosWrapper" name="panda_controller" output="screen">
-		<param name="control_mode" value="cartesian_position" />
+		<param name="control_mode" value="hybrid" />
     </node>
     <node pkg="inputs_ros" type="forcedimensionRosWrapper" name="forcedimension_interface" output="screen">
     </node>

@@ -8,7 +8,7 @@ SET(CATKIN_PACKAGE_BIN_DESTINATION ${CMAKE_CURRENT_SOURCE_DIR}/../../devel/lib)
 
 SET(relaxed_ik_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../../devel/share/relaxed_ik/cmake)
 
-find_package(catkin REQUIRED COMPONENTS roscpp rospy std_msgs genmsg relaxed_ik)
+find_package(catkin REQUIRED COMPONENTS roscpp tf tf2_ros rospy std_msgs genmsg relaxed_ik)
 find_package(Eigen3 REQUIRED)
 find_library(LIBNIFALCON nifalcon REQUIRED)
 find_library(DHDC libdhd.so.3.8.0 REQUIRED)

@@ -642,7 +642,7 @@ namespace PandaController {
 
                 EulerAngles difference_a = quaternionToEuler(difference);
 
-                double scaling_factor = 3;
+                double scaling_factor = 5;
                 double v_x = (commandedPosition[0] - position[0]) * scaling_factor;
                 double v_y = (commandedPosition[1] - position[1]) * scaling_factor;
                 double v_z = (commandedPosition[2] - position[2]) * scaling_factor;
@@ -654,7 +654,7 @@ namespace PandaController {
 
                 Eigen::VectorXd v(6);
                 v << v_x, v_y, v_z, v_roll, v_pitch, v_yaw;
-                //v.fill(0);
+
                 constrainForces(v, robot_state);
 
                 franka::JointVelocities output {0,0,0,0,0,0,0};
@@ -790,7 +790,7 @@ namespace PandaController {
 
 
                 // Force Control Law - P controller w/ very low gain
-                double Kfp = 0.0005;
+                double Kfp = 0.0008;
                 double v_x_f = Kfp*(commandedWrench[0]-currentWrench[0]);
                 double v_y_f = Kfp*(commandedWrench[1]-currentWrench[1]);
                 double v_z_f = Kfp*(commandedWrench[2]-currentWrench[2]);
@@ -846,7 +846,6 @@ namespace PandaController {
             cout << e.what() << endl;
         }
     }
-
     //Input Cartesian velocity, control with joint velocities
     void runVelocityController(char* ip = NULL){
         try {
@@ -1120,7 +1119,7 @@ namespace PandaController {
         try {
             p_gripper->stop();
             SharedData->isGripperMoving = true;
-            p_gripper->grasp(maxGripperWidth/2,0.2,20,0.5,0.5);
+            p_gripper->grasp(maxGripperWidth/2,0.2,40,0.5,0.5);
             SharedData->isGripperMoving = false;
             SharedData->grasped = true;
             PandaController::writeGripperState();
@@ -1514,7 +1513,7 @@ namespace PandaController {
             SharedData->currentCommand ++;
             command = SharedData->commanded_position[SharedData->currentCommand];
             pathChanged = true;
-            cout << "path changed" << endl;
+            //cout << "path changed" << endl;
         }
         if (pathChanged) updateInterpolationCoefficients();
 
@@ -1587,7 +1586,6 @@ namespace PandaController {
         SharedData->currentCommand = 0;
         SharedData->lastCommand = length - 1;
         updateInterpolationCoefficients();
-
     }
 
     void setControlCamera(const bool & controlCamera) {
@@ -1663,7 +1661,6 @@ namespace PandaController {
         boost::interprocess::scoped_lock<boost::interprocess::interprocess_mutex> lock(SharedData->mutex);
         return SharedData->current_state;
     }
-
     void writeRobotState(franka::RobotState data){
         if (SharedData == NULL) return;
         boost::interprocess::scoped_lock<boost::interprocess::interprocess_mutex> lock(SharedData->mutex);

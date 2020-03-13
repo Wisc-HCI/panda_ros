@@ -124,6 +124,16 @@ void updateCallbackCartVel(const geometry_msgs::Twist::ConstPtr& msg){
     }
 }
 
+void updateCallbackSelectionVector(const geometry_msgs::Vector3::ConstPtr& msg){
+    if (PandaController::isRunning()){
+        std::array<double, 3> vec;
+        vec[0] = msg->x;
+        vec[1] = msg->y;
+        vec[2] = msg->z;
+        PandaController::writeSelectionVector(vec);
+    }
+}
+
 void callbackCommands(const std_msgs::String& msg){
     std::vector<std::string> command;
     boost::split(command, msg.data, [](char c){return c == ';';});
@@ -139,8 +149,7 @@ void callbackCommands(const std_msgs::String& msg){
     }
     if(command[0] == "setMaxForce") {
         cout<<"Setting max force to "<<command[1]<<endl;
-        PandaController::writeMaxForce(stod(command[1]));
-        cout<<PandaController::readMaxForce()<<endl;
+        PandaController::writeCommandedFT({0,0,-stod(command[1]),0,0,0});
     }
     
 }
@@ -234,6 +243,8 @@ int main(int argc, char **argv) {
         mode = PandaController::ControlMode::CartesianPosition;
     if(mode_str == "joint_position")
         mode = PandaController::ControlMode::JointPosition;
+    if(mode_str == "hybrid")
+        mode = PandaController::ControlMode::HybridControl;
     if(mode_str == "none")
         mode = PandaController::ControlMode::None;
         
@@ -246,6 +257,7 @@ int main(int argc, char **argv) {
     ros::Subscriber sub_position;
     ros::Subscriber sub_trajectory;
     ros::Subscriber sub_controlCamera;
+    ros::Subscriber sub_selectionVector;
     switch(mode){
         case PandaController::ControlMode::CartesianVelocity:
             sub_position = n.subscribe("/panda/cart_vel", 10, updateCallbackCartVel);
@@ -258,6 +270,15 @@ int main(int argc, char **argv) {
             sub_position = n.subscribe("/panda/cart_pose", 10, updateCallbackCartPos);
             sub_trajectory = n.subscribe("/panda/path", 10, updateCallbackPath);
             sub_controlCamera = n.subscribe("/panda/controlCamera", 10, updateCallbackControlCamera);
+            
+            break;
+        case PandaController::ControlMode::HybridControl:
+            sub_position = n.subscribe("/panda/cart_pose", 10, updateCallbackCartPos);
+            sub_trajectory = n.subscribe("/panda/path", 10, updateCallbackPath);
+            sub_controlCamera = n.subscribe("/panda/controlCamera", 10, updateCallbackControlCamera);
+            sub_selectionVector = n.subscribe("/panda/selection_vector", 10, updateCallbackSelectionVector);
+            PandaController::writeCommandedFT({0,0,-4,0,0,0});
+            PandaController::writeSelectionVector({1,1,1});
             
             break;
         case PandaController::ControlMode::JointPosition:
