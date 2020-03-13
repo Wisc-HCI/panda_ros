@@ -1667,11 +1667,6 @@ namespace PandaController {
             SharedData->timestamps[SharedData->buffer_end-1] = (std::chrono::system_clock::now() - SharedData->start_time).count();
         }
         SharedData->current_state = data;
-        Eigen::MatrixXd jacobian = Eigen::Map<Eigen::MatrixXd>(SharedData->jacobian.data(), 6, 7);
-        Eigen::VectorXd dp = jacobian * Eigen::Map<Eigen::VectorXd>(data.dq.data(),7);
-        for (size_t i = 0; i < 6; i++) {
-            SharedData->currentVelocity[i] = dp[i];
-        }
     }
 
     void consumeBuffer(int &count, franka::RobotState* result, long* times){
