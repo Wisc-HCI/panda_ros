@@ -39,7 +39,7 @@ namespace PandaController {
     void stopControl();
     pid_t initPandaController(ControlMode, char* = NULL);
 
-    std::array<double, 6> readCommandedPosition(double & scaleFactor);
+    std::array<double, 6> readCommandedPosition();
     void writeCommandedPosition(std::array<double, 6> data);
     void writeCommandedPath(const std::array<double, 7>* data, const int & length);
     void setControlCamera(const bool & controlCamera);
@@ -72,6 +72,11 @@ namespace PandaController {
     bool isRunning();
 
     void writeGripperState();
+    franka::GripperState readGripperState();
+
+    void writeMaxForce(double val);
+    double readMaxForce();
+    
     void homeGripper();
     
     void toggleGrip(std::function<void ()> onToggle = NULL);
@@ -102,10 +107,15 @@ namespace PandaController {
 
         bool controlCamera = false;
         std::array<double, 7> commanded_position[1000]; // time, pose
+        long pathStartTime_ms = 0;
+        long pathEndTime_ms = 0;
+        const int maxIntermediatePoints = 3;
+        std::array<double, 36> interpolationCoefficients{};
         int currentCommand = 0;
         int lastCommand = 0;
         std::array<double, 6> commanded_velocity;
         franka::RobotState current_state;
+        franka::GripperState gripper_state;
         franka::RobotState buffer[1000];
         std::chrono::system_clock::time_point start_time;
         long timestamps[1000];
@@ -138,6 +148,7 @@ namespace PandaController {
         std::array<double, 6> ft_sensor;
         std::array<double, 6> ft_bias;
         
+	double maxForce = 15;
 
         shared_data() {
             writeCommandedVelocity({0,0,0,0,0,0});

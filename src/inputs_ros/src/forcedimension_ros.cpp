@@ -13,6 +13,9 @@
 #include "geometry_msgs/Pose.h"
 #include "geometry_msgs/Wrench.h"
 #include "std_msgs/String.h"
+#include "geometry_msgs/TransformStamped.h"
+#include "geometry_msgs/Vector3.h"
+#include "tf2_ros/transform_listener.h"
 
 
 // Force Dimension
@@ -24,9 +27,12 @@ using namespace std;
 
 array<double,3> workspace_center = {0.42, 0., 0.19};
 array<double,3> force_dimension = {0.0, 0.0, 0.0};
+// Scaling Values
+array<double,3> scaling_factors = {-5.0, -5.0, 5.0};
 bool buttonPressed=false;
 bool velocity_mode=false;
 bool resetCenter=false;
+bool idleMode = true;
 double velcenterx = 0;
 double velcentery = 0;
 double velcenterz = 0;
@@ -43,6 +49,37 @@ void signalHandler(int sig)
     exit(sig);
 }
 
+void fd_neutral_position(ros::Publisher fd_pos_pub){
+    
+    double x_d = 0.0;
+    double y_d = 0.0;
+    double z_d = 0.0;
+
+    double x_curr, y_curr, z_curr;
+
+    double v_x = 0.0;
+    double v_y = 0.0;
+    double v_z = 0.0;
+
+    double stiffness = 200;
+    double damping = 2*sqrt(stiffness);
+
+    // Get current position and velocity
+    dhdGetPosition (&x_curr, &y_curr, &z_curr);
+    geometry_msgs::Vector3 fd_pos;
+    fd_pos.x = x_curr;
+    fd_pos.y = y_curr;
+    fd_pos.z = z_curr;
+    fd_pos_pub.publish(fd_pos);
+
+    dhdGetLinearVelocity(&v_x,&v_y,&v_z);
+    
+    // Command to that position with P controller
+    dhdSetForceAndTorque(-stiffness*(x_curr-x_d)-damping*v_x,-stiffness*(y_curr-y_d)-damping*v_y,
+    -stiffness*(z_curr-z_d)-damping*v_z,0.0,0.0,0.0);
+
+}
+
 bool init_forcedimension() {
     cout <<"Setting up Force Dimension\n";
     if (dhdOpen () < 0) {
@@ -51,24 +88,10 @@ bool init_forcedimension() {
         return false;
     }
     cout << "Force Dimension Setup Complete" << endl;
-
-
-    buttonPressed = false;
-
-    cout << endl << endl << "(Press Force Dimension Button to Start Control)" << endl;
-
-    // maybe add timeout?
-    while(!buttonPressed)
-        if(dhdGetButton(0)==1) // button pressed
-        {
-            buttonPressed = true;
-        }
+    return true;
 }
 
 void poll_forcedimension(bool buttonPressed, double velcenterx, double velcentery,double velcenterz,ros::Publisher pose_goal_pub) {
-
-    // Scaling Values
-    array<double,3> scaling_factors = {-3.0, -3.0, 3.0};
 
     array<double, 6> panda_pos = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
     
@@ -144,7 +167,7 @@ void feedback_ft_forcedimension(geometry_msgs::Wrench wrench){
     FTData[2] = v[2];
 
 
-    if(!velocity_mode){ 
+    if(!velocity_mode && !idleMode){ 
         // If not clutching, render the forces on force dimension
         dhdSetForceAndTorque(FTData[0] * scale -vx*b,-FTData[1]* scale -vy*b,FTData[2]* scale -vz*b,0.0,0.0,0.0);
     }
@@ -156,6 +179,13 @@ void feedback_ft_forcedimension(geometry_msgs::Wrench wrench){
 
     //cout << "FT: " << -FTData[0] * scale -vx*b  << "," << -FTData[1]* scale << "," << FTData[2]* scale -vz*b << endl;
 
+}
+
+void check_idle_mode(std_msgs::String event){
+    if(event.data=="gui_takeover")
+    {
+        idleMode=true;
+    }
 }
 
 int main(int argc, char **argv) {
@@ -198,12 +228,19 @@ int main(int argc, char **argv) {
 
     cout << "Control and Force Enabled" << endl;
 
+    ros::Rate loop_rate(1000);
 
     ros::Publisher pose_goal_pub = 
         n.advertise<geometry_msgs::Pose>("/panda/cart_pose", 5);
     ros::Publisher command_pub = 
         n.advertise<std_msgs::String>("/panda/commands", 5);
+    ros::Publisher event_pub = 
+        n.advertise<std_msgs::String>("/event", 5);
+    ros::Publisher fd_pos_pub = 
+        n.advertise<geometry_msgs::Vector3>("/fd/position", 5);
     ros::Subscriber force_sub = n.subscribe("/panda/wrench", 5, feedback_ft_forcedimension);
+
+    ros::Subscriber event_sub = n.subscribe("/event", 5, check_idle_mode);
 
     poll_forcedimension(false,0.0,0.0,0.0,pose_goal_pub);
 
@@ -219,11 +256,21 @@ int main(int argc, char **argv) {
     velocity_mode = false;
     auto start = high_resolution_clock::now(); 
     bool gripping = false;
+    tf2_ros::Buffer tfBuffer;
+    tf2_ros::TransformListener tfListener(tfBuffer);
 
     while (ros::ok()) {
         // Get force dimension position and publish to ROS
-        poll_forcedimension(velocity_mode, velcenterx,velcentery,velcenterz,pose_goal_pub);
-         if (resetCenter){ //only allow one correction
+
+        if(!idleMode){
+            poll_forcedimension(velocity_mode, velcenterx,velcentery,velcenterz,pose_goal_pub);
+        }
+
+        else{
+            fd_neutral_position(fd_pos_pub);
+        }
+
+        if (resetCenter){ //only allow one correction
             resetCenter=false;
         }
 
@@ -266,10 +313,39 @@ int main(int argc, char **argv) {
 
             if(duration.count()<300000)
             {
-                cout << "GRIPPER ACTION" << endl;
-                std_msgs::String cmd;
-                cmd.data = "toggleGrip";
-                command_pub.publish(cmd);
+                // Single button press in idle mode is takeover
+                if(idleMode){
+                    idleMode=false;
+                    std_msgs::String cmd;
+                    cmd.data = "fd_takeover";
+                    event_pub.publish(cmd);
+
+                    geometry_msgs::TransformStamped transformStamped;
+                    try{
+                        //CHECK DURATION
+                        transformStamped = tfBuffer.lookupTransform("panda_link0", "end_effector",ros::Time(0));
+                    }
+                    catch (tf2::TransformException &ex) {
+                        ROS_WARN("%s",ex.what());
+                    }
+                    // TODO: THIS IS WHERE THE WORKSPACE CENTER IS!!!!
+                    //workspace_center[0]=current_x-scaling_factors[0]*(force_dimension[0]-velcenterx);
+                    //workspace_center[1]=current_y-scaling_factors[1]*(force_dimension[1]-velcentery);
+                    //workspace_center[2]=current_z-scaling_factors[2]*(force_dimension[2]-velcenterz);
+                    dhdGetPosition (&force_dimension[0], &force_dimension[1], &force_dimension[2]);
+
+                    workspace_center[0]=transformStamped.transform.translation.x-scaling_factors[0]*(force_dimension[0]);
+                    workspace_center[1]=transformStamped.transform.translation.y-scaling_factors[1]*(force_dimension[1]);
+                    workspace_center[2]=transformStamped.transform.translation.z-scaling_factors[2]*(force_dimension[2]);
+                }
+
+                // Not in idle mode is gripper action
+                else{
+                    cout << "GRIPPER ACTION" << endl;
+                    std_msgs::String cmd;
+                    cmd.data = "toggleGrip";
+                    command_pub.publish(cmd);
+                }
             }
 
             buttonPressed=false;
@@ -283,7 +359,7 @@ int main(int argc, char **argv) {
 
         // Finish the loop
         ros::spinOnce();
-        usleep(1000); 
+        loop_rate.sleep(); 
 
     }
 

@@ -16,6 +16,7 @@
 #include <eigen3/Eigen/Dense>
 #include <csignal>
 #include <deque>
+#include <boost/algorithm/string.hpp>
 
 using namespace std;
 
@@ -123,8 +124,19 @@ void updateCallbackCartVel(const geometry_msgs::Twist::ConstPtr& msg){
     }
 }
 
-void callbackCommands(const std_msgs::String& msg){
+void updateCallbackSelectionVector(const geometry_msgs::Vector3::ConstPtr& msg){
+    if (PandaController::isRunning()){
+        std::array<double, 3> vec;
+        vec[0] = msg->x;
+        vec[1] = msg->y;
+        vec[2] = msg->z;
+        PandaController::writeSelectionVector(vec);
+    }
+}
 
+void callbackCommands(const std_msgs::String& msg){
+    std::vector<std::string> command;
+    boost::split(command, msg.data, [](char c){return c == ';';});
     if(msg.data == "grasp"){
         cout<<"Grasping"<<endl;
         PandaController::graspObject();
@@ -135,11 +147,17 @@ void callbackCommands(const std_msgs::String& msg){
     if(msg.data == "toggleGrip") {
         PandaController::toggleGrip();
     }
+    if(command[0] == "setMaxForce") {
+        cout<<"Setting max force to "<<command[1]<<endl;
+        PandaController::writeCommandedFT({0,0,-stod(command[1]),0,0,0});
+    }
     
 }
 
 void publishJointState(franka::RobotState robot_state, ros::Publisher jointPub){
-    const vector<string> joint_names{"panda_joint1", "panda_joint2","panda_joint3","panda_joint4","panda_joint5","panda_joint6","panda_joint7"};
+    const vector<string> joint_names{"panda_joint1", "panda_joint2","panda_joint3","panda_joint4","panda_joint5","panda_joint6","panda_joint7","panda_finger_joint1","panda_finger_joint2"};
+    franka::GripperState gripperState = PandaController::readGripperState();
+
     sensor_msgs::JointState states;
     states.effort.resize(joint_names.size());
     states.name.resize(joint_names.size());
@@ -149,11 +167,14 @@ void publishJointState(franka::RobotState robot_state, ros::Publisher jointPub){
         states.name[i] = joint_names[i];
     }
     states.header.stamp = ros::Time::now();
-    for (size_t i = 0; i < joint_names.size(); i++) {
+    for (size_t i = 0; i < joint_names.size()-2; i++) {
         states.position[i] = robot_state.q[i];
         states.velocity[i] = robot_state.dq[i];
         states.effort[i] = robot_state.tau_J[i];
     }
+    states.position[joint_names.size()-2] = gripperState.width/2.;
+    states.position[joint_names.size()-1] = gripperState.width/2.;
+    
     jointPub.publish(states);
 }
 
@@ -163,6 +184,9 @@ void publishTf(franka::RobotState robot_state){
     Eigen::Affine3d transform(Eigen::Matrix4d::Map(robot_state.O_T_EE.data()));
     Eigen::Vector3d position(transform.translation());
     Eigen::Quaterniond orientation(transform.linear());
+    // Align the orientation of the end-effector with panda_link0
+    Eigen::Quaterniond rot(Eigen::AngleAxisd(M_PI,Eigen::Vector3d::UnitX()));
+    orientation *= rot;
     geometry_msgs::TransformStamped transformStamped;
     
     transformStamped.header.stamp = ros::Time::now();
@@ -219,6 +243,8 @@ int main(int argc, char **argv) {
         mode = PandaController::ControlMode::CartesianPosition;
     if(mode_str == "joint_position")
         mode = PandaController::ControlMode::JointPosition;
+    if(mode_str == "hybrid")
+        mode = PandaController::ControlMode::HybridControl;
     if(mode_str == "none")
         mode = PandaController::ControlMode::None;
         
@@ -231,10 +257,10 @@ int main(int argc, char **argv) {
     ros::Subscriber sub_position;
     ros::Subscriber sub_trajectory;
     ros::Subscriber sub_controlCamera;
+    ros::Subscriber sub_selectionVector;
     switch(mode){
         case PandaController::ControlMode::CartesianVelocity:
             sub_position = n.subscribe("/panda/cart_vel", 10, updateCallbackCartVel);
-            cout<<"subscribed"<<endl;
             break;
         case PandaController::ControlMode::JointVelocity:
             //TODO: we don't actually have anything that uses this, not set up correctly in PandaController
@@ -246,8 +272,17 @@ int main(int argc, char **argv) {
             sub_controlCamera = n.subscribe("/panda/controlCamera", 10, updateCallbackControlCamera);
             
             break;
+        case PandaController::ControlMode::HybridControl:
+            sub_position = n.subscribe("/panda/cart_pose", 10, updateCallbackCartPos);
+            sub_trajectory = n.subscribe("/panda/path", 10, updateCallbackPath);
+            sub_controlCamera = n.subscribe("/panda/controlCamera", 10, updateCallbackControlCamera);
+            sub_selectionVector = n.subscribe("/panda/selection_vector", 10, updateCallbackSelectionVector);
+            PandaController::writeCommandedFT({0,0,-4,0,0,0});
+            PandaController::writeSelectionVector({1,1,1});
+            
+            break;
         case PandaController::ControlMode::JointPosition:
-            sub_position = n.subscribe("/relaxed_ik/joint_angle_solutions", 10, updateCallbackJointPos);
+            sub_position = n.subscribe("/panda/joint_angles", 10, updateCallbackJointPos);
             break;
         case PandaController::ControlMode::None:
             break;     
