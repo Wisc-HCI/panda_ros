@@ -58,18 +58,6 @@ bool init_forcedimension() {
         return false;
     }
     cout << "Force Dimension Setup Complete" << endl;
-
-
-    bool buttonPressed = false;
-
-    cout << endl << endl << "(Press Force Dimension Button to Start Control)" << endl;
-
-    // maybe add timeout?
-    while(!buttonPressed)
-        if(dhdGetButton(0)==1) // button pressed
-        {
-            buttonPressed = true;
-        }
 }
 
 
@@ -118,13 +106,45 @@ void replay_demo(){
     string temp;
     if(dmpfile.good())
     {
+        double k=50;
+        double b=sqrt(2*k);
+
+        double ddx, ddy, ddf;
+
+        double dx = 0.0;
+        double dy = 0.0;
+        double df = 0.0; 
+
+        double f_x, f_y, f_f;
+
+        double fd_x, fd_y, fd_z;
+
+        std::array<double, 6> pose;
+        std::array<double, 6> ft;
+        std::array<double, 3> selection;
+
+        // Read first mode command
+        string throwaway;
+        getline(dmpfile,throwaway,',');
+        getline(dmpfile,throwaway,',');
+        getline(dmpfile,temp);
+
+        // Read Selection Vector
+        getline(dmpfile,temp,',');
+        selection[0] = atof(temp.c_str());
+        getline(dmpfile,temp,',');
+        selection[1] = atof(temp.c_str());
+        getline(dmpfile,temp);
+        selection[2] = atof(temp.c_str());
+        PandaController::writeSelectionVector(selection);
+
         // Read Starting Points
         getline(dmpfile,temp,',');
         starting_x = atof(temp.c_str());
         getline(dmpfile,temp,',');
         starting_y = atof(temp.c_str());
         getline(dmpfile,temp);
-        starting_f = -atof(temp.c_str());
+        starting_f = atof(temp.c_str());
 
         // Read Attractor Points
         getline(dmpfile,temp,',');
@@ -132,8 +152,18 @@ void replay_demo(){
         getline(dmpfile,temp,',');
         attractor_y = atof(temp.c_str());
         getline(dmpfile,temp);
-        attractor_f = -atof(temp.c_str());
+        attractor_f = atof(temp.c_str());
 
+        // Reset
+        x = starting_x;
+        y = starting_y;
+        f = starting_f;
+
+        dx = 0.0;
+        dy = 0.0;
+        df = 0.0; 
+
+        cout << "STARTING: " << starting_x << "," << starting_y << "," << starting_f << endl;
 
         std::array<double, 7> command;
         // Time to arrive in milliseconds
@@ -141,7 +171,7 @@ void replay_demo(){
         command[0] = std::chrono::system_clock::now().time_since_epoch()/std::chrono::milliseconds(1) + 2000;
         command[1] = starting_x;
         command[2] = starting_y;
-        command[3] = z_high;
+        command[3] = starting_f;
         command[4] = 0;
         command[5] = 0;
         command[6] = 0;
@@ -149,53 +179,8 @@ void replay_demo(){
 
         // GO ABOVE STARTING POINT
         PandaController::writeCommandedPath(commandedPath,1);
-        cout << "GOING TO START POSITION" << endl;
 
-        // Allow path
         dhdSleep(2.1);
-
-        // Go down a bit
-        command[0] = std::chrono::system_clock::now().time_since_epoch()/std::chrono::milliseconds(1) + 2000;
-        command[3] = z;
-        commandedPath[0] = command;
-        PandaController::writeCommandedPath(commandedPath,1);
-
-        // Allow path
-        dhdSleep(2.1);
-
-        // SAFELY ONLOAD THE FORCES
-        cout << "ONLOADING FORCES" << endl;
-        std::array<double, 6> ft = {0.0, 0.0, starting_f, 0.0, 0.0, 0.0};
-        PandaController::writeCommandedFT(ft);
-        std::array<double, 6> pose = {starting_x, starting_y, z, 0.0, 0.0, 0.0};
-        PandaController::writeCommandedPosition(pose);
-        std::array<double, 3> selection = {1.0, 1.0, 0.0};
-        PandaController::writeSelectionVector(selection);
-        dhdSleep(1.0);
-
-        // REPLAY OF MOTION
-        double k=50;
-        double b=sqrt(2*k);
-
-        x = starting_x;
-        y = starting_y;
-        f = starting_f;
-
-        double ddx;
-        double ddy;
-        double ddf;
-
-        double dx = 0.0;
-        double dy = 0.0;
-        double df = 0.0; 
-
-        double f_x;
-        double f_y;
-        double f_f;
-
-        double fd_x;
-        double fd_y;
-        double fd_z;
 
         for(int i=0; i<1000;i++)
         {
@@ -206,56 +191,116 @@ void replay_demo(){
         cout << "REPLAYING MOTION" << endl;
 
         while(getline(dmpfile,temp,',')){
-            f_x = atof(temp.c_str());
-            getline(dmpfile,temp,',');
-            f_y = atof(temp.c_str());
-            getline(dmpfile,temp);
-            f_f = -atof(temp.c_str());
+            if(temp=="mode")
+            {
+                getline(dmpfile,temp,',');
+                f_y = atof(temp.c_str());
+                getline(dmpfile,temp);
+                f_f = atof(temp.c_str());
 
-            fd_neutral_position(&fd_x,&fd_y,&fd_z);
+                // Read Selection Vector
+                getline(dmpfile,temp,',');
+                selection[0] = atof(temp.c_str());
+                getline(dmpfile,temp,',');
+                selection[1] = atof(temp.c_str());
+                getline(dmpfile,temp);
+                selection[2] = atof(temp.c_str());
 
-            // Calculate New X
-            ddx = k*(attractor_x-x)-b*dx+f_x-75*fd_x;
-            dx = dx + ddx*0.001;
-            x = x+dx*0.001;
+                // Read Starting Points
+                getline(dmpfile,temp,',');
+                starting_x = atof(temp.c_str());
+                getline(dmpfile,temp,',');
+                starting_y = atof(temp.c_str());
+                getline(dmpfile,temp);
+                starting_f = atof(temp.c_str());
 
-            // Calculate New Y
-            ddy = k*(attractor_y-y)-b*dy+f_y-75*fd_y;
-            dy = dy + ddy*0.001;
-            y = y+dy*0.001;
+                // Read Attractor Points
+                getline(dmpfile,temp,',');
+                attractor_x = atof(temp.c_str());
+                getline(dmpfile,temp,',');
+                attractor_y = atof(temp.c_str());
+                getline(dmpfile,temp);
+                attractor_f = atof(temp.c_str());
 
-            // Calculate New F
-            ddf = k*(attractor_f-f)-b*df+f_f+8000*fd_z;
-            df = df + ddf*0.001;
-            f = f+df*0.001;
+                // Reset
+                x = starting_x;
+                y = starting_y;
+                f = starting_f;
 
-            cout << "X:" << x << " Y:" << y << " F:" << f << endl;
+                dx = 0.0;
+                dy = 0.0;
+                df = 0.0; 
 
-            ft = {0.0, 0.0, f, 0.0, 0.0, 0.0};
-            pose = {x, y, z, 0.0, 0.0, 0.0};
-            PandaController::writeCommandedPosition(pose);
-            PandaController::writeCommandedFT(ft);
-            dhdSleep(0.001);
+                PandaController::writeSelectionVector(selection);
+
+                if(selection[0]==0 || selection [1]==0 || selection[2]==0){
+                    // Do force onloading with the first sample
+                    cout << "FORCE ONLOADING STARTED" << endl;
+
+                    ft = {starting_x, starting_y, starting_f, 0.0, 0.0, 0.0};
+                    pose = {starting_x, starting_y, starting_f, 0.0, 0.0, 0.0};
+                    PandaController::writeCommandedPosition(pose);
+                    PandaController::writeCommandedFT(ft);
+
+                    bool proper_contact = false;
+                    while(!proper_contact)
+                    {
+                        fd_neutral_position(&fd_x,&fd_y,&fd_z);
+                        std::array<double, 6> FTData = PandaController::readFTForces();
+                        cout << "FZ: " << FTData[2] << " " << starting_f << endl;
+                        if(FTData[2]<0.98*starting_f && FTData[2]>1.02*starting_f)
+                        {
+                            proper_contact = true;
+                        }
+                        dhdSleep(0.001);
+
+                    }
+                    cout << "FORCE ONLOADING COMPLETE" << endl;
+
+                }
+
+
+
+            }
+            
+            else{
+                f_x = atof(temp.c_str());
+                getline(dmpfile,temp,',');
+                f_y = atof(temp.c_str());
+                getline(dmpfile,temp);
+                f_f = atof(temp.c_str());
+                fd_neutral_position(&fd_x,&fd_y,&fd_z);
+
+                // Force mode gain, Position mode gain
+                std::array<double, 2> sel_gains = {6000, 75};
+
+                // Calculate New X
+                ddx = k*(attractor_x-x)-b*dx+f_x-sel_gains[(int) selection[0]]*fd_x;
+                dx = dx + ddx*0.001;
+                x = x+dx*0.001;
+
+                // Calculate New Y
+                ddy = k*(attractor_y-y)-b*dy+f_y-sel_gains[(int) selection[1]]*fd_y;
+                dy = dy + ddy*0.001;
+                y = y+dy*0.001;
+
+                // Calculate New F
+                ddf = k*(attractor_f-f)-b*df+f_f+sel_gains[(int) selection[2]]*fd_z;
+                df = df + ddf*0.001;
+                f = f+df*0.001;
+
+                //cout << "X:" << fd_x << " Y:" << fd_y << " F:" << fd_z << endl;
+
+                ft = {x, y, f, 0.0, 0.0, 0.0};
+                pose = {x, y, f, 0.0, 0.0, 0.0};
+                PandaController::writeCommandedPosition(pose);
+                PandaController::writeCommandedFT(ft);
+                dhdSleep(0.001);
+            }
         }
 
         // Offload FD Forces
         dhdSetForceAndTorque(0.0,0.0,0.0,0.0,0.0,0.0);
-
-        // Offload Forces
-        command[0] = std::chrono::system_clock::now().time_since_epoch()/std::chrono::milliseconds(1) + 1000;
-        command[1] = x;
-        command[2] = y;
-        command[3] = z_high;
-        command[4] = 0;
-        command[5] = 0;
-        command[6] = 0;
-        commandedPath[0] = command;
-
-        // GO BACK OFF BOARD
-        selection = {1.0, 1.0, 1.0};
-        PandaController::writeSelectionVector(selection);
-        PandaController::writeCommandedPath(commandedPath,1);
-        dhdSleep(1.5);
 
     }
 
@@ -265,7 +310,7 @@ void replay_demo(){
 void poll_forcedimension(bool buttonPressed, bool resetCenter, double velcenterx, double velcentery,double velcenterz) {
 
     // Scaling Values
-    array<double,3> scaling_factors = {-3.0, -3.0, 3.0};
+    array<double,3> scaling_factors = {-4.0, -4.0, 4.0};
 
     array<double, 6> panda_pos = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
     
@@ -324,7 +369,7 @@ void feedback_forcedimension(double *x, double *y, double *z, double *fx, double
 }
 
 void log_demonstration(double x, double y, double z, double fx, double fy, double fz){
-    outputfile << x << "," << y << "," << z << "," << fx << "," << fy << "," << fz << "\n";
+    outputfile << x << "," << y << "," << z << "," << -fx << "," << -fy << "," << -fz << "\n";
 }
 
 void feedback_ft_forcedimension(bool buttonPressed, double velcenterx, double velcentery, double velcenterz,
@@ -369,9 +414,9 @@ double *x, double *y, double *z, double *fx, double *fy, double *fz){
     *x = state.O_T_EE[12];
     *y = state.O_T_EE[13];
     *z = state.O_T_EE[14];
-    *fx = -state.O_F_ext_hat_K[0];
-    *fy = -state.O_F_ext_hat_K[1];
-    *fz = -state.O_F_ext_hat_K[2];
+    *fx = -FTData[0];
+    *fy = -FTData[1];
+    *fz = -FTData[2];
 
     // TODO: Fix this to be the forces from the actual force torque sensor
 

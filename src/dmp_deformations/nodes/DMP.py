@@ -38,7 +38,7 @@ class DMP:
         self.weighting_fxns=[]
         self.DMP_forcing=[]
 
-        print "Initializing"
+        # print "Initializing"
 
     def inputData(self,demonstration_data):
         # Clear data if non-empty
@@ -149,9 +149,6 @@ class DMP:
 
         for xx in range(0, self.num_variables):
             currF = self.DMP_forcing[xx]
-
-            if xx==2:
-                print "FORCES:",self.DMP_forcing[xx]
 
             # Initial conditions for numerical integration
             dx=0
