@@ -38,8 +38,6 @@ Panels:
     SyncSource: ""
 Preferences:
   PromptSaveOnExit: true
-Toolbars:
-  toolButtonStyle: 2
 Visualization Manager:
   Class: ""
   Displays:
@@ -236,10 +234,7 @@ Visualization Manager:
     - Class: rviz/FocusCamera
     - Class: rviz/Measure
     - Class: rviz/SetInitialPose
-      Theta std deviation: 0.2617993950843811
       Topic: /initialpose
-      X std deviation: 0.5
-      Y std deviation: 0.5
     - Class: rviz/SetGoal
       Topic: /move_base_simple/goal
     - Class: rviz/PublishPoint
@@ -249,25 +244,25 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz/Orbit
-      Distance: 0.8207738995552063
+      Distance: 0.6327810287475586
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
         Swap Stereo Eyes: false
         Value: false
       Focal Point:
-        X: 0.26597777009010315
-        Y: 0.054765935987234116
-        Z: 0.07260137796401978
+        X: -0.1509658396244049
+        Y: 0.1528393030166626
+        Z: 0.8886816501617432
       Focal Shape Fixed Size: true
       Focal Shape Size: 0.05000000074505806
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 0.4703977704048157
+      Pitch: 0.44539809226989746
       Target Frame: <Fixed Frame>
       Value: Orbit (rviz)
-      Yaw: 1.913583755493164
+      Yaw: 2.058584690093994
     Saved: ~
 Window Geometry:
   Displays:
@@ -285,5 +280,5 @@ Window Geometry:
   Views:
     collapsed: true
   Width: 1853
-  X: 67
+  X: 1987
   Y: 27
