@@ -61,8 +61,8 @@ class DMP:
         first_demo = demonstration_data[0]
 
         for jj in range(0,self.num_variables):
-            ending_points = [demo[-50:,jj] for demo in demonstration_data]
-            starting_points = [demo[0:50, jj] for demo in demonstration_data]
+            ending_points = [demo[-5:,jj] for demo in demonstration_data]
+            starting_points = [demo[0:5, jj] for demo in demonstration_data]
             self.attractor_points[jj]=np.median(ending_points)
             self.starting_points[jj] =np.median(starting_points)
 
