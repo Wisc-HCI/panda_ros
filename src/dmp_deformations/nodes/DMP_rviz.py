@@ -19,6 +19,8 @@ from nav_msgs.msg import Path
 from geometry_msgs.msg import PoseStamped
 from visualization_msgs.msg import MarkerArray, Marker
 import csv
+from dtw import dtw
+
 
 demonstrations = []
 
@@ -46,10 +48,11 @@ def getSegmentation(demo):
     # print np.shape(demo)
 
     # 2nd order filter
-    b, a = signal.butter(2, 0.9,fs=50)
-    y = signal.filtfilt(b, a, np.linalg.norm(demo[:,3:],axis=1), padlen=150)
+    b, a = signal.butter(2, 1.0,fs=50)
+    y = signal.filtfilt(b, a, np.linalg.norm(demo[:,3:],axis=1), padlen=0)
     y = y-np.min(y)
     # import matplotlib.pyplot as plt
+    # plt.plot(np.linalg.norm(demo[:,3:],axis=1))
     # plt.plot(y)
     # plt.show()
 
@@ -65,7 +68,6 @@ def getSegmentation(demo):
             in_contact = False
 
     return states
-
 
 
 def plot_paths_rviz(demonstration_data_trimmed,trajectories):
@@ -151,7 +153,7 @@ def plot_paths_rviz(demonstration_data_trimmed,trajectories):
                 tempForce.id = jj
                 tempForce.type = Marker.ARROW
                 tempForce.action = Marker.ADD
-                tempForce.scale.x = trajectories[5][jj]/300
+                tempForce.scale.x = -trajectories[5][jj]/300
                 tempForce.scale.y = 0.003
                 tempForce.scale.z = 0.003
                 tempForces.markers.append(tempForce)
@@ -183,6 +185,17 @@ def resetDMP(data):
     forceDMP.publish(emptyForces)
 
 
+def loadPresegmented(data):
+    directory = '/home/mike/Documents/MikePanda/devel/lib/dmp_deformations'
+    demonstration_data = []
+    demonstration_data.append(np.loadtxt(directory+'/'+data.data, delimiter=",", skiprows=1))
+    segmentation = []
+    print np.loadtxt(directory+'/'+data.data, delimiter=",",max_rows=1)
+    for point in np.loadtxt(directory+'/'+data.data, delimiter=",",max_rows=1):
+        # right now only allows for position-level
+        segmentation.append((point, np.array([1, 1, 1])))
+    calculateDMP(demonstration_data, segmentation)
+
 def loadData(data):
     global demonstrations
     # File structure is a list of arrays (one per demonstration)
@@ -192,7 +205,9 @@ def loadData(data):
     print ""
     print ""
     print("Loading Data from CSV")
-    directory = '/home/hcilab/Documents/MikePanda/devel/lib/dmp_deformations'
+
+    #TODO: Get directory from ros path
+    directory = '/home/mike/Documents/MikePanda/devel/lib/dmp_deformations'
     
     demonstrations.append(data.data)
     demonstration_data = []
@@ -202,29 +217,49 @@ def loadData(data):
             print("Loading File: " + filename)
             demonstration_data.append(np.loadtxt(open(directory + '/' + filename, "rb"), delimiter=",", skiprows=0)[0:-1:20])
 
-    calculateDMP(demonstration_data)
-    print "LOAD AND CALCULATIONS COMPLETE"
-
-
-def calculateDMP(demonstration_data):
-    print "Building DMPs"
-    dmps = []
-    
-    # Using the first demonstration, segment to figure
-    # out how many DMPs are needed to encode the overall motion
+    # Segmentation is calculated from the first demonstration
+    # Done here so that calculateDMP can also be called
+    # with a predetermined segmentation
+    # This will figure out how many DMPs are needed to encode
+    # the motion
     segmentation = getSegmentation(demonstration_data[0])
 
     print "SEGMENTATION:",len(segmentation)
     print segmentation
-    print "Number of Contacts: ",(len(segmentation)-1)/2
+    # print "Number of Contacts: ",(len(segmentation)-1)/2
+    calculateDMP(demonstration_data, segmentation)
+    print "LOAD AND CALCULATIONS COMPLETE"
 
+
+def calculateDMP(demonstration_data, segmentation):
+    print "Building DMPs"
+    dmps = []
+    
     # Use Dynamic Time Warping to figure out the equivalent
     # index scaling for each of the additional demonstrations
 
-    # TODO: Actually do this
+    x = []
+    for ii in range(0,np.shape(demonstration_data[0])[0]):
+        # Features are stored as lists of tuples
+        x.append((demonstration_data[0][ii,0],demonstration_data[0][ii,1],demonstration_data[0][ii,2]))
+
+    alignment_curves = []
+    for ii in range(0,len(demonstration_data)):
+        y = []
+        # compare each of the demos to the first which is used for segmentation
+        manhattan_distance = lambda x, y: np.abs(x[0] - y[0])+np.abs(x[1] - y[1])+np.abs(x[2] - y[2])
+
+        for jj in range(0, np.shape(demonstration_data[ii])[0]):
+            # Features are stored as lists of tuples
+            y.append((demonstration_data[ii][jj, 0], demonstration_data[ii][jj, 1], demonstration_data[ii][jj, 2]))
+
+        d, cost_matrix, acc_cost_matrix, path = dtw(x, y, dist=manhattan_distance)
+        alignment_curves.append((path[0],path[1]))
+
+
 
     # Write a CSV with the final trajectory which can be read and executed
-    with open('/home/hcilab/Documents/MikePanda/devel/lib/dmp_deformations/learneddmp.csv', 'w') as csvfile:
+    with open('/home/mike/Documents/MikePanda/devel/lib/dmp_deformations/learneddmp.csv', 'w') as csvfile:
         # Write to file for potential replay
         # print "Writing to DMP file"
 
@@ -243,19 +278,21 @@ def calculateDMP(demonstration_data):
 
             demonstration_per_dmp = []
             
-            # Only currently works for one demo
+            # Get the DMP sections for each of the demonstrations
             for yy in range(0,len(demonstration_data)):
                 demo = demonstration_data[yy]
                  # Get Start and End Points
                 start_index = segment[0]
+                start_index = alignment_curves[yy][1][int(np.round(np.median(np.where(alignment_curves[yy][0]==start_index))))]
                 end_index = len(demo)
                 print "LEN:",np.shape(demo)
                 # If not the last segment, get the next event index
                 if xx+1<len(segmentation):
                     end_index = segmentation[xx+1][0]
+                    end_index = alignment_curves[yy][1][
+                        int(np.round(np.median(np.where(alignment_curves[yy][0] == end_index))))]
 
-                # TODO: Update indices based on DTW for the demonstration
-    
+                    
                 temp = np.zeros((end_index-start_index,3))
                 # Get either forces or positions depending on selection vector
                 # First three are positions, second three are forces
@@ -338,8 +375,8 @@ def calculateDMP(demonstration_data):
             # Figure out how long the demonstration should be based on max difference (velocity)
             # in kinematic directions and interpolate such that this is sent at 1000 Hz.
 
-            max_vel = 0.1 # m/s
-            panda_delta_T = 0.001 # 1 ms
+            max_vel = 0.05 # m/s
+            panda_delta_T = 0.01 # 1 ms # TODO: MOVE TO CONFIG!
 
             max_x = sel_vec[0]*np.average(np.diff(np.array(trajectories[0]),axis=0))
             max_y = sel_vec[1]*np.average(np.diff(np.array(trajectories[1]),axis=0))
@@ -397,6 +434,7 @@ def main():
     path3 = rospy.Publisher('/dmp/path3', Path, queue_size=1)
     path4 = rospy.Publisher('/dmp/path4', Path, queue_size=1)
     rospy.Subscriber("/dmp/filepub", String, loadData)
+    rospy.Subscriber("/dmp/filepubsegmented", String, loadPresegmented)
     rospy.Subscriber("/dmp/reset", String, resetDMP)
     
     rospy.spin()
