@@ -188,12 +188,14 @@ def resetDMP(data):
 def loadPresegmented(data):
     directory = '/home/mike/Documents/MikePanda/devel/lib/dmp_deformations'
     demonstration_data = []
-    demonstration_data.append(np.loadtxt(directory+'/'+data.data, delimiter=",", skiprows=1))
+    demonstration_data.append(np.loadtxt(directory+'/'+data.data, delimiter=",", skiprows=2))
     segmentation = []
-    print np.loadtxt(directory+'/'+data.data, delimiter=",",max_rows=1)
-    for point in np.loadtxt(directory+'/'+data.data, delimiter=",",max_rows=1):
+    for point,interaction in zip(np.loadtxt(directory+'/'+data.data, delimiter=",",max_rows=1),np.loadtxt(directory+'/'+data.data, delimiter=",",max_rows=1, skiprows=1)):
         # right now only allows for position-level
-        segmentation.append((point, np.array([1, 1, 1])))
+        if interaction==1:
+            segmentation.append((point, np.array([1, 1, 1])))
+        else:
+            segmentation.append((point, np.array([1, 1, 0])))
     calculateDMP(demonstration_data, segmentation)
 
 def loadData(data):
