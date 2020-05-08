@@ -28,12 +28,10 @@ using namespace StamperKinematicImpl;
 
 FalconDevice m_falconDevice;
 
-// For calculated a filtered falcon velocity at 1000 Hz
+// For calculating the falcon velocity
 array<double, 3> falcon_vel = {0.0, 0.0, 0.0};
 std::array<double, 3> frozen_position = {0.0, 0.0, 0.0};
 std::array<double, 3> last_falcon = {0.0, 0.0, 0.0};
-std::array<double, 3> last_vel = {0.0, 0.0, 0.0};
-std::array<double, 3> two_vel = {0.0, 0.0, 0.0};
 
 bool last_falcon_updated = false;
 
@@ -44,6 +42,7 @@ double dmp_fx, dmp_fy, dmp_fz;
 
 bool replay_active = false;
 
+// This writes all of the state information to the open CSV file
 void log_demonstration(double x, double y, double z, double fx, double fy, double fz){
     outputfile << x << "," << y << "," << z << "," << fx << "," << fy << "," << fz << "\n";
 }
@@ -59,115 +58,132 @@ void falconVelocity() {
     // Provide there is a last position to compute the velocity, calculate with backwards differencing
     if(last_falcon_updated)
     {
-        //falcon_vel = {1.819*last_vel[0]-0.819*two_vel[0]+0.9048*falconPos[0]-0.9048*last_falcon[0],
-        //1.819*last_vel[1]-0.819*two_vel[1]+0.9048*falconPos[1]-0.9048*last_falcon[1],
-        //1.819*last_vel[2]-0.819*two_vel[2]+0.9048*falconPos[2]-0.9048*last_falcon[2]};
-        //falcon_vel = {0.9048*last_vel[0]+10.0*falconPos[0]-10*last_falcon[0],0.9048*last_vel[1]+10.0*falconPos[1]-10*last_falcon[1],
-        //0.9048*last_vel[2]+10.0*falconPos[2]-10*last_falcon[2]};
+        // Velocity calculated as basic differencing
         falcon_vel = {(falconPos[0]-last_falcon[0])/delta_T,(falconPos[1]-last_falcon[1])/delta_T,(falconPos[2]-last_falcon[2])/delta_T};
     }
 
-    //Update last falcon
+    //Update last falcon  for use in the velocity calculation
     last_falcon[0] = falconPos[0];
     last_falcon[1] = falconPos[1];
     last_falcon[2] = falconPos[2];
 
-    two_vel[0] = last_vel[0];
-    two_vel[1] = last_vel[1];
-    two_vel[2] = last_vel[2];
-    last_vel[0] = falcon_vel[0];
-    last_vel[1] = falcon_vel[1];
-    last_vel[2] = falcon_vel[2];
     last_falcon_updated = true;
 }
 
-void replay_demo(ros::Publisher selection_vector_pub, ros::Publisher wrench_goal_pub, ros::Publisher pose_goal_pub, ros::Publisher pose_path_pub, ros::Publisher dmp_replay_pub){
+
+void readDemo(vector<vector<array<double,3>>> &dmps,vector<array<double,3>> &selections,vector<array<double,3>> &starting_points,vector<array<double,3>> &attractor_points){
     std::ifstream dmpfile("learneddmp.csv");
-    double starting_x;
-    double starting_y;
-    double starting_f;
-
-    double attractor_x;
-    double attractor_y;
-    double attractor_f;
-
-    std_msgs::String replay_str;
-    replay_str.data = "reset";
-    dmp_replay_pub.publish(replay_str);
-    
-    double x, y, z, f;
-
+    double junk;
     string temp;
+
+    vector<array<double,3>> dmp_temp;
+    // Read entire file into the vectors
     if(dmpfile.good())
     {
-        double k=50; // eventually move these parameters to within the file
-        double b=sqrt(2*k);
+        while(getline(dmpfile,temp,',')){
+            // Either a new mode definition or continued values
+            if(temp=="mode")
+            {
+                // New mode, need to create vector
+                // for trajectory, get selection and
+                // starting/attractor points
+                // maybe make this the DMP stiffness and damping?
+                getline(dmpfile,temp,',');
+                junk = atof(temp.c_str());
+                getline(dmpfile,temp);
+                junk = atof(temp.c_str());
 
-        double ddx, ddy, ddf;
+                // Read Selection Vector
+                array<double,3> selection_temp;
 
-        double dx = 0.0;
-        double dy = 0.0;
-        double df = 0.0; 
+                getline(dmpfile,temp,','); selection_temp[0] = atof(temp.c_str());
+                getline(dmpfile,temp,','); selection_temp[1] = atof(temp.c_str());
+                getline(dmpfile,temp); selection_temp[2] = atof(temp.c_str());
+                selections.push_back(selection_temp);
 
-        double f_x, f_y, f_f;
+                // Read Starting Points
+                array<double,3> starting_temp;
+                getline(dmpfile,temp,','); starting_temp[0] = atof(temp.c_str());
+                getline(dmpfile,temp,','); starting_temp[1] = atof(temp.c_str());
+                getline(dmpfile,temp); starting_temp[2] = atof(temp.c_str());
+                starting_points.push_back(starting_temp);
 
-        double fd_x, fd_y, fd_z;
+                // Read Attractor Points
+                array<double,3> attractor_temp;
+                getline(dmpfile,temp,','); attractor_temp[0] = atof(temp.c_str());
+                getline(dmpfile,temp,','); attractor_temp[1] = atof(temp.c_str());
+                getline(dmpfile,temp); attractor_temp[2] = atof(temp.c_str());
+                attractor_points.push_back(attractor_temp);
 
-        geometry_msgs::Pose pose;
-        
+                // Send the previous DMP if it has something in it
+                // this avoids sending an empty DMP at the beginning
+                if(dmp_temp.size()>0)
+                {
+                    dmps.push_back(dmp_temp);
+                }
+
+                // Reinitialize the temporary vector
+                // to store the trajectory
+                dmp_temp.clear();
+            }
+
+            else{ // Add new value to dmp_vector
+                array<double,3> state_vector_temp;
+                // temp has first value already
+                state_vector_temp[0] = atof(temp.c_str());
+                getline(dmpfile,temp,',');
+                state_vector_temp[1] = atof(temp.c_str());
+                getline(dmpfile,temp);
+                state_vector_temp[2] = atof(temp.c_str());
+                dmp_temp.push_back(state_vector_temp);
+            }
+
+        }
+
+        // Publish the final dmp
+        if(dmp_temp.size()>0)
+        {
+            dmps.push_back(dmp_temp);
+        }
+
+
+    }
+
+    //close the filestream
+    dmpfile.close();
+}
+
+void replay_demo(ros::Publisher selection_vector_pub, ros::Publisher wrench_goal_pub, ros::Publisher pose_goal_pub, ros::Publisher pose_path_pub, ros::Publisher dmp_replay_pub){
+
+    std_msgs::String replay_str;
+
+    // All of the data from the DMPs is stored in 
+    vector<vector<array<double,3>>> dmps;
+    vector<array<double,3>> selections;
+    vector<array<double,3>> starting_points;
+    vector<array<double,3>> attractor_points;
+
+    geometry_msgs::Pose pose;
+    geometry_msgs::Wrench ft;
+    geometry_msgs::Vector3 selection;
     
-        geometry_msgs::Wrench ft;
-        geometry_msgs::Vector3 selection;
+    // DMP Parameters - TODO: READ THESE FROM THE FILE
+    double k=50;
+    double b=sqrt(2*k);
+    readDemo(dmps,selections,starting_points,attractor_points);
 
-        // Read first mode command
-        string throwaway;
-        getline(dmpfile,throwaway,',');
-        getline(dmpfile,throwaway,',');
-        getline(dmpfile,temp);
+    // Action: Tell the robot the replay is starting over
+    replay_str.data = "reset";
+    dmp_replay_pub.publish(replay_str);
 
-        // Read Selection Vector
-        getline(dmpfile,temp,',');
-        selection.x = atof(temp.c_str());
-        getline(dmpfile,temp,',');
-        selection.y = atof(temp.c_str());
-        getline(dmpfile,temp);
-        selection.z = atof(temp.c_str());
-        selection_vector_pub.publish(selection);
-
-        // Read Starting Points
-        getline(dmpfile,temp,',');
-        starting_x = atof(temp.c_str());
-        getline(dmpfile,temp,',');
-        starting_y = atof(temp.c_str());
-        getline(dmpfile,temp);
-        starting_f = atof(temp.c_str());
-
-        // Read Attractor Points
-        getline(dmpfile,temp,',');
-        attractor_x = atof(temp.c_str());
-        getline(dmpfile,temp,',');
-        attractor_y = atof(temp.c_str());
-        getline(dmpfile,temp);
-        attractor_f = atof(temp.c_str());
-
-        // Reset
-        x = starting_x;
-        y = starting_y;
-        f = starting_f;
-
-        dx = 0.0;
-        dy = 0.0;
-        df = 0.0; 
-
-        cout << "STARTING: " << starting_x << "," << starting_y << "," << starting_f << endl;
-
-        // GO TO STARTING POINT AND WAIT A SECOND
-        pose.position.x = starting_x;
-        pose.position.y = starting_y;
-        pose.position.z = starting_f;
+    // Tell the robot to go to the overall starting point
+    // Pose path pub will interpolate the path
+        pose.position.x = starting_points[0][0];
+        pose.position.y = starting_points[0][1];
+        pose.position.z = starting_points[0][2];
         pose_path_pub.publish(pose);
         
-        // Sleep for 2.2 seconds to allow path
+        // Sleep for 2.5 seconds to allow path completion
         for(int jj=0; jj<2500; jj++)
         {
             ros::spinOnce();
@@ -175,135 +191,260 @@ void replay_demo(ros::Publisher selection_vector_pub, ros::Publisher wrench_goal
             usleep(1000);
         }
 
+    // Action: Tell the robot the replay is starting
+    cout << "Replay Starting..." << endl;
+    replay_str.data = "start";
+    dmp_replay_pub.publish(replay_str);   
 
-        cout << "REPLAYING MOTION" << endl;
-        replay_str.data = "start";
-        dmp_replay_pub.publish(replay_str);
+    // Variables needed for transitions and deformation collision-limiting
+    bool previous_dmp_no_contact = true;
+    double transition_x=0.0, transition_y=0.0, transition_z=0.0;
+    bool dmp_x_limiting;
+    bool dmp_y_limiting;
+    bool dmp_z_limiting;
+    double dmp_x_collision = 0.0;
+    double dmp_y_collision = 0.0;
+    double dmp_z_collision = 0.0;
 
-        while(getline(dmpfile,temp,',')){
-            ros::spinOnce();
-            if(temp=="mode")
-            {
-                getline(dmpfile,temp,',');
-                f_y = atof(temp.c_str());
-                getline(dmpfile,temp);
-                f_f = atof(temp.c_str());
+    // Loop through to replay the demo
+    for(int ii = 0; ii<selections.size();ii++)
+    {
+        // First, publish selection vector
+        selection.x =selections[ii][0];
+        selection.y =selections[ii][1];
+        selection.z =selections[ii][2];
+        selection_vector_pub.publish(selection);
 
-                // Read Selection Vector
-                getline(dmpfile,temp,',');
-                selection.x = atof(temp.c_str());
-                getline(dmpfile,temp,',');
-                selection.y = atof(temp.c_str());
-                getline(dmpfile,temp);
-                selection.z = atof(temp.c_str());
-
-                // Read Starting Points
-                getline(dmpfile,temp,',');
-                starting_x = atof(temp.c_str());
-                getline(dmpfile,temp,',');
-                starting_y = atof(temp.c_str());
-                getline(dmpfile,temp);
-                starting_f = atof(temp.c_str());
-
-                // Read Attractor Points
-                getline(dmpfile,temp,',');
-                attractor_x = atof(temp.c_str());
-                getline(dmpfile,temp,',');
-                attractor_y = atof(temp.c_str());
-                getline(dmpfile,temp);
-                attractor_f = atof(temp.c_str());
-
-                // Reset
-                x = starting_x;
-                y = starting_y;
-                f = starting_f;
-
-                dx = 0.0;
-                dy = 0.0;
-                df = 0.0; 
-
-                selection_vector_pub.publish(selection);
-
-                if(selection.x==0 || selection.y==0 || selection.z==0){
-                    // Do force onloading with the first sample
-                    cout << "FORCE ONLOADING STARTED" << endl;
-                    ft.force.x = starting_x;
-                    ft.force.y = starting_y;
-                    ft.force.z = starting_f;
-                    pose.position.x = starting_x;
-                    pose.position.y = starting_y;
-                    pose.position.z = starting_f;
-                    pose_goal_pub.publish(pose);
-                    wrench_goal_pub.publish(ft);
-
-                    bool proper_contact = false;
-                    while(!proper_contact)
-                    {
-                        // TODO - MAKE THIS MORE GENERAL!!!!
-                        cout << "FZ: " << fz << " " << starting_f << endl;
-                        if(fz<0.95*starting_f && fz>1.05*starting_f)
-                        {
-                            proper_contact = true;
-                        }
-                        
-                        for (int yy=0; yy<10; yy++)
-                        {
-                            falconVelocity();
-                            usleep(1000);
-                        }
-                        ros::spinOnce();
-
-                    }
-                    cout << "FORCE ONLOADING COMPLETE" << endl;
-                }
-            }
-            
-            else{
-                f_x = atof(temp.c_str());
-                getline(dmpfile,temp,',');
-                f_y = atof(temp.c_str());
-                getline(dmpfile,temp);
-                f_f = atof(temp.c_str());
-                
-                // Force mode gain, Position mode gain
-                std::array<double, 2> sel_gains = {12000, 150};
-
-                // Calculate New X
-                ddx = k*(attractor_x-x)-b*dx+f_x+sel_gains[(int) selection.x]*dmp_fx;
-                dx = dx + ddx*0.01;
-                x = x+dx*0.01;
-
-                // Calculate New Y
-                ddy = k*(attractor_y-y)-b*dy+f_y+sel_gains[(int) selection.y]*dmp_fy;
-                dy = dy + ddy*0.01;
-                y = y+dy*0.01;
-
-                // Calculate New F
-                ddf = k*(attractor_f-f)-b*df+f_f+sel_gains[(int) selection.z]*dmp_fz;
-                df = df + ddf*0.01;
-                f = f+df*0.01;
-
-                cout << " DEF X:" << sel_gains[(int) selection.x]*dmp_fx << " Y:" << sel_gains[(int) selection.y]*dmp_fy << " F:" << sel_gains[(int) selection.z]*dmp_fz << endl;
-
-                ft.force.x = x;
-                ft.force.y = y;
-                ft.force.z = f;
-                pose.position.x = x;
-                pose.position.y = y;
-                pose.position.z = f;
+        // If selection has force control, need force onloading
+        if((selection.x==0 || selection.y==0 || selection.z==0)){
+            if(previous_dmp_no_contact){
+                // Do force onloading with the first sample
+                cout << "FORCE ONLOADING STARTED" << endl;
+                ft.force.x = starting_points[ii][0];
+                ft.force.y = starting_points[ii][1];
+                ft.force.z = starting_points[ii][2];
+                pose.position.x = starting_points[ii][0];
+                pose.position.y = starting_points[ii][1];
+                pose.position.z = starting_points[ii][2];
                 pose_goal_pub.publish(pose);
                 wrench_goal_pub.publish(ft);
-                for (int yy=0; yy<10; yy++)
+
+                bool proper_contact = false;
+                while(!proper_contact)
                 {
-                    falconVelocity();
-                    usleep(1000);
+                    // TODO - MAKE THIS MORE GENERAL!!!!
+                    cout << "FZ: " << fz << " " << starting_points[ii][2] << endl;
+                    if(fz<0.95*starting_points[ii][2] && fz>1.05*starting_points[ii][2])
+                    {
+                        proper_contact = true;
+                    }
+                    
+                    for (int yy=0; yy<10; yy++)
+                    {
+                        falconVelocity();
+                        usleep(1000);
+                    }
+                    ros::spinOnce();
+
                 }
+                cout << "FORCE ONLOADING COMPLETE" << endl;
+            }
+            previous_dmp_no_contact = false;
+        }
+
+        else{
+            previous_dmp_no_contact = true;
+        }
+
+        // This is used to contact the "Nearest contact condition" to consider
+        // minimizing the deformations
+        dmp_x_limiting = false;
+        dmp_y_limiting = false;
+        dmp_z_limiting = false;
+
+        // There is a next DMP, check for pos to force transition
+        if (ii+1<selections.size()){
+            if(selections[ii][0] ==1 && selections[ii+1][0]==0){
+                dmp_x_collision = attractor_points[ii][0];
+                dmp_x_limiting=true;
+            }
+            if(selections[ii][1] ==1 && selections[ii+1][1]==0){
+                dmp_y_collision = attractor_points[ii][1];
+                dmp_y_limiting=true;
+            }
+            if(selections[ii][2] ==1 && selections[ii+1][2]==0){
+                dmp_z_collision = attractor_points[ii][2];
+                dmp_z_limiting=true;
             }
         }
 
-        replay_str.data = "end";
-        dmp_replay_pub.publish(replay_str);
+        // There is a previous DMP, check for force to pos transition
+        if (ii>0){
+            if(selections[ii-1][0] ==0 && selections[ii][0]==1){
+                dmp_x_collision = starting_points[ii][0];
+                dmp_x_limiting=true;
+            }
+            if(selections[ii-1][1] ==0 && selections[ii][1]==1){
+                dmp_y_collision = starting_points[ii][1];
+                dmp_y_limiting=true;
+            }
+            if(selections[ii-1][2] ==0 && selections[ii][2]==1){
+                dmp_z_collision = starting_points[ii][2];
+                dmp_z_limiting=true;
+            }
+        }
+
+        // Set up the values for the new DMP
+        double ddx, ddy, ddz;
+        double dx = 0.0, dy = 0.0, dz = 0.0;
+        double x=starting_points[ii][0]+transition_x, y=starting_points[ii][1]+transition_y, z=starting_points[ii][2]+transition_z;
+        
+        // For the general impedance model
+        double ddx_imp, ddy_imp, ddz_imp;
+        double dx_imp = 0.0, dy_imp=0.0, dz_imp=0.0;
+        double x_imp = starting_points[ii][0], y_imp=starting_points[ii][1], z_imp=starting_points[ii][2];
+        double x_def = 0.0, y_def=0.0, z_def=0.0;
+        
+        double s = 0; // phase variable used for time
+        double delta_s = 1.0;
+
+        // Now replay the entirety of the demonstration
+        while(s<dmps[ii].size()){
+            ros::spinOnce();
+
+            // Interpolate each of the applied forces for the non-integer value s
+            double dmp_x = dmps[ii][(int)floor(s)][0]+(dmps[ii][(int)ceil(s)][0]-dmps[ii][(int)floor(s)][0])*(s-floor(s));
+            double dmp_y = dmps[ii][(int)floor(s)][1]+(dmps[ii][(int)ceil(s)][1]-dmps[ii][(int)floor(s)][1])*(s-floor(s));
+            double dmp_z = dmps[ii][(int)floor(s)][2]+(dmps[ii][(int)ceil(s)][2]-dmps[ii][(int)floor(s)][2])*(s-floor(s));
+
+            // Compute a potential DMP diminishing scale based on collisions
+            double dmp_scaling_x = 1.0;
+            double dmp_scaling_y = 1.0;
+            double dmp_scaling_z = 1.0;
+            if(dmp_x_limiting) dmp_scaling_x = 1-exp(-200*abs(x-dmp_x_collision));
+            if(dmp_y_limiting) dmp_scaling_y = 1-exp(-200*abs(y-dmp_y_collision));
+            if(dmp_z_limiting) dmp_scaling_z = 1-exp(-200*abs(z-dmp_z_collision));
+            //cout << "DMP scaling Z: " << dmp_scaling_z << endl;
+
+            
+            // Force mode gain, Position mode gain
+            std::array<double, 2> sel_gains = {6000, 150};
+
+            bool dmp_integration=true;
+
+            /////////////////////////////////////////////////////////
+            // DMP Integration Method                              //
+            /////////////////////////////////////////////////////////
+            if(dmp_integration)
+            {
+                // Calculate New X (State 1)
+                ddx = k*(attractor_points[ii][0]-x)-b*dx+dmp_x+sel_gains[(int) selection.x]*dmp_scaling_x*dmp_fx;
+                dx = dx + ddx*0.01*delta_s;
+                x = x+dx*0.01*delta_s;
+
+                // Calculate New Y (State 2)
+                ddy = k*(attractor_points[ii][1]-y)-b*dy+dmp_y+sel_gains[(int) selection.y]*dmp_scaling_y*dmp_fy;
+                dy = dy + ddy*0.01*delta_s;
+                y = y+dy*0.01*delta_s;
+
+                // Calculate New Z (State 3)
+                ddz = k*(attractor_points[ii][2]-z)-b*dz+dmp_z+sel_gains[(int) selection.z]*dmp_scaling_z*dmp_fz;
+                dz = dz + ddz*0.01*delta_s;
+                z = z+dz*0.01*delta_s;
+
+                // Compute the new velocity factor and
+                // Update the time variable
+                // TODO: Maybe use a covariance to try and remove units?
+                double dir_x = dx/sqrt(dx*dx+dy*dy);
+                double dir_y = dy/sqrt(dx*dx+dy*dy);
+                double dp_in_dir = dir_x*20*dmp_fx + dir_y*20*dmp_fy;
+                
+                if(dp_in_dir > 0)
+                {
+                    dp_in_dir=0.0; // only allow slowing down
+                }
+                delta_s = 1.0+dp_in_dir;
+                s+=delta_s;
+                //cout << "deltaS:" << delta_s << endl;
+            }
+
+            /////////////////////////////////////////////////////////
+            // Impedance Method                                    //
+            /////////////////////////////////////////////////////////
+
+            else{
+                // Still uses DMP, but the deformation is treated as an
+                // overdamped deviation from the current state variable
+                // TODO: make that true
+
+                // Force mode gain, Position mode gain
+                std::array<double, 2> imp_gains = {200, 5};
+
+                // Calculate New X (State 1)
+                ddx = k*(attractor_points[ii][0]-x_imp)-b*dx+dmp_x;
+                dx = dx + ddx*0.01*delta_s;
+                x_imp = x_imp+dx*0.01*delta_s;
+                
+                ddx_imp = k*(-x_def)-b*dx_imp+sel_gains[(int) selection.x]*dmp_fx;
+                dx_imp = dx_imp + ddx_imp*0.01*delta_s;
+                x_def = x_def + dx_imp*0.01*delta_s;
+
+                x = x_imp+x_def; 
+
+                // Calculate New Y (State 2)
+                ddy = k*(attractor_points[ii][1]-y_imp)-b*dy+dmp_y;
+                dy = dy + ddy*0.01*delta_s;
+                y_imp = y_imp+dy*0.01*delta_s;
+                
+                ddy_imp = k*(-y_def)-b*dy_imp+sel_gains[(int) selection.y]*dmp_fy;
+                dy_imp = dy_imp + ddy_imp*0.01*delta_s;
+                y_def = y_def + dy_imp*0.01*delta_s;
+
+                y = y_imp+y_def; 
+
+                // Calculate New Z (State 3)
+                ddz = k*(attractor_points[ii][2]-z_imp)-b*dz+dmp_z;
+                dz = dz + ddz*0.01*delta_s;
+                z_imp = z_imp+dz*0.01*delta_s;
+                
+                ddz_imp = k*(-z_def)-b*dz_imp+sel_gains[(int) selection.z]*dmp_fz;
+                dz_imp = dz_imp + ddz_imp*0.01*delta_s;
+                z_def = z_def + dz_imp*0.01*delta_s;
+
+                z = z_imp+z_def; 
+                s+=1; // No variable time scaling
+            }
+            
+            //cout << " DEF X:" << sel_gains[(int) selection.x]*dmp_fx << " Y:" << sel_gains[(int) selection.y]*dmp_fy << " F:" << sel_gains[(int) selection.z]*dmp_fz << endl;
+
+            // Publish everything to the simulation
+            ft.force.x = x;
+            ft.force.y = y;
+            ft.force.z = z;
+            pose.position.x = x;
+            pose.position.y = y;
+            pose.position.z = z;
+            pose_goal_pub.publish(pose);
+            wrench_goal_pub.publish(ft);
+            
+            // Pause for 0.01 seconds, but calculate velocities at 0.001s
+            for (int yy=0; yy<10; yy++)
+            {
+                falconVelocity();
+                usleep(1000);
+            }
+        }
+
+        // Combat the transition discontinuities if there is still a transition left
+        if((ii+1)<selections.size()){
+            transition_x = (x-attractor_points[ii][0])*(double)(selections[ii][0]==selections[ii+1][0]);
+            transition_y = (y-attractor_points[ii][1])*(double)(selections[ii][1]==selections[ii+1][1]);;
+            transition_z = (z-attractor_points[ii][2])*(double)(selections[ii][2]==selections[ii+1][2]);;
+        }
     }
+
+    replay_str.data = "end";
+    dmp_replay_pub.publish(replay_str);
 }
  
 bool init_falcon() {
