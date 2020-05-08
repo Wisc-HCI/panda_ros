@@ -40,6 +40,13 @@ add_executable(falconVREPDMP src/Falcon_DMP_VREP_ros.cpp)
 target_include_directories(falconVREPDMP PUBLIC ${catkin_INCLUDE_DIRS} ${EIGEN3_INCLUDE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/include ${CMAKE_CURRENT_SOURCE_DIR}/../../devel/include)
 target_link_libraries(falconVREPDMP ${catkin_LIBRARIES} ${LIBNIFALCON} ${pandaController} ${pandaCommon} franka ${DRDC} ${DHDC})
 
+add_executable(FDdeformations src/ForceDimension_Deformation_Emmanuel.cpp)
+target_include_directories(FDdeformations PUBLIC ${catkin_INCLUDE_DIRS} ${EIGEN3_INCLUDE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/include ${CMAKE_CURRENT_SOURCE_DIR}/../../devel/include)
+target_link_libraries(FDdeformations ${catkin_LIBRARIES} ${DRDC} ${DHDC})
+
+install(TARGETS FDdeformations
+  RUNTIME DESTINATION lib/FDdeformations
+)
 
 install(TARGETS falconDMP
   RUNTIME DESTINATION lib/falconDMP
