@@ -188,21 +188,34 @@ def resetDMP(data):
 def loadPresegmented(data):
     directory = '/home/mike/Documents/MikePanda/devel/lib/dmp_deformations'
     demonstration_data = []
-    demonstration_data.append(np.loadtxt(directory+'/'+data.data, delimiter=",", skiprows=2))
+    demonstration_data.append(np.loadtxt(directory+'/'+data.data, delimiter=",", skiprows=3))
     segmentation = []
-    for point,interaction in zip(np.loadtxt(directory+'/'+data.data, delimiter=",",max_rows=1),np.loadtxt(directory+'/'+data.data, delimiter=",",max_rows=1, skiprows=1)):
-        # right now only allows for position-level
-        if interaction==1:
-            segmentation.append((point, np.array([1, 1, 1])))
+
+    # Zip doesn't work if there is 1 entry since it is not iterable
+    if(np.shape(np.loadtxt(directory+'/'+data.data, delimiter=",",max_rows=1,skiprows=1))!=()):
+        for surface_model,point,interaction in zip(np.genfromtxt(directory+'/'+data.data,delimiter=",",max_rows=1,dtype='str') ,np.loadtxt(directory+'/'+data.data, delimiter=",",max_rows=1, skiprows=1),np.loadtxt(directory+'/'+data.data, delimiter=",",max_rows=1, skiprows=2)):
+            # right now only allows for position-level
+            if interaction==1:
+                # TODO: fix this!!!!
+                segmentation.append((point, np.array([1, 1, 1, 1, 1, 1, 1]),surface_model))
+            else:
+                segmentation.append((point, np.array([1, 1, 0, 1, 1, 1, 1]),surface_model))
+    else:
+        surface_model = np.genfromtxt(directory+'/'+data.data,delimiter=",",max_rows=1,dtype='str')
+        point = np.loadtxt(directory+'/'+data.data, delimiter=",",max_rows=1, skiprows=1)
+        interaction = np.loadtxt(directory+'/'+data.data, delimiter=",",max_rows=1, skiprows=2)
+        if interaction == 1:
+            # TODO: fix this!!!!
+            segmentation.append((point, np.array([1, 1, 1, 1, 1, 1, 1]),surface_model))
         else:
-            segmentation.append((point, np.array([1, 1, 0])))
+            segmentation.append((point, np.array([1, 1, 0, 1, 1, 1, 1]),surface_model))
+
     calculateDMP(demonstration_data, segmentation)
 
 def loadData(data):
     global demonstrations
     # File structure is a list of arrays (one per demonstration)
     # Each array is an n-samples by 6 array for the 3 positions and 3 forces
-    print ""
     print ""
     print ""
     print ""
@@ -236,9 +249,12 @@ def loadData(data):
 def calculateDMP(demonstration_data, segmentation):
     print "Building DMPs"
     dmps = []
-    
+
     # Use Dynamic Time Warping to figure out the equivalent
     # index scaling for each of the additional demonstrations
+
+    # DTW is just done with the x,y,and z-values for now
+    # only relevant anyways when doing LFD with multiple demonstrations
 
     x = []
     for ii in range(0,np.shape(demonstration_data[0])[0]):
@@ -257,7 +273,6 @@ def calculateDMP(demonstration_data, segmentation):
 
         d, cost_matrix, acc_cost_matrix, path = dtw(x, y, dist=manhattan_distance)
         alignment_curves.append((path[0],path[1]))
-
 
 
     # Write a CSV with the final trajectory which can be read and executed
@@ -283,11 +298,14 @@ def calculateDMP(demonstration_data, segmentation):
             # Get the DMP sections for each of the demonstrations
             for yy in range(0,len(demonstration_data)):
                 demo = demonstration_data[yy]
+
                  # Get Start and End Points
                 start_index = segment[0]
                 start_index = alignment_curves[yy][1][int(np.round(np.median(np.where(alignment_curves[yy][0]==start_index))))]
                 end_index = len(demo)
-                print "LEN:",np.shape(demo)
+
+                # print "LEN:",np.shape(demo)
+
                 # If not the last segment, get the next event index
                 if xx+1<len(segmentation):
                     end_index = segmentation[xx+1][0]
@@ -295,26 +313,31 @@ def calculateDMP(demonstration_data, segmentation):
                         int(np.round(np.median(np.where(alignment_curves[yy][0] == end_index))))]
 
                     
-                temp = np.zeros((end_index-start_index,3))
+                temp = np.zeros((end_index-start_index,7))
                 # Get either forces or positions depending on selection vector
-                # First three are positions, second three are forces
-                temp[:,0] = demo[start_index:end_index,0+3*(1-sel_vec[0])].reshape((end_index-start_index,))
-                temp[:,1] = demo[start_index:end_index,1+3*(1-sel_vec[1])].reshape((end_index-start_index,))
-                temp[:,2] = demo[start_index:end_index,2+3*(1-sel_vec[2])].reshape((end_index-start_index,))
+                # First three are positions, 7-9 are forces (after quaternion)
+                temp[:, 0] = demo[start_index:end_index,0+7*(1-sel_vec[0])].reshape((end_index-start_index,))
+                temp[:, 1] = demo[start_index:end_index,1+7*(1-sel_vec[1])].reshape((end_index-start_index,))
+                temp[:, 2] = demo[start_index:end_index,2+7*(1-sel_vec[2])].reshape((end_index-start_index,))
+                temp[:, 3] = demo[start_index:end_index,3].reshape((end_index - start_index,))
+                temp[:, 4] = demo[start_index:end_index,4].reshape((end_index - start_index,))
+                temp[:, 5] = demo[start_index:end_index,5].reshape((end_index - start_index,))
+                temp[:, 6] = demo[start_index:end_index,6].reshape((end_index - start_index,))
 
                 # Positions for plotting
                 temp_pos = np.zeros((end_index-start_index,3))
+
                 # Get either forces or positions depending on selection vector
                 # First three are positions, second three are forces
                 temp_pos[:,:] = demo[start_index:end_index,0:3].reshape((end_index-start_index,3))
                 
                 demonstration_per_dmp.append(temp)
 
-                # Just for plotting
-                if len(demonstration_data_trimmed)<(yy+1):
-                    demonstration_data_trimmed.append(temp_pos)
-                else:
-                    demonstration_data_trimmed[yy] = np.append(demonstration_data_trimmed[yy],temp_pos,axis=0)
+                # # Just for plotting
+                # if len(demonstration_data_trimmed)<(yy+1):
+                #     demonstration_data_trimmed.append(temp_pos)
+                # else:
+                #     demonstration_data_trimmed[yy] = np.append(demonstration_data_trimmed[yy],temp_pos,axis=0)
 
             dmps[xx].inputData(demonstration_data=demonstration_per_dmp)
             dmps[xx].computeDMP()
@@ -324,60 +347,11 @@ def calculateDMP(demonstration_data, segmentation):
             zero_length = len(trajectories[0])
             print "ZERO LENGTH: ",zero_length
 
-            if(len(trajectories_plotting)<6):
-                if sel_vec[0]==1:
-                    trajectories_plotting.append(trajectories[0])
-                else:
-                    trajectories_plotting.append(np.zeros((zero_length,1)))
-                if sel_vec[1]==1:
-                    trajectories_plotting.append(trajectories[1])
-                else:
-                    trajectories_plotting.append(np.zeros((zero_length,1)))
-                if sel_vec[2]==1:
-                    trajectories_plotting.append(trajectories[2])
-                else:
-                    trajectories_plotting.append(np.zeros((zero_length,1)))
-                if sel_vec[0]==0:
-                    trajectories_plotting.append(trajectories[0])
-                else:
-                    trajectories_plotting.append(np.zeros((zero_length,1)))
-                if sel_vec[1]==0:
-                    trajectories_plotting.append(trajectories[1])
-                else:
-                    trajectories_plotting.append(np.zeros((zero_length,1)))
-                if sel_vec[2]==0:
-                    trajectories_plotting.append(trajectories[2])
-                else:
-                    trajectories_plotting.append(np.zeros((zero_length,1)))
-                
-            else:
-                if sel_vec[0]==1:
-                    trajectories_plotting[0] = np.append(trajectories_plotting[0],trajectories[0],axis=0)
-                    trajectories_plotting[3] = np.append(trajectories_plotting[3],np.zeros((zero_length,1)),axis=0)
-                else:
-                    trajectories_plotting[0] = np.append(trajectories_plotting[0],np.zeros((zero_length,1)),axis=0)
-                    trajectories_plotting[3] = np.append(trajectories_plotting[3],trajectories[0],axis=0)
-                if sel_vec[1]==1:
-                    trajectories_plotting[1] = np.append(trajectories_plotting[1],trajectories[1],axis=0)
-                    trajectories_plotting[4] = np.append(trajectories_plotting[4],np.zeros((zero_length,1)),axis=0)
-                else:
-                    trajectories_plotting[1] = np.append(trajectories_plotting[1],np.zeros((zero_length,1)),axis=0)
-                    trajectories_plotting[4] = np.append(trajectories_plotting[4],trajectories[1],axis=0)
-                if sel_vec[2]==1:
-                    trajectories_plotting[2] = np.append(trajectories_plotting[2],trajectories[2],axis=0)
-                    trajectories_plotting[5] = np.append(trajectories_plotting[5],np.zeros((zero_length,1)),axis=0)
-                else:
-                    trajectories_plotting[2] = np.append(trajectories_plotting[2],trajectories_plotting[2][-1,0]*np.ones((zero_length,1)),axis=0)
-                    trajectories_plotting[5] = np.append(trajectories_plotting[5],trajectories[2],axis=0)
-
-            # TODO: Plotting function needs to be updated to consider force and
-            # pure position trajectories
-            
 
             # Figure out how long the demonstration should be based on max difference (velocity)
             # in kinematic directions and interpolate such that this is sent at 1000 Hz.
 
-            max_vel = 0.05 # m/s
+            max_vel = 0.1 # m/s
             panda_delta_T = 0.01 # 1 ms # TODO: MOVE TO CONFIG!
 
             max_x = sel_vec[0]*np.average(np.diff(np.array(trajectories[0]),axis=0))
@@ -385,12 +359,15 @@ def calculateDMP(demonstration_data, segmentation):
             max_z = sel_vec[2]*np.average(np.diff(np.array(trajectories[2]),axis=0))
 
             average_vel = np.sqrt(np.power(max_x,2)+np.power(max_y,2)+np.power(max_z,2))
-            
+
+
+
             delta_T = average_vel / max_vel
             num_interp_pts = int(round(delta_T / panda_delta_T))
 
-            # print "Delta T:", delta_T
-            # print "# interp:", num_interp_pts
+            print "Average Vel: ", average_vel
+            print "Delta T:", delta_T
+            print "# interp:", num_interp_pts
 
             # Don't allow zero
             if num_interp_pts < int(1):
@@ -400,16 +377,20 @@ def calculateDMP(demonstration_data, segmentation):
             starting_points, attractor_points, return_forces = dmps[xx].getForces()
 
             # First write mode to signal new DMP
-            csvfile.write('mode'+','+''+','+'')
+            surface = segment[2]
+            csvfile.write('mode'+','+surface+','+'')
             csvfile.write('\n')
             # Write selection vector
+            # TODO: fix this with orientation
             csvfile.write(str(sel_vec[0])+','+str(sel_vec[1])+','+str(sel_vec[2]))
             csvfile.write('\n')
-            csvfile.write(str(starting_points[0])+','+str(starting_points[1])+','+str(starting_points[2]))
+            csvfile.write(str(starting_points[0])+','+str(starting_points[1])+','+str(starting_points[2])+','+str(starting_points[3])+','+str(starting_points[4])+','+str(starting_points[5])+','+str(starting_points[6]))
             csvfile.write('\n')
-            csvfile.write(str(attractor_points[0])+','+str(attractor_points[1])+','+str(attractor_points[2]))
+            csvfile.write(str(attractor_points[0])+','+str(attractor_points[1])+','+str(attractor_points[2])+','+str(attractor_points[3])+','+str(attractor_points[4])+','+str(attractor_points[5])+','+str(attractor_points[6]))
             csvfile.write('\n')
 
+
+            # TODO: This should be switched to SLERP for Orientation
             # Write all of the trajectory stuff
             for ii in range(0,len(return_forces[0])-1):
                 # print trajectories[0][ii][0]
@@ -417,12 +398,16 @@ def calculateDMP(demonstration_data, segmentation):
                     interp_x = return_forces[0][ii]+(float(jj)/float(num_interp_pts))*(return_forces[0][ii+1]-return_forces[0][ii])
                     interp_y = return_forces[1][ii]+(float(jj)/float(num_interp_pts))*(return_forces[1][ii+1]-return_forces[1][ii])
                     interp_z = return_forces[2][ii]+(float(jj)/float(num_interp_pts))*(return_forces[2][ii+1]-return_forces[2][ii])
-                    csvfile.write(str(interp_x)+','+str(interp_y)+','+str(interp_z))
+                    interp_qx = return_forces[3][ii]+(float(jj)/float(num_interp_pts))*(return_forces[3][ii + 1] - return_forces[3][ii])
+                    interp_qy = return_forces[4][ii]+(float(jj)/float(num_interp_pts))*(return_forces[4][ii + 1] - return_forces[4][ii])
+                    interp_qz = return_forces[5][ii]+(float(jj)/float(num_interp_pts))*(return_forces[5][ii + 1] - return_forces[5][ii])
+                    interp_qw = return_forces[6][ii]+(float(jj)/float(num_interp_pts))*(return_forces[6][ii + 1] - return_forces[6][ii])
+                    csvfile.write(str(interp_x)+','+str(interp_y)+','+str(interp_z)+','+str(interp_qx)+','+str(interp_qy)+','+str(interp_qz)+','+str(interp_qw))
                     csvfile.write('\n')
 
-        print np.shape(trajectories_plotting[2])
-        print demonstration_data_trimmed[0][:,2]
-        plot_paths_rviz(demonstration_data_trimmed,trajectories_plotting)
+        # print np.shape(trajectories_plotting[2])
+        # print demonstration_data_trimmed[0][:,2]
+        # plot_paths_rviz(demonstration_data_trimmed,trajectories_plotting)
 
 
 def main():
