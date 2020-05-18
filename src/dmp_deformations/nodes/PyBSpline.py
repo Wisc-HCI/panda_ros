@@ -154,29 +154,30 @@ class BSplineSurface:
 
 
 def createCurved():
-    x = np.linspace(0.15, -0.35, 25)
+    x = np.linspace(0.05, -0.45, 25)
     y = np.linspace(0.15, -0.15, 25)
     xv, yv = np.meshgrid(x, y)
-    z = 0.87+0.05*np.sin(15*(0.15-xv))+0.06*np.sin((np.pi/0.3)*(0.15-yv)-np.pi/2)
+    z = 0.87+0.05*np.sin(15*(0.05-xv))+0.06*np.sin((np.pi/0.3)*(0.15-yv)-np.pi/2)
 
     control_pts = np.transpose([xv, yv, z])
     # control_pts = np.ones((5,5,3))
     print("Control Points:")
     print(np.shape(control_pts))
+    print(control_pts[0,24,:])
 
     # Create a B-Spline instance
     test_curve = BSplineSurface()
     test_curve.initialize(k=3, control_pts=control_pts)
 
     # Evaluate a new point
-    eval_pt, n_hat = test_curve.calculate_surface_point(0.5, 0.25)
-    print "NHAT: ", n_hat
+    # eval_pt, n_hat = test_curve.calculate_surface_point(0.5, 0.25)
+    # print "NHAT: ", n_hat
 
     # 3D plotting code
     ax = plt.gca(projection='3d')
     ax.scatter(xv.flatten(), yv.flatten(), z.flatten(), color='blue')
-    ax.scatter(eval_pt[0], eval_pt[1], eval_pt[2], color='red', s=50)
-    ax.quiver(eval_pt[0], eval_pt[1], eval_pt[2], n_hat[0], n_hat[1], n_hat[2], length=0.1, normalize=True)
+    # ax.scatter(eval_pt[0], eval_pt[1], eval_pt[2], color='red', s=50)
+    # ax.quiver(eval_pt[0], eval_pt[1], eval_pt[2], n_hat[0], n_hat[1], n_hat[2], length=0.1, normalize=True)
     ax.set_xlim3d(0, 1)
     ax.set_ylim3d(0, 1)
     ax.set_zlim3d(0, 1)
