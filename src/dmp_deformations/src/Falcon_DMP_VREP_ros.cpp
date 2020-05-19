@@ -50,6 +50,16 @@ void log_demonstration(double x, double y, double z, double fx, double fy, doubl
     outputfile << x << "," << y << "," << z << "," << fx << "," << fy << "," << fz << "\n";
 }
 
+array<bool,4> getButtons(){
+    unsigned int my_buttons = m_falconDevice.getFalconGrip()->getDigitalInputs();
+    array<bool,4> buttons;
+    buttons[0] = (my_buttons & libnifalcon::FalconGripFourButton::CENTER_BUTTON)  ? 1 : 0;
+    buttons[1] = (my_buttons & libnifalcon::FalconGripFourButton::PLUS_BUTTON)    ? 1 : 0;
+    buttons[2] = (my_buttons & libnifalcon::FalconGripFourButton::MINUS_BUTTON)   ? 1 : 0;
+    buttons[3] = (my_buttons & libnifalcon::FalconGripFourButton::FORWARD_BUTTON) ? 1 : 0;
+    return buttons;
+}
+
 // This takes a particular DMP and figures out the first non-zero velocity direction
 // for setting the starting tool orientation
 array<double,3> getFirstSurfaceVelocity(array<double,7> attractor_point, array<double,7> starting_point,double dmp_u,double dmp_v, array<double,3> r_u, array<double,3> r_v ){
@@ -227,7 +237,7 @@ void readDemo(vector<vector<array<double,7>>> &dmps,vector<array<double,3>> &sel
     dmpfile.close();
 }
 
-void replay_demo(ros::Publisher selection_vector_pub, ros::Publisher wrench_goal_pub, ros::Publisher pose_goal_pub, ros::Publisher pose_path_pub, ros::Publisher dmp_replay_pub, ros::Publisher constraint_frame_pub){
+void replay_demo(ros::Publisher selection_vector_pub, ros::Publisher wrench_goal_pub, ros::Publisher pose_goal_pub, ros::Publisher pose_path_pub, ros::Publisher dmp_replay_pub, ros::Publisher constraint_frame_pub, ros::Publisher point_goal_pub){
 
     std_msgs::String replay_str;
 
@@ -363,7 +373,7 @@ void replay_demo(ros::Publisher selection_vector_pub, ros::Publisher wrench_goal
                 // force direction until it achieves the desired force (within a tolerance)
                 while(!proper_contact)
                 {
-                    proper_contact=true; // TODO: REMOVE/FIX THIS
+                    //proper_contact=true; // TODO: REMOVE/FIX THIS
                     double f_z_rotated = x_hat[2]*fx+y_hat[2]*fy+n_hat[2]*fz;
                     cout << "FZ: " << f_z_rotated << " " << starting_points[ii][2] << endl;
                     if(f_z_rotated<0.95*starting_points[ii][2] && f_z_rotated>1.05*starting_points[ii][2])
@@ -542,6 +552,12 @@ void replay_demo(ros::Publisher selection_vector_pub, ros::Publisher wrench_goal
                     curr_surface.calculateSurfacePoint(x,y,r,n_hat,x_hat,y_hat);
                     
                     cout << "X: " << x << " Y:" << y << endl;
+                    cout << "R: " << r[0] << "," << r[1] << "," << r[2] << endl;
+                    geometry_msgs::Pose point;
+                    point.position.x = r[0];
+                    point.position.y = r[1];
+                    point.position.z = r[2];
+                    point_goal_pub.publish(point);
 
                     // Using the velocity of x and y (u and v), calculate the time
                     // derivative of the surface (i.e., vector-valued function)
@@ -556,7 +572,7 @@ void replay_demo(ros::Publisher selection_vector_pub, ros::Publisher wrench_goal
                     {
                         // change the constraint frame
                         v_hat[0]=v_hat[0]/v_mag; v_hat[1]=v_hat[1]/v_mag; v_hat[2]=v_hat[2]/v_mag;
-                        cout << "VELHAT: " << v_hat[0] << " "  << v_hat[1] << " " << v_hat[2] << endl;
+                        //cout << "VELHAT: " << v_hat[0] << " "  << v_hat[1] << " " << v_hat[2] << endl;
                         // cout << "DX: " << dx << " DY: " << dy << endl;
                         // cout << "X_HAT: " << x_hat[0] << " "  << x_hat[1] << " " << x_hat[2] << endl;
                         // Z x X = Y
@@ -567,7 +583,7 @@ void replay_demo(ros::Publisher selection_vector_pub, ros::Publisher wrench_goal
 
                         // TODO: HOW TO MAKE THIS WORK!!!!
                         array<double,4> q_out;
-                        rotationToQuaternion(v_hat,y_new,n_hat,q_out);
+                        rotationToQuaternion(x_hat,y_hat,n_hat,q_out);
                         // rotationToQuaternion(x_hat,y_hat,n_hat,q_out);
                         constraint_frame.x = q_out[0];
                         constraint_frame.y = q_out[1];
@@ -934,6 +950,9 @@ int main(int argc, char **argv) {
     ros::Publisher dmp_replay_pub = 
         n.advertise<std_msgs::String>("/dmp/replay", 5);
 
+    ros::Publisher point_goal_pub = 
+        n.advertise<geometry_msgs::Pose>("/panda/ee_point_goals", 5);
+
     bool last_buttons[4] = {false, false, false, false};
     bool clutch = false;
     bool reset_center = false;
@@ -948,16 +967,7 @@ int main(int argc, char **argv) {
 
     while(ros::ok() && (!replay_mode)){      
         // Check button presses
-        unsigned int my_buttons = m_falconDevice.getFalconGrip()->getDigitalInputs();
-        bool buttons[4];
-        // Clutch is center button
-        buttons[0] = (my_buttons & libnifalcon::FalconGripFourButton::CENTER_BUTTON)  ? 1 : 0;
-        // Change between record and replay mode with plus button
-        buttons[1] = (my_buttons & libnifalcon::FalconGripFourButton::PLUS_BUTTON)    ? 1 : 0;
-        // Reset DMP with minus button (arrow)
-        buttons[2] = (my_buttons & libnifalcon::FalconGripFourButton::MINUS_BUTTON)   ? 1 : 0;
-        // Record DMP with forward button (lightning)
-        buttons[3] = (my_buttons & libnifalcon::FalconGripFourButton::FORWARD_BUTTON) ? 1 : 0;
+        array<bool,4> buttons = getButtons();
         
         if(buttons[0]!=last_buttons[0]){
             // Clutching functionality
@@ -1047,22 +1057,12 @@ int main(int argc, char **argv) {
     bool quit_replay = false;
     while(ros::ok() && !quit_replay)
     {
-        unsigned int my_buttons = m_falconDevice.getFalconGrip()->getDigitalInputs();
-        bool buttons[4];
-        // Replay is center button
-        buttons[0] = (my_buttons & libnifalcon::FalconGripFourButton::CENTER_BUTTON)  ? 1 : 0;
-        // Quit
-        buttons[1] = (my_buttons & libnifalcon::FalconGripFourButton::PLUS_BUTTON)    ? 1 : 0;
-        // TBD
-        buttons[2] = (my_buttons & libnifalcon::FalconGripFourButton::MINUS_BUTTON)   ? 1 : 0;
-        // TBD
-        buttons[3] = (my_buttons & libnifalcon::FalconGripFourButton::FORWARD_BUTTON) ? 1 : 0;
-        
+        array<bool,4> buttons = getButtons();
         if(buttons[0]!=last_buttons[0]){
             // Run Replay
             if(buttons[0]==1){
                 cout << "RUN THE REPLAY" << endl;
-                replay_demo(selection_vector_pub,wrench_goal_pub, pose_goal_pub, pose_path_pub, dmp_replay_pub,constraint_frame_pub);
+                replay_demo(selection_vector_pub,wrench_goal_pub, pose_goal_pub, pose_path_pub, dmp_replay_pub,constraint_frame_pub, point_goal_pub);
             }
         }
 
