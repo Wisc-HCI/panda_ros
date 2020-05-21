@@ -155,7 +155,7 @@ class BSplineSurface:
 
 def createCurved():
     x = np.linspace(0.05, -0.45, 25)
-    y = np.linspace(0.15, -0.15, 25)
+    y = np.linspace(0.05, -0.25, 25)
     xv, yv = np.meshgrid(x, y)
     z = 0.87+0.05*np.sin(15*(0.05-xv))+0.06*np.sin((np.pi/0.3)*(0.15-yv)-np.pi/2)
 

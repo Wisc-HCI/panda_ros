@@ -351,7 +351,7 @@ def calculateDMP(demonstration_data, segmentation):
             # Figure out how long the demonstration should be based on max difference (velocity)
             # in kinematic directions and interpolate such that this is sent at 1000 Hz.
 
-            max_vel = 0.1 # m/s
+            max_vel = 0.15 # m/s
             panda_delta_T = 0.01 # 1 ms # TODO: MOVE TO CONFIG!
 
             max_x = sel_vec[0]*np.average(np.diff(np.array(trajectories[0]),axis=0))
