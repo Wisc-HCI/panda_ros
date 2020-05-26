@@ -11,6 +11,7 @@
 #include "geometry_msgs/Wrench.h"
 #include "geometry_msgs/Quaternion.h"
 #include "std_msgs/String.h"
+#include "std_msgs/Float64.h"
 
 #include "falcon/core/FalconDevice.h"
 #include "falcon/grip/FalconGripFourButton.h"
@@ -106,6 +107,8 @@ array<double,3> getFirstSurfaceVelocity(array<double,7> attractor_point, array<d
     double k=50;
     array<double,3> vel_hat;
 
+    // These next 2 are equivalent to calculating the first velocity in the DMP ignoring the deformation and damping (since the velocity is initial 0)
+
     // Calculate Vel-U direction
     double ddu = k*(attractor_point[0]-starting_point[0])+dmp_u;
 
@@ -157,10 +160,8 @@ void rotationToQuaternion(array<double,3> x_hat, array<double,3> y_hat, array<do
 
     // Make sure it is normalized
     double mag = sqrt(q_out[0]*q_out[0]+q_out[1]*q_out[1]+q_out[2]*q_out[2]+q_out[3]*q_out[4]);
-    cout << "MAG:" << mag << endl;
-    //q_out[0] = q_out[0]/mag; q_out[1] = q_out[1]/mag; q_out[2] = q_out[2]/mag; q_out[3] = q_out[3]/mag;
+    q_out[0] = q_out[0]/mag; q_out[1] = q_out[1]/mag; q_out[2] = q_out[2]/mag; q_out[3] = q_out[3]/mag;
 }
-
 
 void falconVelocity() {
     double delta_T = 1000;
@@ -283,7 +284,7 @@ void readDemo(vector<vector<array<double,7>>> &dmps,vector<array<double,3>> &sel
     dmpfile.close();
 }
 
-void replay_demo(ros::Publisher selection_vector_pub, ros::Publisher wrench_goal_pub, ros::Publisher pose_goal_pub, ros::Publisher pose_path_pub, ros::Publisher dmp_replay_pub, ros::Publisher constraint_frame_pub, ros::Publisher point_goal_pub){
+void replay_demo(ros::Publisher selection_vector_pub, ros::Publisher wrench_goal_pub, ros::Publisher pose_goal_pub, ros::Publisher pose_path_pub, ros::Publisher dmp_replay_pub, ros::Publisher constraint_frame_pub, ros::Publisher point_goal_pub, ros::Publisher force_gain_pub){
 
     std_msgs::String replay_str;
 
@@ -322,6 +323,8 @@ void replay_demo(ros::Publisher selection_vector_pub, ros::Publisher wrench_goal
             falconVelocity();
             usleep(1000);
         }
+
+    // TODO MAKE THE ABOVE CLOSED LOOP (waits until it gets to the starting point)!!!!!!!!!!
 
     // Action: Tell the robot the replay is starting
     cout << "Replay Starting..." << endl;
@@ -367,6 +370,7 @@ void replay_demo(ros::Publisher selection_vector_pub, ros::Publisher wrench_goal
                 pose.position.x = starting_points[ii][0];
                 pose.position.y = starting_points[ii][1];
                 pose.position.z = starting_points[ii][2];
+                
                 // TODO: FIX THIS!
                 pose.orientation.x = 0.0;
                 pose.orientation.y = 0.0;
@@ -403,8 +407,11 @@ void replay_demo(ros::Publisher selection_vector_pub, ros::Publisher wrench_goal
                 constraint_frame.w = q_out[3];
 
                 // Convert the XYZ into the constraint frame
-                pose.position.x = x_hat[0]*r[0]+y_hat[0]*r[1]+n_hat[0]*r[2];
-                pose.position.y = x_hat[1]*r[0]+y_hat[1]*r[1]+n_hat[1]*r[2];
+                array<double,3> temp_vec = vectorIntoConstraintFrame(r[0],r[1],r[2],q_out[0],q_out[1],q_out[2],q_out[3]);
+                pose.position.x = temp_vec[0]; pose.position.y = temp_vec[1]; pose.position.z=temp_vec[2];
+
+                cout << "OGXYZ: " << r[0] << " "  << r[1] << " " << r[2] << endl;
+                cout << "XYZ: " << pose.position.x << " "  << pose.position.y << " " << pose.position.z << endl;
 
                 //cout << "CF: " << constraint_frame.x << " " << constraint_frame.y << " " << constraint_frame.z << " " << constraint_frame.w << endl;
                 //cout << "XYZ:" << pose.position.x << " " << pose.position.y << " " << x_hat[2]*r[0]+y_hat[2]*r[1]+n_hat[2]*r[2] << endl;
@@ -412,6 +419,7 @@ void replay_demo(ros::Publisher selection_vector_pub, ros::Publisher wrench_goal
                 // cout << "RV " << y_hat[0] << " " << y_hat[1] << " " << y_hat[2] << endl;
                 // cout << "NHAT " << n_hat[0] << " " << n_hat[1] << " " << n_hat[2] << endl;
 
+                force_gain_pub.publish(0.0001);
                 selection_vector_pub.publish(selection);
                 constraint_frame_pub.publish(constraint_frame);
                 pose_goal_pub.publish(pose);
@@ -421,7 +429,7 @@ void replay_demo(ros::Publisher selection_vector_pub, ros::Publisher wrench_goal
                 // force direction until it achieves the desired force (within a tolerance)
                 while(!proper_contact)
                 {
-                    proper_contact=true; // TODO: REMOVE/FIX THIS
+                    //proper_contact=true; // TODO: REMOVE/FIX THIS
                     double f_z_rotated = x_hat[2]*fx+y_hat[2]*fy+n_hat[2]*fz;
                     cout << "FZ: " << f_z_rotated << " " << starting_points[ii][2] << endl;
                     if(f_z_rotated<0.95*starting_points[ii][2] && f_z_rotated>1.05*starting_points[ii][2])
@@ -438,6 +446,7 @@ void replay_demo(ros::Publisher selection_vector_pub, ros::Publisher wrench_goal
                     ros::spinOnce();
 
                 }
+                force_gain_pub.publish(0.003);
                 cout << "FORCE ONLOADING COMPLETE" << endl;
             }
             previous_dmp_no_contact = false;
@@ -540,9 +549,9 @@ void replay_demo(ros::Publisher selection_vector_pub, ros::Publisher wrench_goal
             {
 
                 // TAKE THIS OUT - BROKEN FALCON
-                // dmp_fx = 0.0;
-                // dmp_fy = 0.0;
-                // dmp_fz = 0.0;
+                dmp_fx = 0.0;
+                dmp_fy = 0.0;
+                dmp_fz = 0.0;
 
                 ////////////////////////////////////////////////////////////////
                 //      Deformation input mapping                             //
@@ -652,7 +661,7 @@ void replay_demo(ros::Publisher selection_vector_pub, ros::Publisher wrench_goal
                     {
                         // change the constraint frame
                         v_hat[0]=v_hat[0]/v_mag; v_hat[1]=v_hat[1]/v_mag; v_hat[2]=v_hat[2]/v_mag;
-                        cout << "VELHAT: " << v_hat[0] << " "  << v_hat[1] << " " << v_hat[2] << endl;
+                        //cout << "VELHAT: " << v_hat[0] << " "  << v_hat[1] << " " << v_hat[2] << endl;
                         // cout << "DX: " << dx << " DY: " << dy << endl;
                         // cout << "X_HAT: " << x_hat[0] << " "  << x_hat[1] << " " << x_hat[2] << endl;
                         // Z x X = Y
@@ -1041,6 +1050,9 @@ int main(int argc, char **argv) {
 
     ros::Publisher constraint_frame_pub = 
         n.advertise<geometry_msgs::Quaternion>("/panda/constraintframe", 5);
+    
+    ros::Publisher force_gain_pub = 
+        n.advertise<std_msgs::Float64>("/panda/forcegain", 5);
 
     ros::Publisher command_pub = 
         n.advertise<std_msgs::String>("/panda/commands", 5);
@@ -1172,7 +1184,7 @@ int main(int argc, char **argv) {
             // Run Replay
             if(buttons[0]==1){
                 cout << "RUN THE REPLAY" << endl;
-                replay_demo(selection_vector_pub,wrench_goal_pub, pose_goal_pub, pose_path_pub, dmp_replay_pub,constraint_frame_pub, point_goal_pub);
+                replay_demo(selection_vector_pub,wrench_goal_pub, pose_goal_pub, pose_path_pub, dmp_replay_pub,constraint_frame_pub, point_goal_pub,force_gain_pub);
             }
         }
 
