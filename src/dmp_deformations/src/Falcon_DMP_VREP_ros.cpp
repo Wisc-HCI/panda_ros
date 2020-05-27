@@ -117,7 +117,6 @@ array<double,3> crossProduct(array<double,3> x, array<double,3> y){
     return_vec[0]=x[1]*y[2]-x[2]*y[1];
     return_vec[1]=x[2]*y[0]-x[0]*y[2];
     return_vec[2]=x[0]*y[1]-x[1]*y[0];
-
     return return_vec;
 }
 
@@ -212,6 +211,56 @@ void rotationToQuaternion(array<double,3> x_hat, array<double,3> y_hat, array<do
     // Make sure it is normalized
     double mag = sqrt(q_out[0]*q_out[0]+q_out[1]*q_out[1]+q_out[2]*q_out[2]+q_out[3]*q_out[3]);
     q_out[0] = q_out[0]/mag; q_out[1] = q_out[1]/mag; q_out[2] = q_out[2]/mag; q_out[3] = q_out[3]/mag;
+}
+
+array<double,3> map_deformation_input(int method, double dmp_fx,double dmp_fy,double dmp_fz,double dx,double dy, double dz){
+    // TODO: add the selection vector stuff
+
+    // Methods:
+    // 1. Task oriented frame - define in terms of a principal axis for the task
+    // 2. Velocity-oriented frame - deformation is a relative direction based on the current velocity
+
+    // Rotate the deformation force into the relevant frame
+    array<double,3> deformation_rotation;
+
+    if (method==1){ 
+        /////////////////
+        // Task-Oriented Frame
+        /////////////////
+        // This quaternion rotates it to be aligned with the general camera/x-y directions
+        deformation_rotation = vectorIntoConstraintFrame(dmp_fx, dmp_fy, dmp_fz, 0.0, 0.0, -1.0, 0.0);
+        return deformation_rotation;
+    }
+
+    else if (method==2){
+        /////////////////
+        // Velocity-oriented
+        /////////////////
+        array<double,3> manifold_vel_dir = {1.0, 0.0, 0.0}; // z is always zero as these are functionally
+        // homogeneous coordinates since we are talking about a 2D projection + force
+
+        if(dx!=0.0 || dy != 0.0)
+        {
+            manifold_vel_dir = {dx, dy, 0.0};
+            double mag = dx*dx+dy*dy;
+            manifold_vel_dir[0] = manifold_vel_dir[0]/mag; manifold_vel_dir[1] = manifold_vel_dir[1]/mag;
+        }
+
+        array<double,3> y_temp;
+        array<double,3> z_hat = {0.0, 0.0, 1.0};
+        y_temp = crossProduct(z_hat,manifold_vel_dir);
+
+        array<double,4> q_out_rc;
+        rotationToQuaternion(manifold_vel_dir, y_temp,z_hat, q_out_rc);
+        deformation_rotation = vectorIntoConstraintFrame(dmp_fx, dmp_fy, dmp_fz, q_out_rc[0], q_out_rc[1], q_out_rc[2], q_out_rc[3]);
+        return deformation_rotation;
+    }
+
+    else{ // Invalid method - No rotation
+        deformation_rotation = {dmp_fx, dmp_fy, dmp_fz};
+        cout << "INVALID METHOD FOR INPUT MAPPING" << endl;
+        return deformation_rotation;
+    }
 }
 
 void falconVelocity() {
@@ -606,57 +655,36 @@ void replay_demo(ros::Publisher pose_goal_pub, ros::NodeHandle n){
 
             if(dmp_integration)
             {
-
                 // TAKE THIS OUT - BROKEN FALCON
                 // dmp_fx = 0.0;
                 // dmp_fy = 0.0;
                 // dmp_fz = 0.0;
-
+                
                 ////////////////////////////////////////////////////////////////
                 //      Deformation input mapping                             //
                 ////////////////////////////////////////////////////////////////
-                array<double,3> temp_rot;
-                // Rotate the deformation force into the relevant frame
-            
-                // /////////////////
-                // // Task-Oriented Frame
-                // /////////////////
-                // // This quaternion rotates it to be aligned with the general camera/x-y directions
-                temp_rot = vectorIntoConstraintFrame(dmp_fx, dmp_fy, dmp_fz, 0.0, 0.0, -1.0, 0.0);
+                // 1 - Task Frame
+                // 2 - Velocity Frame
+                int input_mapping_method=1;
+                array<double,3> rotated_deformation = map_deformation_input(input_mapping_method,dmp_fx,dmp_fy,dmp_fz,dx,dy,dz);
                 
-                // /////////////////
-                // // RC-car version
-                // /////////////////
-                // array<double,3> manifold_vel_dir = {1.0, 0.0, 0.0}; // z is always zero as these are functionally
-                // // homogeneous coordinates since we are talking about a 2D projection + force
 
-                // if(dx!=0.0 || dy != 0.0)
-                // {
-                //     manifold_vel_dir = {dx, dy, 0.0};
-                //     double mag = dx*dx+dy*dy;
-                //     manifold_vel_dir[0] = manifold_vel_dir[0]/mag; manifold_vel_dir[1] = manifold_vel_dir[1]/mag;
-                // }
-
-                // array<double,3> y_temp;
-                // array<double,3> z_hat = {0.0, 0.0, 1.0};
-                // y_temp = crossProduct(z_hat,manifold_vel_dir);
-
-                // array<double,4> q_out_rc;
-                // rotationToQuaternion(manifold_vel_dir, y_temp,z_hat, q_out_rc);
-                // temp_rot = vectorIntoConstraintFrame(dmp_fx, dmp_fy, dmp_fz, q_out_rc[0], q_out_rc[1], q_out_rc[2], q_out_rc[3]);
+                ////////////////////////////////////////////////////////////////
+                //      Calculate New DMP values                              //
+                ////////////////////////////////////////////////////////////////
 
                 // Calculate New X (State 1)
-                ddx = k*(attractor_points[ii][0]-x)-b*dx+dmp_x+sel_gains[(int) selection.x]*dmp_scaling_x*temp_rot[0];
+                ddx = k*(attractor_points[ii][0]-x)-b*dx+dmp_x+sel_gains[(int) selection.x]*dmp_scaling_x*rotated_deformation[0];
                 dx = dx + ddx*0.01*delta_s;
                 x = x+dx*0.01*delta_s;
 
                 // Calculate New Y (State 2)
-                ddy = k*(attractor_points[ii][1]-y)-b*dy+dmp_y+sel_gains[(int) selection.y]*dmp_scaling_y*temp_rot[1];
+                ddy = k*(attractor_points[ii][1]-y)-b*dy+dmp_y+sel_gains[(int) selection.y]*dmp_scaling_y*rotated_deformation[1];
                 dy = dy + ddy*0.01*delta_s;
                 y = y+dy*0.01*delta_s;
 
                 // Calculate New Z (State 3)
-                ddz = k*(attractor_points[ii][2]-z)-b*dz+dmp_z+sel_gains[(int) selection.z]*dmp_scaling_z*temp_rot[2];
+                ddz = k*(attractor_points[ii][2]-z)-b*dz+dmp_z+sel_gains[(int) selection.z]*dmp_scaling_z*rotated_deformation[2];
                 dz = dz + ddz*0.01*delta_s;
                 z = z+dz*0.01*delta_s;
 
