@@ -402,6 +402,13 @@ void replay_demo(ros::Publisher pose_goal_pub, ros::NodeHandle n){
     ros::Publisher dmp_replay_pub = 
         n.advertise<std_msgs::String>("/dmp/replay", 5);
 
+    // Pause 0.5s to allow publishers to register
+    for(int jj=0; jj<500; jj++)
+    {
+        ros::spinOnce();
+        falconVelocity();
+        usleep(1000);
+    }
 
     // All of the data from the DMPs are stored in vectors
     vector<vector<array<double,7>>> dmps;
@@ -427,18 +434,18 @@ void replay_demo(ros::Publisher pose_goal_pub, ros::NodeHandle n){
 
     // Tell the robot to go to the overall starting point
     // Pose path pub will interpolate the path
-        pose.position.x = starting_points[0][0];
-        pose.position.y = starting_points[0][1];
-        pose.position.z = starting_points[0][2];
-        pose_path_pub.publish(pose);
+    pose.position.x = starting_points[0][0];
+    pose.position.y = starting_points[0][1];
+    pose.position.z = starting_points[0][2];
+    pose_path_pub.publish(pose);
         
-        // Sleep for 2.5 seconds to allow path completion
-        for(int jj=0; jj<2500; jj++)
-        {
-            ros::spinOnce();
-            falconVelocity();
-            usleep(1000);
-        }
+    // Sleep for 2.5 seconds to allow path completion
+    for(int jj=0; jj<2500; jj++)
+    {
+        ros::spinOnce();
+        falconVelocity();
+        usleep(1000);
+    }
 
     // TODO MAKE THE ABOVE CLOSED LOOP (waits until it gets to the starting point)!!!!!!!!!!
 
