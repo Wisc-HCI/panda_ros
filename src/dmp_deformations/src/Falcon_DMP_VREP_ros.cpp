@@ -50,16 +50,19 @@ bool replay_active = false;
 
 // TODO: add these documentation tags for each file
 // This writes all of the state information to the open CSV file
+
 /**
- * Sum numbers in a vector.
- *
- * @param values Container whose values are summed.
- * @return sum of `values`, or 0.0 if `values` is empty.
+ * Streams robot state data to an output file. This is used for when
+ * the demonstration DMPs are learned from demonstration
  */
 void log_demonstration(double x, double y, double z, double fx, double fy, double fz){
     outputfile << x << "," << y << "," << z << "," << fx << "," << fy << "," << fz << "\n";
 }
 
+/**
+ * Returns a boolean array for the current state of the four buttons on the falcon
+ * 1 is pressed, 0 is unpressed
+ */
 array<bool,4> getButtons(){
     unsigned int my_buttons = m_falconDevice.getFalconGrip()->getDigitalInputs();
     array<bool,4> buttons;
@@ -68,6 +71,54 @@ array<bool,4> getButtons(){
     buttons[2] = (my_buttons & libnifalcon::FalconGripFourButton::MINUS_BUTTON)   ? 1 : 0;
     buttons[3] = (my_buttons & libnifalcon::FalconGripFourButton::FORWARD_BUTTON) ? 1 : 0;
     return buttons;
+}
+
+/**
+ * Determines whether a transition should occur to the next DMP based on residual "Error"
+  from the deformations
+
+  transition_x,transition_y, transition_z are outputs representing the change to be applied
+  to the next starting point
+ */
+void calculateDMPTransition(double ii, double &transition_x, double &transition_y, double &transition_z, vector<array<double,3>> selections,vector<array<double,7>> starting_points){
+    if((ii+1)<selections.size()){
+
+        // Situations - same requires direct addition
+        // position to force -> nothing
+        // force to position -> nothing
+        // position to manifold (HARD!)
+        // manifold to position (easier!)
+
+        if (selections[ii][2]==0.0 && selections[ii+1][2]==1.0){
+            // On the manifold currently and coming off it!
+            // get actual pose since it will be different from stiffness and hybrid
+            transition_x = (actual_pos[0]-starting_points[ii+1][0]);
+            transition_y = (actual_pos[1]-starting_points[ii+1][1]);
+            transition_z = (actual_pos[2]-starting_points[ii+1][2]);
+        }
+
+        else{
+            transition_x = 0.0;
+            transition_y = 0.0;
+            transition_z = 0.0;
+        }
+
+        // transition_x = (x-attractor_points[ii][0])*(double)(selections[ii][0]==selections[ii+1][0]);
+        // transition_y = (y-attractor_points[ii][1])*(double)(selections[ii][1]==selections[ii+1][1]);
+        // transition_z = (z-attractor_points[ii][2])*(double)(selections[ii][2]==selections[ii+1][2]);
+    }
+}
+
+/**
+ * Calculates the cross product between 2 3-D vectors
+ */
+array<double,3> crossProduct(array<double,3> x, array<double,3> y){
+    array<double,3> return_vec;
+    return_vec[0]=x[1]*y[2]-x[2]*y[1];
+    return_vec[1]=x[2]*y[0]-x[0]*y[2];
+    return_vec[2]=x[0]*y[1]-x[1]*y[0];
+
+    return return_vec;
 }
 
 /**
@@ -159,7 +210,7 @@ void rotationToQuaternion(array<double,3> x_hat, array<double,3> y_hat, array<do
     }
 
     // Make sure it is normalized
-    double mag = sqrt(q_out[0]*q_out[0]+q_out[1]*q_out[1]+q_out[2]*q_out[2]+q_out[3]*q_out[4]);
+    double mag = sqrt(q_out[0]*q_out[0]+q_out[1]*q_out[1]+q_out[2]*q_out[2]+q_out[3]*q_out[3]);
     q_out[0] = q_out[0]/mag; q_out[1] = q_out[1]/mag; q_out[2] = q_out[2]/mag; q_out[3] = q_out[3]/mag;
 }
 
@@ -288,7 +339,7 @@ void replay_demo(ros::Publisher selection_vector_pub, ros::Publisher wrench_goal
 
     std_msgs::String replay_str;
 
-    // All of the data from the DMPs is stored in vectors
+    // All of the data from the DMPs are stored in vectors
     vector<vector<array<double,7>>> dmps;
     vector<array<double,3>> selections;
     vector<array<double,7>> starting_points;
@@ -386,16 +437,13 @@ void replay_demo(ros::Publisher selection_vector_pub, ros::Publisher wrench_goal
                 array<double,3> x_hat;
                 curr_surface.calculateSurfacePoint(starting_points[ii][0],starting_points[ii][1],r,n_hat,x_hat,y_hat);
 
-                // CALCULATE THE STARTING CONSTRAINT FRAME BASED ON THE FIRST VELOCITY OF THE DMP
+                // Calculate the starting point for orientation based on the first velocity of the DMP
                 array<double,3> vel_hat = getFirstSurfaceVelocity(attractor_points[ii],starting_points[ii],dmps[ii][0][0],dmps[ii][0][1],x_hat,y_hat);
                 
                 cout << "VELHAT: " << vel_hat[0] << " "  << vel_hat[1] << " " << vel_hat[2] << endl;
 
                 // Z (normal) x X (vel) = +Y
-                array<double,3> y_new;
-                y_new[0]=n_hat[1]*vel_hat[2]-n_hat[2]*vel_hat[1];
-                y_new[1]=n_hat[2]*vel_hat[0]-n_hat[0]*vel_hat[2];
-                y_new[2]=n_hat[0]*vel_hat[1]-n_hat[1]*vel_hat[0];
+                array<double,3> y_new = crossProduct(n_hat,vel_hat);
 
                 geometry_msgs::Quaternion constraint_frame; 
                 array<double,4> q_out;               
@@ -409,9 +457,6 @@ void replay_demo(ros::Publisher selection_vector_pub, ros::Publisher wrench_goal
                 // Convert the XYZ into the constraint frame
                 array<double,3> temp_vec = vectorIntoConstraintFrame(r[0],r[1],r[2],q_out[0],q_out[1],q_out[2],q_out[3]);
                 pose.position.x = temp_vec[0]; pose.position.y = temp_vec[1]; pose.position.z=temp_vec[2];
-
-                cout << "OGXYZ: " << r[0] << " "  << r[1] << " " << r[2] << endl;
-                cout << "XYZ: " << pose.position.x << " "  << pose.position.y << " " << pose.position.z << endl;
 
                 //cout << "CF: " << constraint_frame.x << " " << constraint_frame.y << " " << constraint_frame.z << " " << constraint_frame.w << endl;
                 //cout << "XYZ:" << pose.position.x << " " << pose.position.y << " " << x_hat[2]*r[0]+y_hat[2]*r[1]+n_hat[2]*r[2] << endl;
@@ -549,9 +594,9 @@ void replay_demo(ros::Publisher selection_vector_pub, ros::Publisher wrench_goal
             {
 
                 // TAKE THIS OUT - BROKEN FALCON
-                dmp_fx = 0.0;
-                dmp_fy = 0.0;
-                dmp_fz = 0.0;
+                // dmp_fx = 0.0;
+                // dmp_fy = 0.0;
+                // dmp_fz = 0.0;
 
                 ////////////////////////////////////////////////////////////////
                 //      Deformation input mapping                             //
@@ -559,17 +604,17 @@ void replay_demo(ros::Publisher selection_vector_pub, ros::Publisher wrench_goal
                 array<double,3> temp_rot;
                 // Rotate the deformation force into the relevant frame
             
-                /////////////////
-                // Task-Oriented Frame
-                /////////////////
-                // This quaternion rotates it to be aligned with the general camera/x-y directions
+                // /////////////////
+                // // Task-Oriented Frame
+                // /////////////////
+                // // This quaternion rotates it to be aligned with the general camera/x-y directions
                 temp_rot = vectorIntoConstraintFrame(dmp_fx, dmp_fy, dmp_fz, 0.0, 0.0, -1.0, 0.0);
                 
                 // /////////////////
                 // // RC-car version
                 // /////////////////
                 // array<double,3> manifold_vel_dir = {1.0, 0.0, 0.0}; // z is always zero as these are functionally
-                // // homogeous coordinates since we are talking about a 2D projection + force
+                // // homogeneous coordinates since we are talking about a 2D projection + force
 
                 // if(dx!=0.0 || dy != 0.0)
                 // {
@@ -580,15 +625,11 @@ void replay_demo(ros::Publisher selection_vector_pub, ros::Publisher wrench_goal
 
                 // array<double,3> y_temp;
                 // array<double,3> z_hat = {0.0, 0.0, 1.0};
-                
-                // y_temp[0]=z_hat[1]*manifold_vel_dir[2]-z_hat[2]*manifold_vel_dir[1];
-                // y_temp[1]=z_hat[2]*manifold_vel_dir[0]-z_hat[0]*manifold_vel_dir[2];
-                // y_temp[2]=z_hat[0]*manifold_vel_dir[1]-z_hat[1]*manifold_vel_dir[0];
+                // y_temp = crossProduct(z_hat,manifold_vel_dir);
 
                 // array<double,4> q_out_rc;
                 // rotationToQuaternion(manifold_vel_dir, y_temp,z_hat, q_out_rc);
                 // temp_rot = vectorIntoConstraintFrame(dmp_fx, dmp_fy, dmp_fz, q_out_rc[0], q_out_rc[1], q_out_rc[2], q_out_rc[3]);
-
 
                 // Calculate New X (State 1)
                 ddx = k*(attractor_points[ii][0]-x)-b*dx+dmp_x+sel_gains[(int) selection.x]*dmp_scaling_x*temp_rot[0];
@@ -656,30 +697,20 @@ void replay_demo(ros::Publisher selection_vector_pub, ros::Publisher wrench_goal
                     
                     // If the velocity direction is non-zero, re-align the constraint frame
                     // If it is zero, it will keep its previous value
-                    // TODO: change this back
-                    if(v_mag!=0.0)
+                    if(v_mag>0.0)
                     {
                         // change the constraint frame
                         v_hat[0]=v_hat[0]/v_mag; v_hat[1]=v_hat[1]/v_mag; v_hat[2]=v_hat[2]/v_mag;
-                        //cout << "VELHAT: " << v_hat[0] << " "  << v_hat[1] << " " << v_hat[2] << endl;
-                        // cout << "DX: " << dx << " DY: " << dy << endl;
-                        // cout << "X_HAT: " << x_hat[0] << " "  << x_hat[1] << " " << x_hat[2] << endl;
+                        
                         // Z x X = Y
                         array<double,3> y_new;
-                        y_new[0]=n_hat[1]*v_hat[2]-n_hat[2]*v_hat[1];
-                        y_new[1]=n_hat[2]*v_hat[0]-n_hat[0]*v_hat[2];
-                        y_new[2]=n_hat[0]*v_hat[1]-n_hat[1]*v_hat[0];
-
-                        // TODO: HOW TO MAKE THIS WORK!!!!
+                        y_new = crossProduct(n_hat,v_hat);
+                    
                         array<double,4> q_out;
-                        rotationToQuaternion(x_hat,y_hat,n_hat,q_out);
-                        // rotationToQuaternion(v_hat,y_new,n_hat,q_out);
-                        constraint_frame.x = q_out[0];
-                        constraint_frame.y = q_out[1];
-                        constraint_frame.z = q_out[2];
-                        constraint_frame.w = q_out[3];
+                        //rotationToQuaternion(x_hat,y_hat,n_hat,q_out);
+                        rotationToQuaternion(v_hat,y_new,n_hat,q_out);
+                        constraint_frame.x = q_out[0]; constraint_frame.y = q_out[1]; constraint_frame.z = q_out[2]; constraint_frame.w = q_out[3];
                     }
-
 
                     // Orientation is now just the identity in the constraint frame
                     // NOTE: THIS IS OVERWRITING AKA MAKING THE DMPs above USELESS!
@@ -693,10 +724,10 @@ void replay_demo(ros::Publisher selection_vector_pub, ros::Publisher wrench_goal
                     
                 }
 
-                //cout << "X:" << x_conv << " Y:" << y_conv << " Z:" << z_conv << endl;
                 // Compute the new velocity factor and
                 // Update the time variable
                 // TODO: Maybe use a covariance to try and remove units?
+                // TODO: this should be all kinematic directions at the least?
                 double dir_x = dx/sqrt(dx*dx+dy*dy);
                 double dir_y = dy/sqrt(dx*dx+dy*dy);
                 double dp_in_dir = dir_x*20*dmp_fx + dir_y*20*dmp_fy;
@@ -707,7 +738,6 @@ void replay_demo(ros::Publisher selection_vector_pub, ros::Publisher wrench_goal
                 }
                 delta_s = 1.0+dp_in_dir;
                 s+=delta_s;
-                //cout << "S:" << s << endl;
             }
 
             /////////////////////////////////////////////////////////
@@ -761,16 +791,9 @@ void replay_demo(ros::Publisher selection_vector_pub, ros::Publisher wrench_goal
             //cout << " DEF X:" << sel_gains[(int) selection.x]*dmp_fx << " Y:" << sel_gains[(int) selection.y]*dmp_fy << " F:" << sel_gains[(int) selection.z]*dmp_fz << endl;
 
             // Publish everything to the simulation
-            ft.force.x = x_conv;
-            ft.force.y = y_conv;
-            ft.force.z = z_conv;
-            pose.position.x = x_conv;
-            pose.position.y = y_conv;
-            pose.position.z = z_conv;
-            pose.orientation.x = qx;
-            pose.orientation.y = qy;
-            pose.orientation.z = qz;
-            pose.orientation.w = qw;
+            ft.force.x = x_conv; ft.force.y = y_conv; ft.force.z = z_conv;
+            pose.position.x = x_conv; pose.position.y = y_conv; pose.position.z = z_conv;
+            pose.orientation.x = qx; pose.orientation.y = qy; pose.orientation.z = qz; pose.orientation.w = qw;
             selection_vector_pub.publish(selection);
             constraint_frame_pub.publish(constraint_frame);
             pose_goal_pub.publish(pose);
@@ -784,33 +807,10 @@ void replay_demo(ros::Publisher selection_vector_pub, ros::Publisher wrench_goal
             }
         }
 
+        // AFTER THE DMP IS COMPLETE, look at whether transitions are needed
         // Combat the transition discontinuities if there is still a transition left
-        if((ii+1)<selections.size()){
+        calculateDMPTransition(ii,transition_x, transition_y, transition_z, selections, starting_points);
 
-            // Situations - same requires direct addition
-            // position to force -> nothing
-            // force to position -> nothing
-            // position to manifold (HARD!)
-            // manifold to position (easier!)
-
-            if (selections[ii][2]==0.0 && selections[ii+1][2]==1.0){
-                // On the manifold currently and coming off it!
-                // get actual pose since it will be different from stiffness and hybrid
-                transition_x = (actual_pos[0]-starting_points[ii+1][0]);
-                transition_y = (actual_pos[1]-starting_points[ii+1][1]);
-                transition_z = (actual_pos[2]-starting_points[ii+1][2]);
-            }
-
-            else{
-                transition_x = 0.0;
-                transition_y = 0.0;
-                transition_z = 0.0;
-            }
-
-            // transition_x = (x-attractor_points[ii][0])*(double)(selections[ii][0]==selections[ii+1][0]);
-            // transition_y = (y-attractor_points[ii][1])*(double)(selections[ii][1]==selections[ii+1][1]);
-            // transition_z = (z-attractor_points[ii][2])*(double)(selections[ii][2]==selections[ii+1][2]);
-        }
     }
 
     replay_str.data = "end";
