@@ -179,7 +179,7 @@ array<double,3> getFirstSurfaceVelocity(array<double,7> attractor_point, array<d
  * a quaternion of the form x,y,z,w
  */
 void rotationToQuaternion(array<double,3> x_hat, array<double,3> y_hat, array<double,3>z_hat, array<double,4> &q_out){
-    // Using simple formulation found here: https://d3cw3dd2w32x2b.cloudfront.net/wp-content/uploads/2015/01/matrix-to-quat.pdf
+    // Using simple (non-optimal) formulation found here: https://d3cw3dd2w32x2b.cloudfront.net/wp-content/uploads/2015/01/matrix-to-quat.pdf
     // page 2
 
     double trace = x_hat[0] + y_hat[1] + z_hat[2];
@@ -335,9 +335,24 @@ void readDemo(vector<vector<array<double,7>>> &dmps,vector<array<double,3>> &sel
     dmpfile.close();
 }
 
-void replay_demo(ros::Publisher selection_vector_pub, ros::Publisher wrench_goal_pub, ros::Publisher pose_goal_pub, ros::Publisher pose_path_pub, ros::Publisher dmp_replay_pub, ros::Publisher constraint_frame_pub, ros::Publisher point_goal_pub, ros::Publisher force_gain_pub){
+void replay_demo(ros::Publisher pose_goal_pub, ros::NodeHandle n){
 
     std_msgs::String replay_str;
+    
+    // Publishers specifically used for replay
+    ros::Publisher selection_vector_pub = 
+        n.advertise<geometry_msgs::Vector3>("/panda/selection", 5);
+    ros::Publisher wrench_goal_pub = 
+        n.advertise<geometry_msgs::Wrench>("/panda/ee_wrench_goals", 5);
+    ros::Publisher pose_path_pub = 
+        n.advertise<geometry_msgs::Pose>("/panda/ee_path_goals", 5);    
+    ros::Publisher constraint_frame_pub = 
+        n.advertise<geometry_msgs::Quaternion>("/panda/constraintframe", 5);
+    ros::Publisher point_goal_pub = // Used to project the future path for the user TODO: actually
+        n.advertise<geometry_msgs::Pose>("/panda/ee_point_goals", 5);
+    ros::Publisher dmp_replay_pub = 
+        n.advertise<std_msgs::String>("/dmp/replay", 5);
+
 
     // All of the data from the DMPs are stored in vectors
     vector<vector<array<double,7>>> dmps;
@@ -357,6 +372,7 @@ void replay_demo(ros::Publisher selection_vector_pub, ros::Publisher wrench_goal
     readDemo(dmps,selections,starting_points,attractor_points,surfaces);
 
     // Action: Tell the robot the replay is starting over
+    // In case something needs to change or be reset in the simulation state
     replay_str.data = "reset";
     dmp_replay_pub.publish(replay_str);
 
@@ -464,7 +480,6 @@ void replay_demo(ros::Publisher selection_vector_pub, ros::Publisher wrench_goal
                 // cout << "RV " << y_hat[0] << " " << y_hat[1] << " " << y_hat[2] << endl;
                 // cout << "NHAT " << n_hat[0] << " " << n_hat[1] << " " << n_hat[2] << endl;
 
-                force_gain_pub.publish(0.0001);
                 selection_vector_pub.publish(selection);
                 constraint_frame_pub.publish(constraint_frame);
                 pose_goal_pub.publish(pose);
@@ -491,8 +506,7 @@ void replay_demo(ros::Publisher selection_vector_pub, ros::Publisher wrench_goal
                     ros::spinOnce();
 
                 }
-                force_gain_pub.publish(0.003);
-                cout << "FORCE ONLOADING COMPLETE" << endl;
+                cout << "Force Onloading Complete..." << endl;
             }
             previous_dmp_no_contact = false;
         }
@@ -1039,21 +1053,6 @@ int main(int argc, char **argv) {
     ros::Publisher pose_goal_pub = 
         n.advertise<geometry_msgs::Pose>("/panda/ee_pose_goals", 5);
 
-     ros::Publisher pose_path_pub = 
-        n.advertise<geometry_msgs::Pose>("/panda/ee_path_goals", 5);    
-
-    ros::Publisher wrench_goal_pub = 
-        n.advertise<geometry_msgs::Wrench>("/panda/ee_wrench_goals", 5);
-
-    ros::Publisher selection_vector_pub = 
-        n.advertise<geometry_msgs::Vector3>("/panda/selection", 5);
-
-    ros::Publisher constraint_frame_pub = 
-        n.advertise<geometry_msgs::Quaternion>("/panda/constraintframe", 5);
-    
-    ros::Publisher force_gain_pub = 
-        n.advertise<std_msgs::Float64>("/panda/forcegain", 5);
-
     ros::Publisher command_pub = 
         n.advertise<std_msgs::String>("/panda/commands", 5);
     
@@ -1069,11 +1068,6 @@ int main(int argc, char **argv) {
     ros::Publisher gripper_toggle = 
         n.advertise<std_msgs::String>("/gripperToggle", 1);
 
-    ros::Publisher dmp_replay_pub = 
-        n.advertise<std_msgs::String>("/dmp/replay", 5);
-
-    ros::Publisher point_goal_pub = 
-        n.advertise<geometry_msgs::Pose>("/panda/ee_point_goals", 5);
 
     bool last_buttons[4] = {false, false, false, false};
     bool clutch = false;
@@ -1183,8 +1177,8 @@ int main(int argc, char **argv) {
         if(buttons[0]!=last_buttons[0]){
             // Run Replay
             if(buttons[0]==1){
-                cout << "RUN THE REPLAY" << endl;
-                replay_demo(selection_vector_pub,wrench_goal_pub, pose_goal_pub, pose_path_pub, dmp_replay_pub,constraint_frame_pub, point_goal_pub,force_gain_pub);
+                cout << "Running the replay." << endl;
+                replay_demo(pose_goal_pub, n);
             }
         }
 
