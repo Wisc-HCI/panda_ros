@@ -160,6 +160,35 @@ array<double,3> vectorIntoConstraintFrame(double x, double y, double z, double q
 }
 
 /**
+ * Rotates a vector OUT OF a frame (represented as a quaternion)
+ */
+array<double,3> vectorOutOfConstraintFrame(double x, double y, double z, double qx, double qy, double qz, double qw){
+    // Make sure the quaternion is normalized (otherwise, there will be skew)
+    double mag = sqrt(qx*qx+qy*qy+qz*qz+qw*qw);
+    qx = qx/mag; qy = qy/mag; qz = qz/mag; qw = qw/mag;
+
+    // Calculate the rotation matrix
+    double r11=1.0-2*qy*qy-2*qz*qz;
+    double r12=2*qx*qy-2*qz*qw;
+    double r13=2*qx*qz+2*qy*qw;
+    double r21=2*qx*qy+2*qz*qw;
+    double r22=1.0-2*qx*qx-2*qz*qz;
+    double r23=2*qy*qz-2*qx*qw;
+    double r31=2*qx*qz-2*qy*qw;
+    double r32=2*qy*qz+2*qx*qw;
+    double r33=1.0-2*qx*qx-2*qy*qy;
+
+    // Rotate the vector out of the frame
+    // by multiplying by the transpose of
+    // the rotation matrix
+    array<double,3> rotated_vector;
+    rotated_vector[0] = r11*x+r21*y+r31*z;
+    rotated_vector[1] = r12*x+r22*y+r32*z;
+    rotated_vector[2] = r13*x+r23*y+r33*z;
+    return rotated_vector;
+}
+
+/**
  * This function takes in all of the relevant parameters for a particular DMP and will figure out the
  * starting velocity. This is used for setting the tool orientation as it approaches the surface.
  */
@@ -254,9 +283,11 @@ array<double,3> map_deformation_input(int method, double dmp_fx,double dmp_fy,do
         if(dx!=0.0 || dy != 0.0)
         {
             manifold_vel_dir = {dx, dy, 0.0};
-            double mag = dx*dx+dy*dy;
+            double mag = sqrt(dx*dx+dy*dy);
             manifold_vel_dir[0] = manifold_vel_dir[0]/mag; manifold_vel_dir[1] = manifold_vel_dir[1]/mag;
         }
+
+        //cout << "MD:" << manifold_vel_dir[0]  << " " << manifold_vel_dir[1] << " " << manifold_vel_dir[2] << endl;
 
         array<double,3> y_temp;
         array<double,3> z_hat = {0.0, 0.0, 1.0};
@@ -265,7 +296,7 @@ array<double,3> map_deformation_input(int method, double dmp_fx,double dmp_fy,do
         array<double,4> q_out_rc;
         rotationToQuaternion(manifold_vel_dir, y_temp,z_hat, q_out_rc);
         array<double,3> falconRotation = vectorIntoConstraintFrame(dmp_fx,dmp_fy,dmp_fz,0.0, 0.0, 0.7071, 0.7071);
-        deformation_rotation = vectorIntoConstraintFrame(falconRotation[0], falconRotation[1], falconRotation[2], q_out_rc[0], q_out_rc[1], q_out_rc[2], q_out_rc[3]);
+        deformation_rotation = vectorOutOfConstraintFrame(falconRotation[0], falconRotation[1], falconRotation[2], q_out_rc[0], q_out_rc[1], q_out_rc[2], q_out_rc[3]);
         return deformation_rotation;
     }
 
@@ -326,8 +357,6 @@ void forceOnloading(int ii, geometry_msgs::Vector3 selection, vector<array<doubl
 
     // Calculate the starting point for orientation based on the first velocity of the DMP
     array<double,3> vel_hat = getFirstSurfaceVelocity(attractor_points[ii],starting_points[ii],dmps[ii][0][0],dmps[ii][0][1],x_hat,y_hat);
-    
-    cout << "VELHAT: " << vel_hat[0] << " "  << vel_hat[1] << " " << vel_hat[2] << endl;
 
     // Z (normal) x X (vel) = +Y
     array<double,3> y_new = crossProduct(n_hat,vel_hat);
@@ -744,6 +773,13 @@ void replay_demo(ros::Publisher pose_goal_pub, ros::NodeHandle n){
             dqw = dqw + ddqw*0.01*delta_s;
             qw = qw+dqw*0.01*delta_s;
 
+            
+            
+
+            ////////////////////////////////////////////
+            // Hybrid Control For Arbitrary Surfaces  //
+            ////////////////////////////////////////////
+
             // If the mode is interaction, then a few things need to be converted:
             // 1. X and Y are the U,V of the parameterized surface and need to be
             // converted back to the X,Y,Z
@@ -752,11 +788,6 @@ void replay_demo(ros::Publisher pose_goal_pub, ros::NodeHandle n){
             // 3. Need to set the constraint frame based on the surface normal
             // 4. Rotate the X,Y,Z and orientation into the constraint frame
             x_conv = x; y_conv = y; z_conv = z;
-            
-
-            ////////////////////////////////////////////
-            // Hybrid Control For Arbitrary Surfaces  //
-            ////////////////////////////////////////////
             if(selection.z == 0)
             {
                 // Calculate the constraint frame
@@ -789,8 +820,8 @@ void replay_demo(ros::Publisher pose_goal_pub, ros::NodeHandle n){
                     // change the constraint frame
                     v_hat[0]=v_hat[0]/v_mag; v_hat[1]=v_hat[1]/v_mag; v_hat[2]=v_hat[2]/v_mag;
                     //bidirectional_checker(v_hat,prev_v_hat); //check if it should be flipped
-                    cout << "vhat: " << v_hat[0] <<  " " << v_hat[1] << " " << v_hat[2] << endl;
-                    cout << "p_vhat: " << prev_v_hat[0] <<  " " << prev_v_hat[1] << " " << prev_v_hat[2] << endl;
+                    //cout << "vhat: " << v_hat[0] <<  " " << v_hat[1] << " " << v_hat[2] << endl;
+                    //cout << "p_vhat: " << prev_v_hat[0] <<  " " << prev_v_hat[1] << " " << prev_v_hat[2] << endl;
                     prev_v_hat[0] = v_hat[0]; prev_v_hat[1] = v_hat[1]; prev_v_hat[2] = v_hat[2]; 
 
                     // Z x X = Y
@@ -818,21 +849,24 @@ void replay_demo(ros::Publisher pose_goal_pub, ros::NodeHandle n){
             // Update the time variable
             // TODO: Maybe use a covariance to try and remove units?
             // TODO: this should be all kinematic directions at the least?
+            // TODO: get to the point where the deformation is one-normalized so things are less arbitrarily scaled
             double dir_x = dx/sqrt(dx*dx+dy*dy);
             double dir_y = dy/sqrt(dx*dx+dy*dy);
-            double dp_in_dir = dir_x*20*dmp_fx + dir_y*20*dmp_fy;
+            double dp_in_dir = dir_x*20*rotated_deformation[0] + dir_y*20*rotated_deformation[1];
             
             if(dp_in_dir > 0)
             {
-                dp_in_dir=0.0; // only allow slowing down
+                dp_in_dir = 0.0; // only allow slowing down
             }
+
             delta_s = 1.0+dp_in_dir;
             s+=delta_s;
+
+            cout << "DELTAS: " << delta_s << " DIRX:"<< dir_x << " DIRY:" << dir_y << endl;
 
             //cout << " DEF X:" << sel_gains[(int) selection.x]*dmp_fx << " Y:" << sel_gains[(int) selection.y]*dmp_fy << " F:" << sel_gains[(int) selection.z]*dmp_fz << endl;
 
             // Publish everything to the simulation
-            cout << "Z:" << z_conv << endl;
             ft.force.x = x_conv; ft.force.y = y_conv; ft.force.z = z_conv;
             pose.position.x = x_conv; pose.position.y = y_conv; pose.position.z = z_conv;
             pose.orientation.x = qx; pose.orientation.y = qy; pose.orientation.z = qz; pose.orientation.w = qw;
