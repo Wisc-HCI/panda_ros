@@ -72,6 +72,20 @@ array<bool,4> getButtons(){
 }
 
 /**
+ * TODO: fill this out
+ */
+void bidirectional_checker(array<double,3> &vec, array<double,3> &prev_vec){
+    // Check if velocity should be flipped (tool goes both ways)
+    // TODO: change to a function
+    double sign = prev_vec[0]*vec[0] +  prev_vec[1]*vec[1] +  prev_vec[2]*vec[2];
+    cout << "SIGN:" << sign << endl;
+    if(sign<0.0){
+        vec[0] = -vec[0]; vec[1] = -vec[1]; vec[2] = -vec[2]; 
+    }
+
+}
+
+/**
  * Determines whether a transition should occur to the next DMP based on residual "Error"
   from the deformations
 
@@ -155,7 +169,7 @@ array<double,3> getFirstSurfaceVelocity(array<double,7> attractor_point, array<d
     double k=50;
     array<double,3> vel_hat;
 
-    // These next 2 are equivalent to calculating the first velocity in the DMP ignoring the deformation and damping (since the velocity is initial 0)
+    // These next 2 are equivalent to calculating the first velocity in the DMP ignoring the deformation and damping (since the velocity is initially 0)
 
     // Calculate vel-U direction
     double ddu = k*(attractor_point[0]-starting_point[0])+dmp_u;
@@ -250,7 +264,8 @@ array<double,3> map_deformation_input(int method, double dmp_fx,double dmp_fy,do
 
         array<double,4> q_out_rc;
         rotationToQuaternion(manifold_vel_dir, y_temp,z_hat, q_out_rc);
-        deformation_rotation = vectorIntoConstraintFrame(dmp_fx, dmp_fy, dmp_fz, q_out_rc[0], q_out_rc[1], q_out_rc[2], q_out_rc[3]);
+        array<double,3> falconRotation = vectorIntoConstraintFrame(dmp_fx,dmp_fy,dmp_fz,0.0, 0.0, 0.7071, 0.7071);
+        deformation_rotation = vectorIntoConstraintFrame(falconRotation[0], falconRotation[1], falconRotation[2], q_out_rc[0], q_out_rc[1], q_out_rc[2], q_out_rc[3]);
         return deformation_rotation;
     }
 
@@ -625,6 +640,8 @@ void replay_demo(ros::Publisher pose_goal_pub, ros::NodeHandle n){
         double dx_imp = 0.0, dy_imp=0.0, dz_imp=0.0;
         double x_imp = starting_points[ii][0], y_imp=starting_points[ii][1], z_imp=starting_points[ii][2];
         double x_def = 0.0, y_def=0.0, z_def=0.0;
+
+        array<double,3> prev_v_hat = {0.0, 0.0, 0.0};
         
         double s = 0; // phase variable used for time
         double delta_s = 1.0;
@@ -650,195 +667,172 @@ void replay_demo(ros::Publisher pose_goal_pub, ros::NodeHandle n){
             // Force mode gain, Position mode gain
             std::array<double, 2> sel_gains = {3000, 250}; //150
 
-            bool dmp_integration=true;
-
-            /////////////////////////////////////////////////////////
-            // DMP Integration Method                              //
-            /////////////////////////////////////////////////////////
             geometry_msgs::Quaternion constraint_frame;
             constraint_frame.x=0.0; constraint_frame.y=0.0; constraint_frame.z=0.0; constraint_frame.w=1.0;
             double x_conv, y_conv, z_conv;
 
-            if(dmp_integration)
-            {
-                // TAKE THIS OUT - BROKEN FALCON
-                // dmp_fx = 0.0;
-                // dmp_fy = 0.0;
-                // dmp_fz = 0.0;
-                
-                ////////////////////////////////////////////////////////////////
-                //      Deformation input mapping                             //
-                ////////////////////////////////////////////////////////////////
-                // 1 - Task Frame
-                // 2 - Velocity Frame
-                int input_mapping_method=1;
-                array<double,3> rotated_deformation = map_deformation_input(input_mapping_method,dmp_fx,dmp_fy,dmp_fz,dx,dy,dz);
-                
-
-                ////////////////////////////////////////////////////////////////
-                //      Calculate New DMP values                              //
-                ////////////////////////////////////////////////////////////////
-
-                // Calculate New X (State 1)
-                ddx = k*(attractor_points[ii][0]-x)-b*dx+dmp_x+sel_gains[(int) selection.x]*dmp_scaling_x*rotated_deformation[0];
-                dx = dx + ddx*0.01*delta_s;
-                x = x+dx*0.01*delta_s;
-
-                // Calculate New Y (State 2)
-                ddy = k*(attractor_points[ii][1]-y)-b*dy+dmp_y+sel_gains[(int) selection.y]*dmp_scaling_y*rotated_deformation[1];
-                dy = dy + ddy*0.01*delta_s;
-                y = y+dy*0.01*delta_s;
-
-                // Calculate New Z (State 3)
-                ddz = k*(attractor_points[ii][2]-z)-b*dz+dmp_z+sel_gains[(int) selection.z]*dmp_scaling_z*rotated_deformation[2];
-                dz = dz + ddz*0.01*delta_s;
-                z = z+dz*0.01*delta_s;
-
-
-                ////////////////////////////////////////////////
-                // Calculate the orientation - NO DEFORMATIONS /
-                ////////////////////////////////////////////////
-                ddqx = k*(attractor_points[ii][3]-qx)-b*dqx;
-                dqx = dqx + ddqx*0.01*delta_s;
-                qx = qx+dqx*0.01*delta_s;
-                ddqy = k*(attractor_points[ii][4]-qy)-b*dqy;
-                dqy = dqy + ddqy*0.01*delta_s;
-                qy = qy+dqy*0.01*delta_s;
-                ddqz = k*(attractor_points[ii][5]-qz)-b*dqz;
-                dqz = dqz + ddqz*0.01*delta_s;
-                qz = qz+dqz*0.01*delta_s;
-                ddqw = k*(attractor_points[ii][6]-qw)-b*dqw;
-                dqw = dqw + ddqw*0.01*delta_s;
-                qw = qw+dqw*0.01*delta_s;
-
-                // If the mode is interaction, then a few things need to be converted:
-                // 1. X and Y are the U,V of the parameterized surface and need to be
-                // converted back to the X,Y,Z
-                // 2. The orientation should be set to be the surface normal for the
-                // given U and V
-                // 3. Need to set the constraint frame based on the surface normal
-                // 4. Rotate the X,Y,Z and orientation into the constraint frame
-                x_conv = x; y_conv = y; z_conv = z;
-                
-                if(selection.z == 0)
-                {
-                    // Calculate the constraint frame
-                    array<double,3> r = {0.0, 0.0, 0.0};
-                    array<double,3> n_hat = {0.0, 0.0, 0.0};
-                    array<double,3> y_hat;
-                    array<double,3> x_hat;
-                    curr_surface.calculateSurfacePoint(x,y,r,n_hat,x_hat,y_hat);
-                    
-                    //cout << "X: " << x << " Y:" << y << endl;
-                    cout << "R: " << r[0] << "," << r[1] << "," << r[2] << endl;
-                    geometry_msgs::Pose point;
-                    point.position.x = r[0];
-                    point.position.y = r[1];
-                    point.position.z = r[2];
-                    point_goal_pub.publish(point);
-
-                    // Using the velocity of x and y (u and v), calculate the time
-                    // derivative of the surface (i.e., vector-valued function)
-                    array<double,3> v_hat;
-                    v_hat[0]=x_hat[0]*dx+y_hat[0]*dy; v_hat[1]=x_hat[1]*dx+y_hat[1]*dy; v_hat[2]=x_hat[2]*dx+y_hat[2]*dy;
-                    double v_mag = sqrt(v_hat[0]*v_hat[0] + v_hat[1]*v_hat[1] + v_hat[2]*v_hat[2]);
-                    
-                    // If the velocity direction is non-zero, re-align the constraint frame
-                    // If it is zero, it will keep its previous value
-                    if(v_mag>0.0)
-                    {
-                        // change the constraint frame
-                        v_hat[0]=v_hat[0]/v_mag; v_hat[1]=v_hat[1]/v_mag; v_hat[2]=v_hat[2]/v_mag;
-                        
-                        // Z x X = Y
-                        array<double,3> y_new;
-                        y_new = crossProduct(n_hat,v_hat);
-                    
-                        array<double,4> q_out;
-                        //rotationToQuaternion(x_hat,y_hat,n_hat,q_out);
-                        rotationToQuaternion(v_hat,y_new,n_hat,q_out);
-                        constraint_frame.x = q_out[0]; constraint_frame.y = q_out[1]; constraint_frame.z = q_out[2]; constraint_frame.w = q_out[3];
-                    }
-
-                    // Orientation is now just the identity in the constraint frame
-                    // NOTE: THIS IS OVERWRITING AKA MAKING THE DMPs above USELESS!
-                    qx = 0.0; qy = 0.0; qz = 0.0; qw = 1.0;
-
-                    // Convert the XYZ into the constraint frame
-                    array<double,3> xyz_conv = vectorIntoConstraintFrame(r[0], r[1], r[2], constraint_frame.x, constraint_frame.y, constraint_frame.z, constraint_frame.w);
-                    x_conv = xyz_conv[0];
-                    y_conv = xyz_conv[1];
-                    z_conv = z; // Z-direction is the force (hybrid control)
-                    
-                }
-
-                // Compute the new velocity factor and
-                // Update the time variable
-                // TODO: Maybe use a covariance to try and remove units?
-                // TODO: this should be all kinematic directions at the least?
-                double dir_x = dx/sqrt(dx*dx+dy*dy);
-                double dir_y = dy/sqrt(dx*dx+dy*dy);
-                double dp_in_dir = dir_x*20*dmp_fx + dir_y*20*dmp_fy;
-                
-                if(dp_in_dir > 0)
-                {
-                    dp_in_dir=0.0; // only allow slowing down
-                }
-                delta_s = 1.0+dp_in_dir;
-                s+=delta_s;
-            }
-
-            /////////////////////////////////////////////////////////
-            // Impedance Method                                    //
-            /////////////////////////////////////////////////////////
-
-            else{
-                // Still uses DMP, but the deformation is treated as an
-                // overdamped deviation from the current state variable
-                // TODO: make that true
-
-                // Force mode gain, Position mode gain
-                std::array<double, 2> imp_gains = {200, 5};
-
-                // Calculate New X (State 1)
-                ddx = k*(attractor_points[ii][0]-x_imp)-b*dx+dmp_x;
-                dx = dx + ddx*0.01*delta_s;
-                x_imp = x_imp+dx*0.01*delta_s;
-                
-                ddx_imp = k*(-x_def)-b*dx_imp+sel_gains[(int) selection.x]*dmp_fx;
-                dx_imp = dx_imp + ddx_imp*0.01*delta_s;
-                x_def = x_def + dx_imp*0.01*delta_s;
-
-                x = x_imp+x_def; 
-
-                // Calculate New Y (State 2)
-                ddy = k*(attractor_points[ii][1]-y_imp)-b*dy+dmp_y;
-                dy = dy + ddy*0.01*delta_s;
-                y_imp = y_imp+dy*0.01*delta_s;
-                
-                ddy_imp = k*(-y_def)-b*dy_imp+sel_gains[(int) selection.y]*dmp_fy;
-                dy_imp = dy_imp + ddy_imp*0.01*delta_s;
-                y_def = y_def + dy_imp*0.01*delta_s;
-
-                y = y_imp+y_def; 
-
-                // Calculate New Z (State 3)
-                ddz = k*(attractor_points[ii][2]-z_imp)-b*dz+dmp_z;
-                dz = dz + ddz*0.01*delta_s;
-                z_imp = z_imp+dz*0.01*delta_s;
-                
-                ddz_imp = k*(-z_def)-b*dz_imp+sel_gains[(int) selection.z]*dmp_fz;
-                dz_imp = dz_imp + ddz_imp*0.01*delta_s;
-                z_def = z_def + dz_imp*0.01*delta_s;
-
-                z = z_imp+z_def; 
-                
-                s+=1; // No variable time scaling
-            }
+            // TAKE THIS OUT - BROKEN FALCON
+            // dmp_fx = 0.0;
+            // dmp_fy = 0.0;
+            // dmp_fz = 0.0;
             
+            ////////////////////////////////////////////////////////////////
+            //      Deformation input mapping                             //
+            ////////////////////////////////////////////////////////////////
+            // 1 - Task Frame
+            // 2 - Velocity Frame
+            int input_mapping_method=2;
+            array<double,3> rotated_deformation = map_deformation_input(input_mapping_method,dmp_fx,dmp_fy,dmp_fz,dx,dy,dz);
+
+            /////////////////////////////////////////////////////////////////
+            //      Deformation scaling                                    //
+            /////////////////////////////////////////////////////////////////
+
+            // TODO: collisions, safety, adaptive mapping
+            
+            ////////////////////////////////////////////////////////////////
+            //      Calculate New DMP values                              //
+            ////////////////////////////////////////////////////////////////
+
+            // Calculate New X (State 1)
+            ddx = k*(attractor_points[ii][0]-x_imp)-b*dx+dmp_x;
+            dx = dx + ddx*0.01*delta_s;
+            x_imp = x_imp+dx*0.01*delta_s;
+            
+            ddx_imp = k*(-x_def)-b*dx_imp+sel_gains[(int) selection.x]*rotated_deformation[0];
+            dx_imp = dx_imp + ddx_imp*0.01*delta_s;
+            x_def = x_def + dx_imp*0.01*delta_s;
+
+            x = x_imp+x_def; 
+
+            // Calculate New Y (State 2)
+            ddy = k*(attractor_points[ii][1]-y_imp)-b*dy+dmp_y;
+            dy = dy + ddy*0.01*delta_s;
+            y_imp = y_imp+dy*0.01*delta_s;
+            
+            ddy_imp = k*(-y_def)-b*dy_imp+sel_gains[(int) selection.y]*rotated_deformation[1];
+            dy_imp = dy_imp + ddy_imp*0.01*delta_s;
+            y_def = y_def + dy_imp*0.01*delta_s;
+
+            y = y_imp+y_def; 
+
+            // Calculate New Z (State 3)
+            ddz = k*(attractor_points[ii][2]-z_imp)-b*dz+dmp_z;
+            dz = dz + ddz*0.01*delta_s;
+            z_imp = z_imp+dz*0.01*delta_s;
+            
+            ddz_imp = k*(-z_def)-b*dz_imp+sel_gains[(int) selection.z]*rotated_deformation[2];
+            dz_imp = dz_imp + ddz_imp*0.01*delta_s;
+            z_def = z_def + dz_imp*0.01*delta_s;
+
+            z = z_imp+z_def; 
+
+
+            ////////////////////////////////////////////////
+            // Calculate the orientation - NO DEFORMATIONS /
+            ////////////////////////////////////////////////
+            ddqx = k*(attractor_points[ii][3]-qx)-b*dqx;
+            dqx = dqx + ddqx*0.01*delta_s;
+            qx = qx+dqx*0.01*delta_s;
+            ddqy = k*(attractor_points[ii][4]-qy)-b*dqy;
+            dqy = dqy + ddqy*0.01*delta_s;
+            qy = qy+dqy*0.01*delta_s;
+            ddqz = k*(attractor_points[ii][5]-qz)-b*dqz;
+            dqz = dqz + ddqz*0.01*delta_s;
+            qz = qz+dqz*0.01*delta_s;
+            ddqw = k*(attractor_points[ii][6]-qw)-b*dqw;
+            dqw = dqw + ddqw*0.01*delta_s;
+            qw = qw+dqw*0.01*delta_s;
+
+            // If the mode is interaction, then a few things need to be converted:
+            // 1. X and Y are the U,V of the parameterized surface and need to be
+            // converted back to the X,Y,Z
+            // 2. The orientation should be set to be the surface normal for the
+            // given U and V
+            // 3. Need to set the constraint frame based on the surface normal
+            // 4. Rotate the X,Y,Z and orientation into the constraint frame
+            x_conv = x; y_conv = y; z_conv = z;
+            
+
+            ////////////////////////////////////////////
+            // Hybrid Control For Arbitrary Surfaces  //
+            ////////////////////////////////////////////
+            if(selection.z == 0)
+            {
+                // Calculate the constraint frame
+                array<double,3> r = {0.0, 0.0, 0.0};
+                array<double,3> n_hat = {0.0, 0.0, 0.0};
+                array<double,3> y_hat;
+                array<double,3> x_hat;
+                curr_surface.calculateSurfacePoint(x,y,r,n_hat,x_hat,y_hat);
+                
+                //cout << "X: " << x << " Y:" << y << endl;
+                //cout << "R: " << r[0] << "," << r[1] << "," << r[2] << endl;
+                geometry_msgs::Pose point;
+                point.position.x = r[0];
+                point.position.y = r[1];
+                point.position.z = r[2];
+                point_goal_pub.publish(point);
+
+                // Using the velocity of x and y (u and v), calculate the time
+                // derivative of the surface (i.e., vector-valued function)
+                array<double,3> v_hat;
+                v_hat[0]=x_hat[0]*dx+y_hat[0]*dy; v_hat[1]=x_hat[1]*dx+y_hat[1]*dy; v_hat[2]=x_hat[2]*dx+y_hat[2]*dy; // old velocity
+                //v_hat[0]=x_hat[0]*(dx+dx_imp)+y_hat[0]*(dy+dy_imp); v_hat[1]=x_hat[1]*(dx+dx_imp)+y_hat[1]*(dy+dy_imp); v_hat[2]=x_hat[2]*(dx+dx_imp)+y_hat[2]*(dy+dy_imp); // true velocity
+
+                double v_mag = sqrt(v_hat[0]*v_hat[0] + v_hat[1]*v_hat[1] + v_hat[2]*v_hat[2]);
+                
+                // If the velocity direction is non-zero, re-align the constraint frame
+                // If it is zero, it will keep its previous value
+                if(v_mag>0.0)
+                {
+                    // change the constraint frame
+                    v_hat[0]=v_hat[0]/v_mag; v_hat[1]=v_hat[1]/v_mag; v_hat[2]=v_hat[2]/v_mag;
+                    //bidirectional_checker(v_hat,prev_v_hat); //check if it should be flipped
+                    cout << "vhat: " << v_hat[0] <<  " " << v_hat[1] << " " << v_hat[2] << endl;
+                    cout << "p_vhat: " << prev_v_hat[0] <<  " " << prev_v_hat[1] << " " << prev_v_hat[2] << endl;
+                    prev_v_hat[0] = v_hat[0]; prev_v_hat[1] = v_hat[1]; prev_v_hat[2] = v_hat[2]; 
+
+                    // Z x X = Y
+                    array<double,3> y_new;
+                    y_new = crossProduct(n_hat,v_hat);
+                
+                    array<double,4> q_out;
+                    rotationToQuaternion(v_hat,y_new,n_hat,q_out);
+                    constraint_frame.x = q_out[0]; constraint_frame.y = q_out[1]; constraint_frame.z = q_out[2]; constraint_frame.w = q_out[3];
+                }
+
+                // Orientation is now just the identity in the constraint frame
+                // NOTE: This is overwriting the DMP for orientation above!
+                qx = 0.0; qy = 0.0; qz = 0.0; qw = 1.0;
+
+                // Convert the XYZ into the constraint frame
+                array<double,3> xyz_conv = vectorIntoConstraintFrame(r[0], r[1], r[2], constraint_frame.x, constraint_frame.y, constraint_frame.z, constraint_frame.w);
+                x_conv = xyz_conv[0];
+                y_conv = xyz_conv[1];
+                z_conv = z; // Z-direction is the force (hybrid control)
+                
+            }
+
+            // Compute the new velocity factor and
+            // Update the time variable
+            // TODO: Maybe use a covariance to try and remove units?
+            // TODO: this should be all kinematic directions at the least?
+            double dir_x = dx/sqrt(dx*dx+dy*dy);
+            double dir_y = dy/sqrt(dx*dx+dy*dy);
+            double dp_in_dir = dir_x*20*dmp_fx + dir_y*20*dmp_fy;
+            
+            if(dp_in_dir > 0)
+            {
+                dp_in_dir=0.0; // only allow slowing down
+            }
+            delta_s = 1.0+dp_in_dir;
+            s+=delta_s;
+
             //cout << " DEF X:" << sel_gains[(int) selection.x]*dmp_fx << " Y:" << sel_gains[(int) selection.y]*dmp_fy << " F:" << sel_gains[(int) selection.z]*dmp_fz << endl;
 
             // Publish everything to the simulation
+            cout << "Z:" << z_conv << endl;
             ft.force.x = x_conv; ft.force.y = y_conv; ft.force.z = z_conv;
             pose.position.x = x_conv; pose.position.y = y_conv; pose.position.z = z_conv;
             pose.orientation.x = qx; pose.orientation.y = qy; pose.orientation.z = qz; pose.orientation.w = qw;
