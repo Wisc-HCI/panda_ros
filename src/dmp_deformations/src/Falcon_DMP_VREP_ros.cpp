@@ -48,11 +48,9 @@ double dmp_fx, dmp_fy, dmp_fz;
 
 bool replay_active = false;
 
-// TODO: add these documentation tags for each file
-// This writes all of the state information to the open CSV file
 
 /**
- * Streams robot state data to an output file. This is used for when
+ * Streams robot state data to an output file (csv). This is used for when
  * the demonstration DMPs are learned from demonstration
  */
 void log_demonstration(double x, double y, double z, double fx, double fy, double fz){
@@ -159,10 +157,10 @@ array<double,3> getFirstSurfaceVelocity(array<double,7> attractor_point, array<d
 
     // These next 2 are equivalent to calculating the first velocity in the DMP ignoring the deformation and damping (since the velocity is initial 0)
 
-    // Calculate Vel-U direction
+    // Calculate vel-U direction
     double ddu = k*(attractor_point[0]-starting_point[0])+dmp_u;
 
-    // Calculate Vel-V direction
+    // Calculate vel-V direction
     double ddv = k*(attractor_point[1]-starting_point[1])+dmp_v;
 
     vel_hat[0] = r_u[0]*ddu+r_v[0]*ddv;
@@ -283,6 +281,85 @@ void falconVelocity() {
     last_falcon[2] = falconPos[2];
 
     last_falcon_updated = true;
+}
+
+/**
+ * TODO: fill this out
+ */
+void forceOnloading(int ii, geometry_msgs::Vector3 selection, vector<array<double,7>> starting_points, vector<array<double,7>> attractor_points, vector<vector<array<double,7>>> dmps, BSplineSurface curr_surface, ros::Publisher &selection_vector_pub, ros::Publisher &constraint_frame_pub, ros::Publisher pose_goal_pub, ros::Publisher wrench_goal_pub){
+    // Do force onloading with the first sample
+    cout << "Force Onloading Started..." << endl;
+    geometry_msgs::Wrench ft;
+    geometry_msgs::Pose pose;
+
+    ft.force.x = starting_points[ii][0];
+    ft.force.y = starting_points[ii][1];
+    ft.force.z = starting_points[ii][2];
+    pose.position.x = starting_points[ii][0];
+    pose.position.y = starting_points[ii][1];
+    pose.position.z = starting_points[ii][2];
+    
+    // TODO: FIX THIS!
+    pose.orientation.x = 0.0;
+    pose.orientation.y = 0.0;
+    pose.orientation.z = 0.0;
+    pose.orientation.w = 1.0;
+
+    // TODO - FIX THIS FIX THIS FIX THIS!!!!!
+    array<double,3> r, n_hat, y_hat, x_hat;
+    curr_surface.calculateSurfacePoint(starting_points[ii][0],starting_points[ii][1],r,n_hat,x_hat,y_hat);
+
+    // Calculate the starting point for orientation based on the first velocity of the DMP
+    array<double,3> vel_hat = getFirstSurfaceVelocity(attractor_points[ii],starting_points[ii],dmps[ii][0][0],dmps[ii][0][1],x_hat,y_hat);
+    
+    cout << "VELHAT: " << vel_hat[0] << " "  << vel_hat[1] << " " << vel_hat[2] << endl;
+
+    // Z (normal) x X (vel) = +Y
+    array<double,3> y_new = crossProduct(n_hat,vel_hat);
+
+    geometry_msgs::Quaternion constraint_frame; 
+    array<double,4> q_out;               
+    rotationToQuaternion(vel_hat,y_new,n_hat,q_out);
+    // rotationToQuaternion(x_hat,y_hat,n_hat,q_out);
+    constraint_frame.x = q_out[0]; constraint_frame.y = q_out[1]; constraint_frame.z = q_out[2]; constraint_frame.w = q_out[3];
+
+    // Convert the XYZ into the constraint frame
+    array<double,3> temp_vec = vectorIntoConstraintFrame(r[0],r[1],r[2],q_out[0],q_out[1],q_out[2],q_out[3]);
+    pose.position.x = temp_vec[0]; pose.position.y = temp_vec[1]; pose.position.z=temp_vec[2];
+
+    //cout << "CF: " << constraint_frame.x << " " << constraint_frame.y << " " << constraint_frame.z << " " << constraint_frame.w << endl;
+    //cout << "XYZ:" << pose.position.x << " " << pose.position.y << " " << x_hat[2]*r[0]+y_hat[2]*r[1]+n_hat[2]*r[2] << endl;
+    // cout << "RU " << x_hat[0] << " " << x_hat[1] << " " << x_hat[2] << endl;
+    // cout << "RV " << y_hat[0] << " " << y_hat[1] << " " << y_hat[2] << endl;
+    // cout << "NHAT " << n_hat[0] << " " << n_hat[1] << " " << n_hat[2] << endl;
+
+    selection_vector_pub.publish(selection);
+    constraint_frame_pub.publish(constraint_frame);
+    pose_goal_pub.publish(pose);
+    wrench_goal_pub.publish(ft);
+
+    // This loop monitors the robot which has started moving in the
+    // force direction until it achieves the desired force (within a tolerance)
+    bool proper_contact = false;
+    while(!proper_contact)
+    {
+        //proper_contact=true; // TODO: REMOVE/FIX THIS
+        double f_z_rotated = x_hat[2]*fx+y_hat[2]*fy+n_hat[2]*fz;
+        cout << "FZ: " << f_z_rotated << " " << starting_points[ii][2] << endl;
+        if(f_z_rotated<0.95*starting_points[ii][2] && f_z_rotated>1.05*starting_points[ii][2])
+        {
+            proper_contact = true;
+        }
+        
+        // This keeps the falcon in zero-displacement mode while this loop runs
+        for (int yy=0; yy<10; yy++)
+        {
+            falconVelocity();
+            usleep(1000);
+        }
+        ros::spinOnce();
+    }
+    cout << "Force Onloading Complete..." << endl;
 }
 
 
@@ -464,7 +541,6 @@ void replay_demo(ros::Publisher pose_goal_pub, ros::NodeHandle n){
     double dmp_y_collision = 0.0;
     double dmp_z_collision = 0.0;
 
-
     BSplineSurface curr_surface;
 
     // Loop through to replay the demo
@@ -481,88 +557,11 @@ void replay_demo(ros::Publisher pose_goal_pub, ros::NodeHandle n){
         selection.y =selections[ii][1];
         selection.z =selections[ii][2];
 
-        // If selection has force control, need force onloading
+        
         if((selection.x==0 || selection.y==0 || selection.z==0)){
             if(previous_dmp_no_contact){
-                
-                // Do force onloading with the first sample
-                cout << "Force Onloading Started..." << endl;
-                ft.force.x = starting_points[ii][0];
-                ft.force.y = starting_points[ii][1];
-                ft.force.z = starting_points[ii][2];
-                pose.position.x = starting_points[ii][0];
-                pose.position.y = starting_points[ii][1];
-                pose.position.z = starting_points[ii][2];
-                
-                // TODO: FIX THIS!
-                pose.orientation.x = 0.0;
-                pose.orientation.y = 0.0;
-                pose.orientation.z = 0.0;
-                pose.orientation.w = 1.0;
-            
-                bool proper_contact = false;
-
-                // TODO - FIX THIS FIX THIS FIX THIS!!!!!
-                array<double,3> r = {0.0, 0.0, 0.0};
-                array<double,3> n_hat = {0.0, 0.0, 0.0};
-                array<double,3> y_hat;
-                array<double,3> x_hat;
-                curr_surface.calculateSurfacePoint(starting_points[ii][0],starting_points[ii][1],r,n_hat,x_hat,y_hat);
-
-                // Calculate the starting point for orientation based on the first velocity of the DMP
-                array<double,3> vel_hat = getFirstSurfaceVelocity(attractor_points[ii],starting_points[ii],dmps[ii][0][0],dmps[ii][0][1],x_hat,y_hat);
-                
-                cout << "VELHAT: " << vel_hat[0] << " "  << vel_hat[1] << " " << vel_hat[2] << endl;
-
-                // Z (normal) x X (vel) = +Y
-                array<double,3> y_new = crossProduct(n_hat,vel_hat);
-
-                geometry_msgs::Quaternion constraint_frame; 
-                array<double,4> q_out;               
-                rotationToQuaternion(vel_hat,y_new,n_hat,q_out);
-                // rotationToQuaternion(x_hat,y_hat,n_hat,q_out);
-                constraint_frame.x = q_out[0];
-                constraint_frame.y = q_out[1];
-                constraint_frame.z = q_out[2];
-                constraint_frame.w = q_out[3];
-
-                // Convert the XYZ into the constraint frame
-                array<double,3> temp_vec = vectorIntoConstraintFrame(r[0],r[1],r[2],q_out[0],q_out[1],q_out[2],q_out[3]);
-                pose.position.x = temp_vec[0]; pose.position.y = temp_vec[1]; pose.position.z=temp_vec[2];
-
-                //cout << "CF: " << constraint_frame.x << " " << constraint_frame.y << " " << constraint_frame.z << " " << constraint_frame.w << endl;
-                //cout << "XYZ:" << pose.position.x << " " << pose.position.y << " " << x_hat[2]*r[0]+y_hat[2]*r[1]+n_hat[2]*r[2] << endl;
-                // cout << "RU " << x_hat[0] << " " << x_hat[1] << " " << x_hat[2] << endl;
-                // cout << "RV " << y_hat[0] << " " << y_hat[1] << " " << y_hat[2] << endl;
-                // cout << "NHAT " << n_hat[0] << " " << n_hat[1] << " " << n_hat[2] << endl;
-
-                selection_vector_pub.publish(selection);
-                constraint_frame_pub.publish(constraint_frame);
-                pose_goal_pub.publish(pose);
-                wrench_goal_pub.publish(ft);
-
-                // This loop monitors the robot which has started moving in the
-                // force direction until it achieves the desired force (within a tolerance)
-                while(!proper_contact)
-                {
-                    //proper_contact=true; // TODO: REMOVE/FIX THIS
-                    double f_z_rotated = x_hat[2]*fx+y_hat[2]*fy+n_hat[2]*fz;
-                    cout << "FZ: " << f_z_rotated << " " << starting_points[ii][2] << endl;
-                    if(f_z_rotated<0.95*starting_points[ii][2] && f_z_rotated>1.05*starting_points[ii][2])
-                    {
-                        proper_contact = true;
-                    }
-                    
-                    // This keeps the falcon in zero-displacement mode while this loop runs
-                    for (int yy=0; yy<10; yy++)
-                    {
-                        falconVelocity();
-                        usleep(1000);
-                    }
-                    ros::spinOnce();
-
-                }
-                cout << "Force Onloading Complete..." << endl;
+                // If selection has force control and is transitioning from no-contact, need force onloading
+                forceOnloading(ii,selection,starting_points,attractor_points,dmps,curr_surface,selection_vector_pub,constraint_frame_pub,pose_goal_pub,wrench_goal_pub);
             }
             previous_dmp_no_contact = false;
         }
