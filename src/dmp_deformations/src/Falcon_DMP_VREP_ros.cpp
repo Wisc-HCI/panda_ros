@@ -122,6 +122,93 @@ void calculateDMPTransition(double ii, double &transition_x, double &transition_
 }
 
 /**
+ * TODO: Calculate whether there is a chance for collision or something...?
+ */
+void calculateNearestContact(int ii,vector<array<double,3>> selections,vector<array<double,7>> starting_points,vector<array<double,7>> attractor_points,bool &dmp_x_limiting,bool &dmp_y_limiting,bool &dmp_z_limiting,double &dmp_x_collision, double &dmp_y_collision, double &dmp_z_collision){
+    
+    // This is used to contact the "Nearest contact condition" to consider
+    // minimizing the deformations
+    dmp_x_limiting = false;
+    dmp_y_limiting = false;
+    dmp_z_limiting = false;
+
+    // TODO: check over all this collision stuff WRT to the new rotations
+    // There is a next DMP, check for pos to force transition
+    if (ii+1<selections.size()){
+        if(selections[ii][0] ==1 && selections[ii+1][0]==0){
+            dmp_x_collision = attractor_points[ii][0];
+            dmp_x_limiting=true;
+        }
+        if(selections[ii][1] ==1 && selections[ii+1][1]==0){
+            dmp_y_collision = attractor_points[ii][1];
+            dmp_y_limiting=true;
+        }
+        if(selections[ii][2] ==1 && selections[ii+1][2]==0){
+            dmp_z_collision = attractor_points[ii][2];
+            dmp_z_limiting=true;
+        }
+    }
+
+    // There is a previous DMP, check for force to pos transition
+    if (ii>0){
+        if(selections[ii-1][0] ==0 && selections[ii][0]==1){
+            dmp_x_collision = starting_points[ii][0];
+            dmp_x_limiting=true;
+        }
+        if(selections[ii-1][1] ==0 && selections[ii][1]==1){
+            dmp_y_collision = starting_points[ii][1];
+            dmp_y_limiting=true;
+        }
+        if(selections[ii-1][2] ==0 && selections[ii][2]==1){
+            dmp_z_collision = starting_points[ii][2];
+            dmp_z_limiting=true;
+        }
+    }
+}
+
+/**
+ * Calculate the final deformation based on adaptive gains, collisions, workspace limits, etc.
+ */
+array<double,3> deformationScaling(array<double,3> &rotated_deformation, geometry_msgs::Vector3 selection, double x, double y){
+    
+    array<double,3> final_deformation;
+    double k= 50;
+
+    // Force mode gain, Position mode gain
+    std::array<double, 2> sel_gains = {3000, 250}; //150
+
+    // First scale based on the type of input
+    final_deformation[0] = sel_gains[(int) selection.x]*rotated_deformation[0];
+    final_deformation[1] = sel_gains[(int) selection.y]*rotated_deformation[1];
+    final_deformation[2] = sel_gains[(int) selection.z]*rotated_deformation[2];
+
+    // Parameterized surfaces have a range of 0<=x<=1
+    // Make sure it is not over the bounds (for hybrid control)
+    double minEdgePercent = 0.05;
+    if (selection.z == 0){
+        // Direction 1
+        if((final_deformation[0]/k+x)>(1.0-minEdgePercent)){
+            final_deformation[0] = k*((1.0-minEdgePercent)-x);
+        }
+        else if((final_deformation[0]/k+x)<(minEdgePercent)){
+            final_deformation[0] = k*((minEdgePercent)-x);
+        }
+
+        // Direction 2
+        if((final_deformation[1]/k+y)>(1.0-minEdgePercent)){
+            final_deformation[1] = k*((1.0-minEdgePercent)-y);
+        }
+        else if((final_deformation[1]/k+y)<(minEdgePercent)){
+            final_deformation[1] = k*((minEdgePercent)-y);
+        }
+
+    }
+
+    return final_deformation;
+
+}
+
+/**
  * Calculates the cross product between 2 3-D vectors
  */
 array<double,3> crossProduct(array<double,3> x, array<double,3> y){
@@ -545,7 +632,8 @@ void replay_demo(ros::Publisher pose_goal_pub, ros::NodeHandle n){
     
     // DMP Parameters - TODO: READ THESE FROM THE FILE
     double k=50;
-    double b=sqrt(2*k);
+    double b=sqrt(2*k); // ideal underdamped
+    double b_def=2*sqrt(k); // overdamped
     readDemo(dmps,selections,starting_points,attractor_points,surfaces);
 
     // Action: Tell the robot the replay is starting over
@@ -614,62 +702,25 @@ void replay_demo(ros::Publisher pose_goal_pub, ros::NodeHandle n){
             previous_dmp_no_contact = true;
         }
 
-        // This is used to contact the "Nearest contact condition" to consider
-        // minimizing the deformations
-        dmp_x_limiting = false;
-        dmp_y_limiting = false;
-        dmp_z_limiting = false;
-
-        // TODO: check over all this collision stuff WRT to the new rotations
-        // There is a next DMP, check for pos to force transition
-        if (ii+1<selections.size()){
-            if(selections[ii][0] ==1 && selections[ii+1][0]==0){
-                dmp_x_collision = attractor_points[ii][0];
-                dmp_x_limiting=true;
-            }
-            if(selections[ii][1] ==1 && selections[ii+1][1]==0){
-                dmp_y_collision = attractor_points[ii][1];
-                dmp_y_limiting=true;
-            }
-            if(selections[ii][2] ==1 && selections[ii+1][2]==0){
-                dmp_z_collision = attractor_points[ii][2];
-                dmp_z_limiting=true;
-            }
-        }
-
-        // There is a previous DMP, check for force to pos transition
-        if (ii>0){
-            if(selections[ii-1][0] ==0 && selections[ii][0]==1){
-                dmp_x_collision = starting_points[ii][0];
-                dmp_x_limiting=true;
-            }
-            if(selections[ii-1][1] ==0 && selections[ii][1]==1){
-                dmp_y_collision = starting_points[ii][1];
-                dmp_y_limiting=true;
-            }
-            if(selections[ii-1][2] ==0 && selections[ii][2]==1){
-                dmp_z_collision = starting_points[ii][2];
-                dmp_z_limiting=true;
-            }
-        }
-
+        // Check for prominent collisions that should be avoided in deformation (aka known contact points from the model)
+        calculateNearestContact(ii,selections,starting_points,attractor_points,dmp_x_limiting,dmp_y_limiting,dmp_z_limiting,dmp_x_collision,dmp_y_collision,dmp_z_collision);
+        
         // Set up the values for the new DMP
-
         double ddx, ddy, ddz;
         double dx = 0.0, dy = 0.0, dz = 0.0;
         double x=starting_points[ii][0]+transition_x, y=starting_points[ii][1]+transition_y, z=starting_points[ii][2]+transition_z;
 
-        // Set up the values for the Quaternion TODO: Fix
-        double ddqx, ddqy, ddqz, ddqw;
-        double dqx = 0.0, dqy = 0.0, dqz = 0.0, dqw=0.0;
-        double qx=starting_points[ii][3], qy=starting_points[ii][4], qz=starting_points[ii][5], qw=starting_points[ii][6];
-        
         // For the general impedance model
         double ddx_imp, ddy_imp, ddz_imp;
         double dx_imp = 0.0, dy_imp=0.0, dz_imp=0.0;
         double x_imp = starting_points[ii][0], y_imp=starting_points[ii][1], z_imp=starting_points[ii][2];
         double x_def = 0.0, y_def=0.0, z_def=0.0;
 
+        // Set up the values for the Quaternion TODO: Move to CDMP
+        double ddqx, ddqy, ddqz, ddqw;
+        double dqx = 0.0, dqy = 0.0, dqz = 0.0, dqw=0.0;
+        double qx=starting_points[ii][3], qy=starting_points[ii][4], qz=starting_points[ii][5], qw=starting_points[ii][6];
+        
         array<double,3> prev_v_hat = {0.0, 0.0, 0.0};
         
         double s = 0; // phase variable used for time
@@ -693,9 +744,6 @@ void replay_demo(ros::Publisher pose_goal_pub, ros::NodeHandle n){
             if(dmp_y_limiting) dmp_scaling_y = 1-exp(-200*abs(y-dmp_y_collision));
             if(dmp_z_limiting) dmp_scaling_z = 1-exp(-200*abs(z-dmp_z_collision));
             
-            // Force mode gain, Position mode gain
-            std::array<double, 2> sel_gains = {3000, 250}; //150
-
             geometry_msgs::Quaternion constraint_frame;
             constraint_frame.x=0.0; constraint_frame.y=0.0; constraint_frame.z=0.0; constraint_frame.w=1.0;
             double x_conv, y_conv, z_conv;
@@ -716,8 +764,7 @@ void replay_demo(ros::Publisher pose_goal_pub, ros::NodeHandle n){
             /////////////////////////////////////////////////////////////////
             //      Deformation scaling                                    //
             /////////////////////////////////////////////////////////////////
-
-            // TODO: collisions, safety, adaptive mapping
+            array<double,3> final_deformation = deformationScaling(rotated_deformation,selection,x_imp,y_imp);
             
             ////////////////////////////////////////////////////////////////
             //      Calculate New DMP values                              //
@@ -728,7 +775,7 @@ void replay_demo(ros::Publisher pose_goal_pub, ros::NodeHandle n){
             dx = dx + ddx*0.01*delta_s;
             x_imp = x_imp+dx*0.01*delta_s;
             
-            ddx_imp = k*(-x_def)-b*dx_imp+sel_gains[(int) selection.x]*rotated_deformation[0];
+            ddx_imp = k*(-x_def)-b_def*dx_imp+final_deformation[0];
             dx_imp = dx_imp + ddx_imp*0.01*delta_s;
             x_def = x_def + dx_imp*0.01*delta_s;
 
@@ -739,7 +786,7 @@ void replay_demo(ros::Publisher pose_goal_pub, ros::NodeHandle n){
             dy = dy + ddy*0.01*delta_s;
             y_imp = y_imp+dy*0.01*delta_s;
             
-            ddy_imp = k*(-y_def)-b*dy_imp+sel_gains[(int) selection.y]*rotated_deformation[1];
+            ddy_imp = k*(-y_def)-b_def*dy_imp+final_deformation[1];
             dy_imp = dy_imp + ddy_imp*0.01*delta_s;
             y_def = y_def + dy_imp*0.01*delta_s;
 
@@ -750,13 +797,14 @@ void replay_demo(ros::Publisher pose_goal_pub, ros::NodeHandle n){
             dz = dz + ddz*0.01*delta_s;
             z_imp = z_imp+dz*0.01*delta_s;
             
-            ddz_imp = k*(-z_def)-b*dz_imp+sel_gains[(int) selection.z]*rotated_deformation[2];
+            ddz_imp = k*(-z_def)-b_def*dz_imp+final_deformation[2];
             dz_imp = dz_imp + ddz_imp*0.01*delta_s;
             z_def = z_def + dz_imp*0.01*delta_s;
 
             z = z_imp+z_def; 
 
 
+            cout << "X: " << x  << " Y: " << y << endl; 
             ////////////////////////////////////////////////
             // Calculate the orientation - NO DEFORMATIONS /
             ////////////////////////////////////////////////
@@ -774,8 +822,6 @@ void replay_demo(ros::Publisher pose_goal_pub, ros::NodeHandle n){
             qw = qw+dqw*0.01*delta_s;
 
             
-            
-
             ////////////////////////////////////////////
             // Hybrid Control For Arbitrary Surfaces  //
             ////////////////////////////////////////////
@@ -797,14 +843,6 @@ void replay_demo(ros::Publisher pose_goal_pub, ros::NodeHandle n){
                 array<double,3> x_hat;
                 curr_surface.calculateSurfacePoint(x,y,r,n_hat,x_hat,y_hat);
                 
-                //cout << "X: " << x << " Y:" << y << endl;
-                //cout << "R: " << r[0] << "," << r[1] << "," << r[2] << endl;
-                geometry_msgs::Pose point;
-                point.position.x = r[0];
-                point.position.y = r[1];
-                point.position.z = r[2];
-                point_goal_pub.publish(point);
-
                 // Using the velocity of x and y (u and v), calculate the time
                 // derivative of the surface (i.e., vector-valued function)
                 array<double,3> v_hat;
@@ -852,6 +890,7 @@ void replay_demo(ros::Publisher pose_goal_pub, ros::NodeHandle n){
             // TODO: get to the point where the deformation is one-normalized so things are less arbitrarily scaled
             double dir_x = dx/sqrt(dx*dx+dy*dy);
             double dir_y = dy/sqrt(dx*dx+dy*dy);
+            // TODO: this aint right
             double dp_in_dir = dir_x*20*rotated_deformation[0] + dir_y*20*rotated_deformation[1];
             
             if(dp_in_dir > 0)
@@ -861,10 +900,6 @@ void replay_demo(ros::Publisher pose_goal_pub, ros::NodeHandle n){
 
             delta_s = 1.0+dp_in_dir;
             s+=delta_s;
-
-            cout << "DELTAS: " << delta_s << " DIRX:"<< dir_x << " DIRY:" << dir_y << endl;
-
-            //cout << " DEF X:" << sel_gains[(int) selection.x]*dmp_fx << " Y:" << sel_gains[(int) selection.y]*dmp_fy << " F:" << sel_gains[(int) selection.z]*dmp_fz << endl;
 
             // Publish everything to the simulation
             ft.force.x = x_conv; ft.force.y = y_conv; ft.force.z = z_conv;
