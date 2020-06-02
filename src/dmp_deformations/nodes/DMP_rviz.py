@@ -20,6 +20,7 @@ from geometry_msgs.msg import PoseStamped
 from visualization_msgs.msg import MarkerArray, Marker
 import csv
 from dtw import dtw
+import PyBSpline
 
 
 demonstrations = []
@@ -184,26 +185,30 @@ def resetDMP(data):
     emptyForces.markers.append(emptyMarker)
     forceDMP.publish(emptyForces)
 
-
-def loadPresegmented(data):
+def loadPresegmentedCore(file):
     directory = '/home/mike/Documents/MikePanda/devel/lib/dmp_deformations'
     demonstration_data = []
-    demonstration_data.append(np.loadtxt(directory+'/'+data.data, delimiter=",", skiprows=3))
+
+    # Skip over lines for surfaces, segmentation samples, interaction, and variance
+    demonstration_data.append(np.loadtxt(directory+'/'+file, delimiter=",", skiprows=4))
     segmentation = []
 
     # Zip doesn't work if there is 1 entry since it is not iterable
-    if(np.shape(np.loadtxt(directory+'/'+data.data, delimiter=",",max_rows=1,skiprows=1))!=()):
-        for surface_model,point,interaction in zip(np.genfromtxt(directory+'/'+data.data,delimiter=",",max_rows=1,dtype='str') ,np.loadtxt(directory+'/'+data.data, delimiter=",",max_rows=1, skiprows=1),np.loadtxt(directory+'/'+data.data, delimiter=",",max_rows=1, skiprows=2)):
+    if(np.shape(np.loadtxt(directory+'/'+file, delimiter=",",max_rows=1,skiprows=1))!=()):
+        for surface_model,point,interaction,const_variance in zip(np.genfromtxt(directory+'/'+file,delimiter=",",max_rows=1,dtype='str') ,np.loadtxt(directory+'/'+file, delimiter=",",max_rows=1, skiprows=1),np.loadtxt(directory+'/'+file, delimiter=",",max_rows=1, skiprows=2),np.genfromtxt(directory+'/'+file,delimiter=",",max_rows=1,skip_header=3,dtype='str')):
             # right now only allows for position-level
+
+            temp_var = np.array(const_variance.split(" "))
+
             if interaction==1:
                 # TODO: fix this!!!!
-                segmentation.append((point, np.array([1, 1, 1, 1, 1, 1, 1]),surface_model))
+                segmentation.append((point, temp_var, np.array([1, 1, 1, 1, 1, 1, 1]),surface_model))
             else:
-                segmentation.append((point, np.array([1, 1, 0, 1, 1, 1, 1]),surface_model))
+                segmentation.append((point, temp_var, np.array([1, 1, 0, 1, 1, 1, 1]),surface_model))
     else:
-        surface_model = np.genfromtxt(directory+'/'+data.data,delimiter=",",max_rows=1,dtype='str')
-        point = np.loadtxt(directory+'/'+data.data, delimiter=",",max_rows=1, skiprows=1)
-        interaction = np.loadtxt(directory+'/'+data.data, delimiter=",",max_rows=1, skiprows=2)
+        surface_model = np.genfromtxt(directory+'/'+file,delimiter=",",max_rows=1,dtype='str')
+        point = np.loadtxt(directory+'/'+file, delimiter=",",max_rows=1, skiprows=1)
+        interaction = np.loadtxt(directory+'/'+file, delimiter=",",max_rows=1, skiprows=2)
         if interaction == 1:
             # TODO: fix this!!!!
             segmentation.append((point, np.array([1, 1, 1, 1, 1, 1, 1]),surface_model))
@@ -211,6 +216,14 @@ def loadPresegmented(data):
             segmentation.append((point, np.array([1, 1, 0, 1, 1, 1, 1]),surface_model))
 
     calculateDMP(demonstration_data, segmentation)
+    print "..."
+    print "..."
+    print "LOAD AND CALCULATIONS COMPLETE"
+
+
+def loadPresegmented(data):
+    loadPresegmentedCore(data.data)
+
 
 def loadData(data):
     global demonstrations
@@ -291,7 +304,8 @@ def calculateDMP(demonstration_data, segmentation):
             dmp = DMP()
             dmps.append(dmp)
 
-            sel_vec = segment[1]
+            sel_vec = segment[2]
+            variances = segment[1]
 
             demonstration_per_dmp = []
             
@@ -351,14 +365,39 @@ def calculateDMP(demonstration_data, segmentation):
             # Figure out how long the demonstration should be based on max difference (velocity)
             # in kinematic directions and interpolate such that this is sent at 1000 Hz.
 
+            #########################################################################
+            # Determine the playback speed based on velocities in the demonstration #
+            #########################################################################
+
             max_vel = 0.15 # m/s
             panda_delta_T = 0.01 # 1 ms # TODO: MOVE TO CONFIG!
+            # TODO: this really should probably be switched back to maximum velocity
 
-            max_x = sel_vec[0]*np.average(np.diff(np.array(trajectories[0]),axis=0))
-            max_y = sel_vec[1]*np.average(np.diff(np.array(trajectories[1]),axis=0))
-            max_z = sel_vec[2]*np.average(np.diff(np.array(trajectories[2]),axis=0))
+            if sel_vec[2]==1: # Position control
+                max_x = sel_vec[0]*np.average(np.diff(np.array(trajectories[0]),axis=0))
+                max_y = sel_vec[1]*np.average(np.diff(np.array(trajectories[1]),axis=0))
+                max_z = sel_vec[2]*np.average(np.diff(np.array(trajectories[2]),axis=0))
+                average_vel = np.sqrt(np.power(max_x, 2) + np.power(max_y, 2) + np.power(max_z, 2))
+            else: # hybrid control
+                surfaceModel = PyBSpline.BSplineSurface()
+                surfaceModel.loadSurface("curved")
 
-            average_vel = np.sqrt(np.power(max_x,2)+np.power(max_y,2)+np.power(max_z,2))
+                # x and y are the surface parameters
+                # need to get the actual 3D points from the Spline Suface
+
+                points_3d = []
+
+                # 10x downsampling for performance
+                downsample = 10
+                count = 0
+                for traj_x,traj_y in zip(trajectories[0],trajectories[1]):
+                    if count%downsample==0:
+                        points_3d.append(surfaceModel.calculate_surface_point(traj_x,traj_y)[0])
+                    count = count+1
+
+                # 0.1 to cancel out the effect of downsampling
+                average_vel = np.average((1/downsample)*np.linalg.norm(np.diff(np.array(points_3d),axis=0),axis=1))
+
 
 
 
@@ -377,7 +416,7 @@ def calculateDMP(demonstration_data, segmentation):
             starting_points, attractor_points, return_forces = dmps[xx].getForces()
 
             # First write mode to signal new DMP
-            surface = segment[2]
+            surface = segment[3]
             csvfile.write('mode'+','+surface+','+'')
             csvfile.write('\n')
             # Write selection vector
@@ -403,6 +442,13 @@ def calculateDMP(demonstration_data, segmentation):
                     interp_qz = return_forces[5][ii]+(float(jj)/float(num_interp_pts))*(return_forces[5][ii + 1] - return_forces[5][ii])
                     interp_qw = return_forces[6][ii]+(float(jj)/float(num_interp_pts))*(return_forces[6][ii + 1] - return_forces[6][ii])
                     csvfile.write(str(interp_x)+','+str(interp_y)+','+str(interp_z)+','+str(interp_qx)+','+str(interp_qy)+','+str(interp_qz)+','+str(interp_qw))
+                    csvfile.write('\n')
+            csvfile.write('variance' + ',' + '' + ',' + '')
+            csvfile.write('\n')
+            for ii in range(0,len(return_forces[0])-1):
+                # print trajectories[0][ii][0]
+                for jj in range(0,num_interp_pts):
+                    csvfile.write(str(variances[0])+','+str(variances[1])+','+str(variances[2]))
                     csvfile.write('\n')
 
         # print np.shape(trajectories_plotting[2])

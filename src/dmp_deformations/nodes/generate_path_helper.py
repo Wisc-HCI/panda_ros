@@ -81,6 +81,8 @@ def main():
         csvfile.write('\n')
         csvfile.write("1,0,1,1,0,1,1,0,1")
         csvfile.write('\n')
+        csvfile.write("50 50 50,250 250 3000,50 50 50,250 250 3000,50 50 50,250 250 3000,50 50 50,250 250 3000,50 50 50")
+        csvfile.write('\n')
 
         # Format for path section is [rx,ry,rz, qx, qy, qz, qw, fx, fy, fz, tx, ty, tz]
 
@@ -110,19 +112,21 @@ def main():
         ending_y = np.cross(normal_end, ending_vel)
         qx_e, qy_e, qz_e, qw_e = calculateQuaternion(normal_end, ending_vel, ending_y)
 
-        printPathSection(csvfile, np.array([surface_end[0], surface_end[1], surface_end[2], qx_e, qy_e, qz_e, qw_e, 0.0, 0.0, -4.0, 0.0, 0.0, 0.0]),
-                         np.array([-0.4, 0.0, 1.0, qx_e, qy_e, qz_e, qw_e, 0.0, 0.0, -4.0, 0.0, 0.0, 0.0]),num_pts)
-
-        ########################
-        ### PASS 2 #############
-        ########################
+        # From pass 2 - try to fix orientation during kinematic motion
         surface_start, normal_start, r_u, r_v = surfaceModel.calculate_surface_point(0.8, 0.2)
         starting_vel = r_u * -0.1 + r_v * 0.6
         starting_vel = starting_vel / np.linalg.norm(starting_vel)
         starting_y = np.cross(normal_start, starting_vel)
         qx_s, qy_s, qz_s, qw_s = calculateQuaternion(normal_start, starting_vel, starting_y)
 
-        printPathSection(csvfile, np.array([-0.4, 0.0, 1.0, qx_e, qy_e, qz_e, qw_e, 0.0, 0.0, -4.0, 0.0, 0.0, 0.0]),
+        printPathSection(csvfile, np.array([surface_end[0], surface_end[1], surface_end[2], qx_e, qy_e, qz_e, qw_e, 0.0, 0.0, -4.0, 0.0, 0.0, 0.0]),
+                         np.array([-0.4, 0.0, 1.0, qx_s, qy_s, qz_s, qw_s, 0.0, 0.0, -4.0, 0.0, 0.0, 0.0]),num_pts)
+
+        ########################
+        ### PASS 2 #############
+        ########################
+
+        printPathSection(csvfile, np.array([-0.4, 0.0, 1.0, qx_s, qy_s, qz_s, qw_s, 0.0, 0.0, -4.0, 0.0, 0.0, 0.0]),
                          np.array(
                              [surface_start[0], surface_start[1], surface_start[2], qx_s, qy_s, qz_s, qw_s, 0.0, 0.0, -4.0,
                               0.0, 0.0, 0.0]), num_pts)
