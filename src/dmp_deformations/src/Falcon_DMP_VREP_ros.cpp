@@ -25,6 +25,8 @@
 #include "falcon/util/FalconFirmwareBinaryNvent.h"
 
 #include "BSplineSurface.h"
+#include "nlopt.hpp"
+#include <iomanip>
 
 using namespace std;
 using namespace libnifalcon;
@@ -49,164 +51,9 @@ double dmp_fx, dmp_fy, dmp_fz;
 bool replay_active = false;
 
 
-/**
- * Streams robot state data to an output file (csv). This is used for when
- * the demonstration DMPs are learned from demonstration
- */
-void log_demonstration(double x, double y, double z, double fx, double fy, double fz){
-    outputfile << x << "," << y << "," << z << "," << fx << "," << fy << "," << fz << "\n";
-}
-
-/**
- * Returns a boolean array for the current state of the four buttons on the falcon
- * 1 is pressed, 0 is unpressed
- */
-array<bool,4> getButtons(){
-    unsigned int my_buttons = m_falconDevice.getFalconGrip()->getDigitalInputs();
-    array<bool,4> buttons;
-    buttons[0] = (my_buttons & libnifalcon::FalconGripFourButton::CENTER_BUTTON)  ? 1 : 0;
-    buttons[1] = (my_buttons & libnifalcon::FalconGripFourButton::PLUS_BUTTON)    ? 1 : 0;
-    buttons[2] = (my_buttons & libnifalcon::FalconGripFourButton::MINUS_BUTTON)   ? 1 : 0;
-    buttons[3] = (my_buttons & libnifalcon::FalconGripFourButton::FORWARD_BUTTON) ? 1 : 0;
-    return buttons;
-}
-
-/**
- * TODO: fill this out
- */
-void bidirectional_checker(array<double,3> &vec, array<double,3> &prev_vec){
-    // Check if velocity should be flipped (tool goes both ways)
-    // TODO: change to a function
-    double sign = prev_vec[0]*vec[0] +  prev_vec[1]*vec[1] +  prev_vec[2]*vec[2];
-    cout << "SIGN:" << sign << endl;
-    if(sign<0.0){
-        vec[0] = -vec[0]; vec[1] = -vec[1]; vec[2] = -vec[2]; 
-    }
-
-}
-
-/**
- * Determines whether a transition should occur to the next DMP based on residual "Error"
-  from the deformations
-
-  transition_x,transition_y, transition_z are outputs representing the change to be applied
-  to the next starting point
- */
-void calculateDMPTransition(double ii, double &transition_x, double &transition_y, double &transition_z, vector<array<double,3>> selections,vector<array<double,7>> starting_points){
-    if((ii+1)<selections.size()){
-
-        // Situations - same requires direct addition
-        // position to force -> nothing
-        // force to position -> nothing
-        // position to manifold (HARD!)
-        // manifold to position (easier!)
-
-        if (selections[ii][2]==0.0 && selections[ii+1][2]==1.0){
-            // On the manifold currently and coming off it!
-            // get actual pose since it will be different from stiffness and hybrid
-            transition_x = (actual_pos[0]-starting_points[ii+1][0]);
-            transition_y = (actual_pos[1]-starting_points[ii+1][1]);
-            transition_z = (actual_pos[2]-starting_points[ii+1][2]);
-        }
-
-        else{
-            transition_x = 0.0;
-            transition_y = 0.0;
-            transition_z = 0.0;
-        }
-
-        // transition_x = (x-attractor_points[ii][0])*(double)(selections[ii][0]==selections[ii+1][0]);
-        // transition_y = (y-attractor_points[ii][1])*(double)(selections[ii][1]==selections[ii+1][1]);
-        // transition_z = (z-attractor_points[ii][2])*(double)(selections[ii][2]==selections[ii+1][2]);
-    }
-}
-
-/**
- * TODO: Calculate whether there is a chance for collision or something...?
- */
-void calculateNearestContact(int ii,vector<array<double,3>> selections,vector<array<double,7>> starting_points,vector<array<double,7>> attractor_points,bool &dmp_x_limiting,bool &dmp_y_limiting,bool &dmp_z_limiting,double &dmp_x_collision, double &dmp_y_collision, double &dmp_z_collision){
-    
-    // This is used to contact the "Nearest contact condition" to consider
-    // minimizing the deformations
-    dmp_x_limiting = false;
-    dmp_y_limiting = false;
-    dmp_z_limiting = false;
-
-    // TODO: check over all this collision stuff WRT to the new rotations
-    // There is a next DMP, check for pos to force transition
-    if (ii+1<selections.size()){
-        if(selections[ii][0] ==1 && selections[ii+1][0]==0){
-            dmp_x_collision = attractor_points[ii][0];
-            dmp_x_limiting=true;
-        }
-        if(selections[ii][1] ==1 && selections[ii+1][1]==0){
-            dmp_y_collision = attractor_points[ii][1];
-            dmp_y_limiting=true;
-        }
-        if(selections[ii][2] ==1 && selections[ii+1][2]==0){
-            dmp_z_collision = attractor_points[ii][2];
-            dmp_z_limiting=true;
-        }
-    }
-
-    // There is a previous DMP, check for force to pos transition
-    if (ii>0){
-        if(selections[ii-1][0] ==0 && selections[ii][0]==1){
-            dmp_x_collision = starting_points[ii][0];
-            dmp_x_limiting=true;
-        }
-        if(selections[ii-1][1] ==0 && selections[ii][1]==1){
-            dmp_y_collision = starting_points[ii][1];
-            dmp_y_limiting=true;
-        }
-        if(selections[ii-1][2] ==0 && selections[ii][2]==1){
-            dmp_z_collision = starting_points[ii][2];
-            dmp_z_limiting=true;
-        }
-    }
-}
-
-/**
- * Calculate the final deformation based on adaptive gains, collisions, workspace limits, etc.
- */
-array<double,3> deformationScaling(array<double,3> &rotated_deformation, geometry_msgs::Vector3 selection, double x, double y){
-    
-    array<double,3> final_deformation;
-    double k= 50;
-
-    // Force mode gain, Position mode gain
-    std::array<double, 2> sel_gains = {3000, 250}; //150
-
-    // First scale based on the type of input
-    final_deformation[0] = sel_gains[(int) selection.x]*rotated_deformation[0];
-    final_deformation[1] = sel_gains[(int) selection.y]*rotated_deformation[1];
-    final_deformation[2] = sel_gains[(int) selection.z]*rotated_deformation[2];
-
-    // Parameterized surfaces have a range of 0<=x<=1
-    // Make sure it is not over the bounds (for hybrid control)
-    double minEdgePercent = 0.05;
-    if (selection.z == 0){
-        // Direction 1
-        if((final_deformation[0]/k+x)>(1.0-minEdgePercent)){
-            final_deformation[0] = k*((1.0-minEdgePercent)-x);
-        }
-        else if((final_deformation[0]/k+x)<(minEdgePercent)){
-            final_deformation[0] = k*((minEdgePercent)-x);
-        }
-
-        // Direction 2
-        if((final_deformation[1]/k+y)>(1.0-minEdgePercent)){
-            final_deformation[1] = k*((1.0-minEdgePercent)-y);
-        }
-        else if((final_deformation[1]/k+y)<(minEdgePercent)){
-            final_deformation[1] = k*((minEdgePercent)-y);
-        }
-
-    }
-
-    return final_deformation;
-
-}
+////////////////////////////////
+// General robot utility fxns //
+////////////////////////////////
 
 /**
  * Calculates the cross product between 2 3-D vectors
@@ -276,32 +123,6 @@ array<double,3> vectorOutOfConstraintFrame(double x, double y, double z, double 
 }
 
 /**
- * This function takes in all of the relevant parameters for a particular DMP and will figure out the
- * starting velocity. This is used for setting the tool orientation as it approaches the surface.
- */
-array<double,3> getFirstSurfaceVelocity(array<double,7> attractor_point, array<double,7> starting_point,double dmp_u,double dmp_v, array<double,3> r_u, array<double,3> r_v ){
-    
-    // TODO: can this be zero?
-    double k=50;
-    array<double,3> vel_hat;
-
-    // These next 2 are equivalent to calculating the first velocity in the DMP ignoring the deformation and damping (since the velocity is initially 0)
-
-    // Calculate vel-U direction
-    double ddu = k*(attractor_point[0]-starting_point[0])+dmp_u;
-
-    // Calculate vel-V direction
-    double ddv = k*(attractor_point[1]-starting_point[1])+dmp_v;
-
-    vel_hat[0] = r_u[0]*ddu+r_v[0]*ddv;
-    vel_hat[1] = r_u[1]*ddu+r_v[1]*ddv;
-    vel_hat[2] = r_u[2]*ddu+r_v[2]*ddv;
-    double vel_mag = sqrt(vel_hat[0]*vel_hat[0]+vel_hat[1]*vel_hat[1]+vel_hat[2]*vel_hat[2]);
-    vel_hat[0]=vel_hat[0]/vel_mag; vel_hat[1]=vel_hat[1]/vel_mag; vel_hat[2]=vel_hat[2]/vel_mag;
-    return vel_hat;
-}
-
-/**
  * This function takes a rotation matrix expressed as 3 column vectors and creates
  * a quaternion of the form x,y,z,w
  */
@@ -339,6 +160,296 @@ void rotationToQuaternion(array<double,3> x_hat, array<double,3> y_hat, array<do
     // Make sure it is normalized
     double mag = sqrt(q_out[0]*q_out[0]+q_out[1]*q_out[1]+q_out[2]*q_out[2]+q_out[3]*q_out[3]);
     q_out[0] = q_out[0]/mag; q_out[1] = q_out[1]/mag; q_out[2] = q_out[2]/mag; q_out[3] = q_out[3]/mag;
+}
+
+
+///////////////////////////////
+// FALCON-SPECIFIC FUNCTIONS //
+///////////////////////////////
+
+/**
+ * Returns a boolean array for the current state of the four buttons on the falcon
+ * 1 is pressed, 0 is unpressed
+ */
+array<bool,4> getButtons(){
+    unsigned int my_buttons = m_falconDevice.getFalconGrip()->getDigitalInputs();
+    array<bool,4> buttons;
+    buttons[0] = (my_buttons & libnifalcon::FalconGripFourButton::CENTER_BUTTON)  ? 1 : 0;
+    buttons[1] = (my_buttons & libnifalcon::FalconGripFourButton::PLUS_BUTTON)    ? 1 : 0;
+    buttons[2] = (my_buttons & libnifalcon::FalconGripFourButton::MINUS_BUTTON)   ? 1 : 0;
+    buttons[3] = (my_buttons & libnifalcon::FalconGripFourButton::FORWARD_BUTTON) ? 1 : 0;
+    return buttons;
+}
+
+void falconVelocity() {
+    double delta_T = 1000;
+    // Compute the velocity to add some viscous friction to help with stability
+    array<double, 3> falconPos = {0,0,0};
+    m_falconDevice.runIOLoop();
+    falconPos = m_falconDevice.getPosition();
+
+    // Provide there is a last position to compute the velocity, calculate with backwards differencing
+    if(last_falcon_updated)
+    {
+        // Velocity calculated as basic differencing
+        falcon_vel = {(falconPos[0]-last_falcon[0])/delta_T,(falconPos[1]-last_falcon[1])/delta_T,(falconPos[2]-last_falcon[2])/delta_T};
+    }
+
+    //Update last falcon  for use in the velocity calculation
+    last_falcon[0] = falconPos[0];
+    last_falcon[1] = falconPos[1];
+    last_falcon[2] = falconPos[2];
+
+    last_falcon_updated = true;
+}
+
+////////////////////////////
+// DEFORMATION FUNCTIONS  //
+////////////////////////////
+
+// Next 3 pieces are for surface optimization
+typedef struct {
+    double x, y, z;
+    BSplineSurface surface;
+} opt_data;
+
+
+double obj_closest_surface(const std::vector<double> &x, std::vector<double> &grad, void *data)
+{
+    opt_data *d = (opt_data *) data;
+    array<double,3> r = {0.0, 0.0, 0.0};
+    array<double,3> n_hat = {0.0, 0.0, 0.0};
+    array<double,3> r_u = {0.0, 0.0, 0.0};
+    array<double,3> r_v = {0.0, 0.0, 0.0};
+    d->surface.calculateSurfacePoint(x[0],x[1],r,n_hat,r_u,r_v);
+    
+    return (r[0]-d->x)*(r[0]-d->x)+(r[1]-d->y)*(r[1]-d->y)+(r[2]-d->z)*(r[2]-d->z);
+}
+
+void getClosestParams(double x, double y, double z, double &u, double&v, BSplineSurface surface){
+    // Find the closest point on the surface using NL-opt
+    nlopt::opt opt(nlopt::LN_COBYLA, 2);
+    
+    // Bounds of surface are 0 to 1 in U,V directions
+    std::vector<double> lb(2);
+    lb[0] = 0.0; lb[1] = 0.0;
+    std::vector<double> ub(2);
+    ub[0] = 1.0; ub[1] = 1.0;
+    opt.set_lower_bounds(lb);
+    opt.set_upper_bounds(ub);
+
+    // Initial guess for parameters U,V
+    std::vector<double> params(2);
+    params[0] = u; params[1] = v;
+    double minf;
+
+    opt_data data;
+    data.x=x; data.y=y; data.z=z;
+    data.surface = surface;
+
+    opt.set_min_objective(obj_closest_surface,&data);
+    opt.set_xtol_rel(1e-4);
+    cout << "TRYING" << endl;
+
+    try{
+        nlopt::result result = opt.optimize(params, minf);
+        
+        // Output new values if found
+        u = params[0]; v=params[1];
+    }
+    catch(std::exception &e) {
+        std::cout << "nlopt failed: " << e.what() << std::endl;
+    }
+}
+
+/**
+ * Streams robot state data to an output file (csv). This is used for when
+ * the demonstration DMPs are learned from demonstration
+ */
+void log_demonstration(double x, double y, double z, double fx, double fy, double fz){
+    outputfile << x << "," << y << "," << z << "," << fx << "," << fy << "," << fz << "\n";
+}
+
+/**
+ * TODO: fill this out
+ */
+void bidirectional_checker(array<double,3> &vec, array<double,3> &prev_vec){
+    // Check if velocity should be flipped (tool goes both ways)
+    // TODO: change to a function
+    double sign = prev_vec[0]*vec[0] +  prev_vec[1]*vec[1] +  prev_vec[2]*vec[2];
+    cout << "SIGN:" << sign << endl;
+    if(sign<0.0){
+        vec[0] = -vec[0]; vec[1] = -vec[1]; vec[2] = -vec[2]; 
+    }
+
+}
+
+/**
+ * Determines whether a transition should occur to the next DMP based on residual "Error"
+  from the deformations
+
+  transition_x,transition_y, transition_z are outputs representing the change to be applied
+  to the next starting point
+ */
+void calculateDMPTransition(double ii, double &transition_x, double &transition_y, double &transition_z, double x, double y, double z,vector<array<double,3>> selections,vector<array<double,7>> starting_points, vector<string> surfaces){
+    if((ii+1)<selections.size()){
+
+        // Situations - same requires direct addition
+        // position to force -> nothing
+        // force to position -> nothing
+        // position to manifold (HARD!)
+        // manifold to position (easier!)
+
+        if (selections[ii][2]==0.0 && selections[ii+1][2]==1.0){
+            // On the manifold currently and coming off it!
+            // get actual pose since it will be different from stiffness and hybrid
+            transition_x = (actual_pos[0]-starting_points[ii+1][0]);
+            transition_y = (actual_pos[1]-starting_points[ii+1][1]);
+            transition_z = (actual_pos[2]-starting_points[ii+1][2]);
+        }
+
+        else if (selections[ii][2]==1.0 && selections[ii+1][2]==0.0){
+            
+            // Need the surface that is being approached
+            BSplineSurface surface;
+            surface.loadSurface(surfaces[ii+1]);
+
+            // Approaching the manifold, find the nearest manifold point to transition
+            double u = starting_points[ii+1][0];
+            double v = starting_points[ii+1][1];
+            getClosestParams(actual_pos[0], actual_pos[1], actual_pos[2],u,v,surface);
+
+            transition_x = u-starting_points[ii+1][0];
+            transition_y = v-starting_points[ii+1][1];
+            transition_z = 0.0;
+        }
+
+        else if (selections[ii][2]==1.0 && selections[ii+1][2]==1.0){
+            // Staying on the surface - continuity of all local variables
+            transition_x = (x-starting_points[ii+1][0]);
+            transition_y = (y-starting_points[ii+1][1]);
+            transition_z = (z-starting_points[ii+1][2]);
+        }
+
+        else{
+            transition_x = 0.0;
+            transition_y = 0.0;
+            transition_z = 0.0;
+        }
+    }
+}
+
+/**
+ * TODO: Calculate whether there is a chance for collision or something...?
+ */
+void calculateNearestContact(int ii,vector<array<double,3>> selections,vector<array<double,7>> starting_points,vector<array<double,7>> attractor_points,bool &dmp_x_limiting,bool &dmp_y_limiting,bool &dmp_z_limiting,double &dmp_x_collision, double &dmp_y_collision, double &dmp_z_collision){
+    
+    // This is used to contact the "Nearest contact condition" to consider
+    // minimizing the deformations
+    dmp_x_limiting = false;
+    dmp_y_limiting = false;
+    dmp_z_limiting = false;
+
+    // TODO: check over all this collision stuff WRT to the new rotations
+    // There is a next DMP, check for pos to force transition
+    if (ii+1<selections.size()){
+        if(selections[ii][0] ==1 && selections[ii+1][0]==0){
+            dmp_x_collision = attractor_points[ii][0];
+            dmp_x_limiting=true;
+        }
+        if(selections[ii][1] ==1 && selections[ii+1][1]==0){
+            dmp_y_collision = attractor_points[ii][1];
+            dmp_y_limiting=true;
+        }
+        if(selections[ii][2] ==1 && selections[ii+1][2]==0){
+            dmp_z_collision = attractor_points[ii][2];
+            dmp_z_limiting=true;
+        }
+    }
+
+    // There is a previous DMP, check for force to pos transition
+    if (ii>0){
+        if(selections[ii-1][0] ==0 && selections[ii][0]==1){
+            dmp_x_collision = starting_points[ii][0];
+            dmp_x_limiting=true;
+        }
+        if(selections[ii-1][1] ==0 && selections[ii][1]==1){
+            dmp_y_collision = starting_points[ii][1];
+            dmp_y_limiting=true;
+        }
+        if(selections[ii-1][2] ==0 && selections[ii][2]==1){
+            dmp_z_collision = starting_points[ii][2];
+            dmp_z_limiting=true;
+        }
+    }
+}
+
+/**
+ * Calculate the final deformation based on adaptive gains, collisions, workspace limits, etc.
+ */
+array<double,3> deformationScaling(array<double,3> &rotated_deformation, double var_x, double var_y, double var_z, geometry_msgs::Vector3 selection, double x, double y){
+    
+    array<double,3> final_deformation;
+    double k= 50;
+
+    // Force mode gain, Position mode gain
+    std::array<double, 2> sel_gains = {3000, 250}; //150
+
+    // First scale based on the type of input
+    final_deformation[0] = var_x*rotated_deformation[0];
+    final_deformation[1] = var_y*rotated_deformation[1];
+    final_deformation[2] = var_z*rotated_deformation[2];
+
+    // Parameterized surfaces have a range of 0<=x<=1
+    // Make sure it is not over the bounds (for hybrid control)
+    double minEdgePercent = 0.05;
+    if (selection.z == 0){
+        // Direction 1
+        if((final_deformation[0]/k+x)>(1.0-minEdgePercent)){
+            final_deformation[0] = k*((1.0-minEdgePercent)-x);
+        }
+        else if((final_deformation[0]/k+x)<(minEdgePercent)){
+            final_deformation[0] = k*((minEdgePercent)-x);
+        }
+
+        // Direction 2
+        if((final_deformation[1]/k+y)>(1.0-minEdgePercent)){
+            final_deformation[1] = k*((1.0-minEdgePercent)-y);
+        }
+        else if((final_deformation[1]/k+y)<(minEdgePercent)){
+            final_deformation[1] = k*((minEdgePercent)-y);
+        }
+
+    }
+
+    return final_deformation;
+
+}
+
+/**
+ * This function takes in all of the relevant parameters for a particular DMP and will figure out the
+ * starting velocity. This is used for setting the tool orientation as it approaches the surface.
+ */
+array<double,3> getFirstSurfaceVelocity(array<double,7> attractor_point, array<double,7> starting_point,double dmp_u,double dmp_v, array<double,3> r_u, array<double,3> r_v ){
+    
+    // TODO: can this be zero?
+    double k=50;
+    array<double,3> vel_hat;
+
+    // These next 2 are equivalent to calculating the first velocity in the DMP ignoring the deformation and damping (since the velocity is initially 0)
+
+    // Calculate vel-U direction
+    double ddu = k*(attractor_point[0]-starting_point[0])+dmp_u;
+
+    // Calculate vel-V direction
+    double ddv = k*(attractor_point[1]-starting_point[1])+dmp_v;
+
+    vel_hat[0] = r_u[0]*ddu+r_v[0]*ddv;
+    vel_hat[1] = r_u[1]*ddu+r_v[1]*ddv;
+    vel_hat[2] = r_u[2]*ddu+r_v[2]*ddv;
+    double vel_mag = sqrt(vel_hat[0]*vel_hat[0]+vel_hat[1]*vel_hat[1]+vel_hat[2]*vel_hat[2]);
+    vel_hat[0]=vel_hat[0]/vel_mag; vel_hat[1]=vel_hat[1]/vel_mag; vel_hat[2]=vel_hat[2]/vel_mag;
+    return vel_hat;
 }
 
 array<double,3> map_deformation_input(int method, double dmp_fx,double dmp_fy,double dmp_fz,double dx,double dy, double dz){
@@ -392,28 +503,6 @@ array<double,3> map_deformation_input(int method, double dmp_fx,double dmp_fy,do
         cout << "INVALID METHOD FOR INPUT MAPPING" << endl;
         return deformation_rotation;
     }
-}
-
-void falconVelocity() {
-    double delta_T = 1000;
-    // Compute the velocity to add some viscous friction to help with stability
-    array<double, 3> falconPos = {0,0,0};
-    m_falconDevice.runIOLoop();
-    falconPos = m_falconDevice.getPosition();
-
-    // Provide there is a last position to compute the velocity, calculate with backwards differencing
-    if(last_falcon_updated)
-    {
-        // Velocity calculated as basic differencing
-        falcon_vel = {(falconPos[0]-last_falcon[0])/delta_T,(falconPos[1]-last_falcon[1])/delta_T,(falconPos[2]-last_falcon[2])/delta_T};
-    }
-
-    //Update last falcon  for use in the velocity calculation
-    last_falcon[0] = falconPos[0];
-    last_falcon[1] = falconPos[1];
-    last_falcon[2] = falconPos[2];
-
-    last_falcon_updated = true;
 }
 
 /**
@@ -494,13 +583,17 @@ void forceOnloading(int ii, geometry_msgs::Vector3 selection, vector<array<doubl
 }
 
 
-void readDemo(vector<vector<array<double,7>>> &dmps,vector<array<double,3>> &selections,vector<array<double,7>> &starting_points,vector<array<double,7>> &attractor_points, vector<string> &surfaces){
+void readDemo(vector<vector<array<double,7>>> &dmps,vector<array<double,3>> &selections,vector<array<double,7>> &starting_points,vector<array<double,7>> &attractor_points, vector<string> &surfaces, vector<vector<array<double,3>>> &variance_dmp){
     std::ifstream dmpfile("learneddmp.csv");
     double junk;
     string temp;
     string surface;
 
     vector<array<double,7>> dmp_temp;
+    vector<array<double,3>> dmp_variance_temp;
+
+    bool loading_variances = false;
+
     // Read entire file into the vectors
     if(dmpfile.good())
     {
@@ -512,6 +605,9 @@ void readDemo(vector<vector<array<double,7>>> &dmps,vector<array<double,3>> &sel
                 // for trajectory, get selection and
                 // starting/attractor points
                 // make this surface and stiffness (damping implied from overdamped)
+
+                loading_variances = false;
+
                 getline(dmpfile,temp,',');
                 surface = temp.c_str();
                 surfaces.push_back(surface);
@@ -553,11 +649,30 @@ void readDemo(vector<vector<array<double,7>>> &dmps,vector<array<double,3>> &sel
                 if(dmp_temp.size()>0)
                 {
                     dmps.push_back(dmp_temp);
+                    variance_dmp.push_back(dmp_variance_temp);
                 }
 
                 // Reinitialize the temporary vector
                 // to store the trajectory
                 dmp_temp.clear();
+                dmp_variance_temp.clear();
+            }
+
+            else if(temp=="variance")
+            {
+                loading_variances = true;
+                getline(dmpfile,temp);
+            }
+
+            else if(loading_variances){
+                array<double,3> variance_temp;
+                // temp has first value already
+                variance_temp[0] = atof(temp.c_str());
+                getline(dmpfile,temp,',');
+                variance_temp[1] = atof(temp.c_str());
+                getline(dmpfile,temp);
+                variance_temp[2] = atof(temp.c_str());
+                dmp_variance_temp.push_back(variance_temp);
             }
 
             else{ // Add new value to dmp_vector
@@ -585,6 +700,7 @@ void readDemo(vector<vector<array<double,7>>> &dmps,vector<array<double,3>> &sel
         if(dmp_temp.size()>0)
         {
             dmps.push_back(dmp_temp);
+            variance_dmp.push_back(dmp_variance_temp);
         }
     }
 
@@ -624,6 +740,7 @@ void replay_demo(ros::Publisher pose_goal_pub, ros::NodeHandle n){
     vector<array<double,7>> starting_points;
     vector<array<double,7>> attractor_points;
     vector<string> surfaces;
+    vector<vector<array<double,3>>> variance_dmp;
 
     // Reused ROS messages for publishing
     geometry_msgs::Pose pose;
@@ -634,7 +751,7 @@ void replay_demo(ros::Publisher pose_goal_pub, ros::NodeHandle n){
     double k=50;
     double b=sqrt(2*k); // ideal underdamped
     double b_def=2*sqrt(k); // overdamped
-    readDemo(dmps,selections,starting_points,attractor_points,surfaces);
+    readDemo(dmps,selections,starting_points,attractor_points,surfaces,variance_dmp);
 
     // Action: Tell the robot the replay is starting over
     // In case something needs to change or be reset in the simulation state
@@ -736,6 +853,10 @@ void replay_demo(ros::Publisher pose_goal_pub, ros::NodeHandle n){
             double dmp_y = dmps[ii][(int)floor(s)][1]+(dmps[ii][(int)ceil(s)][1]-dmps[ii][(int)floor(s)][1])*(s-floor(s));
             double dmp_z = dmps[ii][(int)floor(s)][2]+(dmps[ii][(int)ceil(s)][2]-dmps[ii][(int)floor(s)][2])*(s-floor(s));
 
+            double var_x = variance_dmp[ii][(int)floor(s)][0]+(variance_dmp[ii][(int)ceil(s)][0]-variance_dmp[ii][(int)floor(s)][0])*(s-floor(s));
+            double var_y = variance_dmp[ii][(int)floor(s)][1]+(variance_dmp[ii][(int)ceil(s)][1]-variance_dmp[ii][(int)floor(s)][1])*(s-floor(s));
+            double var_z = variance_dmp[ii][(int)floor(s)][2]+(variance_dmp[ii][(int)ceil(s)][2]-variance_dmp[ii][(int)floor(s)][2])*(s-floor(s));
+
             // Compute a potential DMP diminishing scale based on collisions
             double dmp_scaling_x = 1.0;
             double dmp_scaling_y = 1.0;
@@ -764,7 +885,7 @@ void replay_demo(ros::Publisher pose_goal_pub, ros::NodeHandle n){
             /////////////////////////////////////////////////////////////////
             //      Deformation scaling                                    //
             /////////////////////////////////////////////////////////////////
-            array<double,3> final_deformation = deformationScaling(rotated_deformation,selection,x_imp,y_imp);
+            array<double,3> final_deformation = deformationScaling(rotated_deformation,var_x,var_y,var_z,selection,x_imp,y_imp);
             
             ////////////////////////////////////////////////////////////////
             //      Calculate New DMP values                              //
@@ -804,7 +925,6 @@ void replay_demo(ros::Publisher pose_goal_pub, ros::NodeHandle n){
             z = z_imp+z_def; 
 
 
-            cout << "X: " << x  << " Y: " << y << endl; 
             ////////////////////////////////////////////////
             // Calculate the orientation - NO DEFORMATIONS /
             ////////////////////////////////////////////////
@@ -820,6 +940,8 @@ void replay_demo(ros::Publisher pose_goal_pub, ros::NodeHandle n){
             ddqw = k*(attractor_points[ii][6]-qw)-b*dqw;
             dqw = dqw + ddqw*0.01*delta_s;
             qw = qw+dqw*0.01*delta_s;
+
+            //cout << "X: " << x << " Y:" << y << endl;
 
             
             ////////////////////////////////////////////
@@ -842,6 +964,8 @@ void replay_demo(ros::Publisher pose_goal_pub, ros::NodeHandle n){
                 array<double,3> y_hat;
                 array<double,3> x_hat;
                 curr_surface.calculateSurfacePoint(x,y,r,n_hat,x_hat,y_hat);
+
+                cout << "R: " << r[0] << " " << r[1] << " " << r[2] << endl;
                 
                 // Using the velocity of x and y (u and v), calculate the time
                 // derivative of the surface (i.e., vector-valued function)
@@ -850,6 +974,8 @@ void replay_demo(ros::Publisher pose_goal_pub, ros::NodeHandle n){
                 //v_hat[0]=x_hat[0]*(dx+dx_imp)+y_hat[0]*(dy+dy_imp); v_hat[1]=x_hat[1]*(dx+dx_imp)+y_hat[1]*(dy+dy_imp); v_hat[2]=x_hat[2]*(dx+dx_imp)+y_hat[2]*(dy+dy_imp); // true velocity
 
                 double v_mag = sqrt(v_hat[0]*v_hat[0] + v_hat[1]*v_hat[1] + v_hat[2]*v_hat[2]);
+
+                cout << "VHAT: " << v_hat[0] << " " << v_hat[1] << " " << v_hat[2] << endl;
                 
                 // If the velocity direction is non-zero, re-align the constraint frame
                 // If it is zero, it will keep its previous value
@@ -860,7 +986,7 @@ void replay_demo(ros::Publisher pose_goal_pub, ros::NodeHandle n){
                     //bidirectional_checker(v_hat,prev_v_hat); //check if it should be flipped
                     //cout << "vhat: " << v_hat[0] <<  " " << v_hat[1] << " " << v_hat[2] << endl;
                     //cout << "p_vhat: " << prev_v_hat[0] <<  " " << prev_v_hat[1] << " " << prev_v_hat[2] << endl;
-                    prev_v_hat[0] = v_hat[0]; prev_v_hat[1] = v_hat[1]; prev_v_hat[2] = v_hat[2]; 
+                    //prev_v_hat[0] = v_hat[0]; prev_v_hat[1] = v_hat[1]; prev_v_hat[2] = v_hat[2]; 
 
                     // Z x X = Y
                     array<double,3> y_new;
@@ -920,7 +1046,7 @@ void replay_demo(ros::Publisher pose_goal_pub, ros::NodeHandle n){
 
         // AFTER THE DMP IS COMPLETE, look at whether transitions are needed
         // Combat the transition discontinuities if there is still a transition left
-        calculateDMPTransition(ii,transition_x, transition_y, transition_z, selections, starting_points);
+        calculateDMPTransition(ii,transition_x, transition_y, transition_z,x,y,z,selections, starting_points, surfaces);
 
     }
 
