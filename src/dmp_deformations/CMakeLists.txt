@@ -19,6 +19,7 @@ find_library(
     PATHS ${CMAKE_CURRENT_SOURCE_DIR}/../../devel/lib
 )
 find_library(BSpline libBSpline.so REQUIRED)
+find_library(NLopt libnlopt.so REQUIRED)
 
 message(STATUS ${pandaController})
 find_library(
@@ -37,7 +38,7 @@ target_link_libraries(falconDMP ${catkin_LIBRARIES} ${LIBNIFALCON} ${pandaContro
 
 add_executable(falconVREPDMP src/Falcon_DMP_VREP_ros.cpp)
 target_include_directories(falconVREPDMP PUBLIC ${catkin_INCLUDE_DIRS} ${EIGEN3_INCLUDE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/include ${CMAKE_CURRENT_SOURCE_DIR}/../../devel/include)
-target_link_libraries(falconVREPDMP ${catkin_LIBRARIES} ${LIBNIFALCON} ${pandaController} ${pandaCommon} franka ${DRDC} ${DHDC} ${BSpline})
+target_link_libraries(falconVREPDMP ${catkin_LIBRARIES} ${LIBNIFALCON} ${pandaController} ${pandaCommon} franka ${DRDC} ${DHDC} ${BSpline} ${NLopt})
 
 add_executable(FDdeformations src/ForceDimension_Deformation_Emmanuel.cpp)
 target_include_directories(FDdeformations PUBLIC ${catkin_INCLUDE_DIRS} ${EIGEN3_INCLUDE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/include ${CMAKE_CURRENT_SOURCE_DIR}/../../devel/include)
