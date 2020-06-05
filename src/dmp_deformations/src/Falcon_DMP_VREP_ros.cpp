@@ -27,6 +27,7 @@
 #include "BSplineSurface.h"
 #include "nlopt.hpp"
 #include <iomanip>
+#include <thread>
 
 using namespace std;
 using namespace libnifalcon;
@@ -165,21 +166,6 @@ void rotationToQuaternion(array<double,3> x_hat, array<double,3> y_hat, array<do
 ///////////////////////////////
 // FALCON-SPECIFIC FUNCTIONS //
 ///////////////////////////////
-
-/**
- * Returns a boolean array for the current state of the four buttons on the falcon
- * 1 is pressed, 0 is unpressed
- */
-array<bool,4> getButtons(){
-    unsigned int my_buttons = m_falconDevice.getFalconGrip()->getDigitalInputs();
-    array<bool,4> buttons;
-    buttons[0] = (my_buttons & libnifalcon::FalconGripFourButton::CENTER_BUTTON)  ? 1 : 0;
-    buttons[1] = (my_buttons & libnifalcon::FalconGripFourButton::PLUS_BUTTON)    ? 1 : 0;
-    buttons[2] = (my_buttons & libnifalcon::FalconGripFourButton::MINUS_BUTTON)   ? 1 : 0;
-    buttons[3] = (my_buttons & libnifalcon::FalconGripFourButton::FORWARD_BUTTON) ? 1 : 0;
-    return buttons;
-}
-
 void falconVelocity() {
     double delta_T = 1000;
     // Compute the velocity to add some viscous friction to help with stability
@@ -200,6 +186,46 @@ void falconVelocity() {
     last_falcon[2] = falconPos[2];
 
     last_falcon_updated = true;
+}
+
+void run_falcon_deformation_controller(){
+    double viscous_replay = 30; // TODO: want to get to 2 sqrt(stiffness)
+    double stiffness = 100; // for replay
+    array<double, 3> falconPos = {0,0,0};
+
+    falconVelocity();
+    
+    while(1){
+        m_falconDevice.runIOLoop();
+        falconPos = m_falconDevice.getPosition();
+        //cout << "FP:" << falconPos[0] << " " << falconPos[1] << " " << falconPos[2] << endl;
+        // zero displacement mode
+        // falcon has offset in z
+        m_falconDevice.setForce({
+                -stiffness*falconPos[0]-viscous_replay*falcon_vel[0], 
+                -stiffness*falconPos[1]-viscous_replay*falcon_vel[1], 
+                -stiffness*(falconPos[2]-0.1)-viscous_replay*falcon_vel[2]});
+
+        // Store forcing from falcon for deformations
+        dmp_fx = -(falconPos[0]);
+        dmp_fy = (falconPos[2]-0.1);
+        dmp_fz = falconPos[1];
+        usleep(1000);
+    }
+}
+
+/**
+ * Returns a boolean array for the current state of the four buttons on the falcon
+ * 1 is pressed, 0 is unpressed
+ */
+array<bool,4> getButtons(){
+    unsigned int my_buttons = m_falconDevice.getFalconGrip()->getDigitalInputs();
+    array<bool,4> buttons;
+    buttons[0] = (my_buttons & libnifalcon::FalconGripFourButton::CENTER_BUTTON)  ? 1 : 0;
+    buttons[1] = (my_buttons & libnifalcon::FalconGripFourButton::PLUS_BUTTON)    ? 1 : 0;
+    buttons[2] = (my_buttons & libnifalcon::FalconGripFourButton::MINUS_BUTTON)   ? 1 : 0;
+    buttons[3] = (my_buttons & libnifalcon::FalconGripFourButton::FORWARD_BUTTON) ? 1 : 0;
+    return buttons;
 }
 
 ////////////////////////////
@@ -581,7 +607,6 @@ void forceOnloading(int ii, geometry_msgs::Vector3 selection, vector<array<doubl
         // This keeps the falcon in zero-displacement mode while this loop runs
         for (int yy=0; yy<10; yy++)
         {
-            falconVelocity();
             usleep(1000);
         }
         ros::spinOnce();
@@ -737,7 +762,6 @@ void replay_demo(ros::Publisher pose_goal_pub, ros::NodeHandle n){
     for(int jj=0; jj<500; jj++)
     {
         ros::spinOnce();
-        falconVelocity();
         usleep(1000);
     }
 
@@ -776,7 +800,6 @@ void replay_demo(ros::Publisher pose_goal_pub, ros::NodeHandle n){
     for(int jj=0; jj<2500; jj++)
     {
         ros::spinOnce();
-        falconVelocity();
         usleep(1000);
     }
 
@@ -1042,7 +1065,6 @@ void replay_demo(ros::Publisher pose_goal_pub, ros::NodeHandle n){
             // Pause for 0.01 seconds, but calculate velocities at 0.001s
             for (int yy=0; yy<10; yy++)
             {
-                falconVelocity();
                 usleep(1000);
             }
         }
@@ -1056,6 +1078,12 @@ void replay_demo(ros::Publisher pose_goal_pub, ros::NodeHandle n){
     // Tells simulation that things are over if necessary
     replay_str.data = "end";
     dmp_replay_pub.publish(replay_str);
+    // Pause 0.5s to allow final message
+    for(int jj=0; jj<500; jj++)
+    {
+        ros::spinOnce();
+        usleep(1000);
+    }
 }
  
 bool init_falcon() {
@@ -1224,37 +1252,32 @@ void feedbackFalcon(geometry_msgs::Wrench wrench) {
     double stiffness = 100; // for replay
     double delta_T = 0.001;
 
-    array<double, 3> falconPos = {0,0,0};
-    m_falconDevice.runIOLoop();
-    falconPos = m_falconDevice.getPosition();
-
     if(!replay_active){
-    // Send force (bilateral + friction) to the falcon
-    m_falconDevice.setForce({
+        array<double, 3> falconPos = {0,0,0};
+        m_falconDevice.runIOLoop();
+        falconPos = m_falconDevice.getPosition();
+        // Send force (bilateral + friction) to the falcon
+        m_falconDevice.setForce({
                 -wrench.force.x * scale-viscous*falcon_vel[0], 
                 -wrench.force.z * scale-viscous*falcon_vel[1], 
                 -wrench.force.y * scale-viscous*falcon_vel[2]});
     }
 
     else{
-        // zero displacement mode
-        // falcon has offset in z
-        m_falconDevice.setForce({
-                -stiffness*falconPos[0]-viscous_replay*falcon_vel[0], 
-                -stiffness*falconPos[1]-viscous_replay*falcon_vel[1], 
-                -stiffness*(falconPos[2]-0.1)-viscous_replay*falcon_vel[2]});
+        // zero displacement running in other process
+
+        //  // zero displacement mode
+        // // falcon has offset in z
+        // m_falconDevice.setForce({
+        //         -stiffness*falconPos[0]-viscous_replay*falcon_vel[0], 
+        //         -stiffness*falconPos[1]-viscous_replay*falcon_vel[1], 
+        //         -stiffness*(falconPos[2]-0.1)-viscous_replay*falcon_vel[2]});
     }
 
     // For recording and hybrid replay
     fx = wrench.force.x;
     fy = wrench.force.y;
     fz = wrench.force.z;
-
-    // Store forcing from falcon for deformations
-    dmp_fx = -(falconPos[0]);
-    dmp_fy = (falconPos[2]-0.1);
-    dmp_fz = falconPos[1];
-
 
 }
 
@@ -1398,12 +1421,12 @@ int main(int argc, char **argv) {
     // TODO: switch this to a loop and something that can go back and forth
     replay_active = true;
     bool quit_replay = false;
+
+    // Thread a process for the zero-displacement falcon controller!
+    std::thread t1(run_falcon_deformation_controller);
+
     while(ros::ok() && !quit_replay)
     {
-
-        // Spin off a process for the zero-displacement and such!
-
-
         array<bool,4> buttons = getButtons();
         if(buttons[0]!=last_buttons[0]){
             // Run Replay
@@ -1424,7 +1447,7 @@ int main(int argc, char **argv) {
         last_buttons[1] = buttons[1];
         last_buttons[2] = buttons[2];
         last_buttons[3] = buttons[3];
-        falconVelocity();
+        
         usleep(1000);
         ros::spinOnce();
     }
