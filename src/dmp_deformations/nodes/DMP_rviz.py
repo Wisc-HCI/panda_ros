@@ -306,6 +306,7 @@ def calculateDMP(demonstration_data, segmentation):
 
             sel_vec = segment[2]
             variances = segment[1]
+            surface=segment[3]
 
             demonstration_per_dmp = []
             
@@ -380,7 +381,7 @@ def calculateDMP(demonstration_data, segmentation):
                 average_vel = np.sqrt(np.power(max_x, 2) + np.power(max_y, 2) + np.power(max_z, 2))
             else: # hybrid control
                 surfaceModel = PyBSpline.BSplineSurface()
-                surfaceModel.loadSurface("curved")
+                surfaceModel.loadSurface(surface)
 
                 # x and y are the surface parameters
                 # need to get the actual 3D points from the Spline Suface
@@ -396,9 +397,7 @@ def calculateDMP(demonstration_data, segmentation):
                     count = count+1
 
                 # 0.1 to cancel out the effect of downsampling
-                average_vel = np.average((1/downsample)*np.linalg.norm(np.diff(np.array(points_3d),axis=0),axis=1))
-
-
+                average_vel = np.average(1.0/(downsample)*np.linalg.norm(np.diff(np.array(points_3d),axis=0),axis=1))
 
 
             delta_T = average_vel / max_vel

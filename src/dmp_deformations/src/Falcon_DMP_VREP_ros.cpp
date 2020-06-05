@@ -162,7 +162,6 @@ void rotationToQuaternion(array<double,3> x_hat, array<double,3> y_hat, array<do
     q_out[0] = q_out[0]/mag; q_out[1] = q_out[1]/mag; q_out[2] = q_out[2]/mag; q_out[3] = q_out[3]/mag;
 }
 
-
 ///////////////////////////////
 // FALCON-SPECIFIC FUNCTIONS //
 ///////////////////////////////
@@ -195,7 +194,7 @@ void falconVelocity() {
         falcon_vel = {(falconPos[0]-last_falcon[0])/delta_T,(falconPos[1]-last_falcon[1])/delta_T,(falconPos[2]-last_falcon[2])/delta_T};
     }
 
-    //Update last falcon  for use in the velocity calculation
+    //Update last falcon for use in the velocity calculation
     last_falcon[0] = falconPos[0];
     last_falcon[1] = falconPos[1];
     last_falcon[2] = falconPos[2];
@@ -212,7 +211,6 @@ typedef struct {
     double x, y, z;
     BSplineSurface surface;
 } opt_data;
-
 
 double obj_closest_surface(const std::vector<double> &x, std::vector<double> &grad, void *data)
 {
@@ -291,21 +289,30 @@ void bidirectional_checker(array<double,3> &vec, array<double,3> &prev_vec){
   transition_x,transition_y, transition_z are outputs representing the change to be applied
   to the next starting point
  */
-void calculateDMPTransition(double ii, double &transition_x, double &transition_y, double &transition_z, double x, double y, double z,vector<array<double,3>> selections,vector<array<double,7>> starting_points, vector<string> surfaces){
+void calculateDMPTransition(double ii, double &transition_x, double &transition_y, double &transition_z, double &transition_def_x, double &transition_def_y, double &transition_def_z, double x_imp, double y_imp, double z_imp, double x_def, double y_def, double z_def, vector<array<double,3>> selections,vector<array<double,7>> starting_points, vector<string> surfaces){
     if((ii+1)<selections.size()){
+        // TWO TRANSITIONS -> need 6 transition variables, need the stiffness, need the deformation scaling
 
         // Situations - same requires direct addition
         // position to force -> nothing
         // force to position -> nothing
-        // position to manifold (HARD!)
-        // manifold to position (easier!)
+        // position to manifold
+        // manifold to position
 
         if (selections[ii][2]==0.0 && selections[ii+1][2]==1.0){
             // On the manifold currently and coming off it!
-            // get actual pose since it will be different from stiffness and hybrid
-            transition_x = (actual_pos[0]-starting_points[ii+1][0]);
-            transition_y = (actual_pos[1]-starting_points[ii+1][1]);
-            transition_z = (actual_pos[2]-starting_points[ii+1][2]);
+            BSplineSurface surface;
+            surface.loadSurface(surfaces[ii]);
+            array<double,3> r; array<double,3> n_hat; array<double,3> r_u; array<double,3> r_v;
+
+            // transition point based on current surface value (state + deformation)
+            surface.calculateSurfacePoint(x_imp+x_def,y_imp+y_def,r,n_hat,r_u,r_v);
+
+            transition_x = (r[0]-starting_points[ii+1][0]);
+            transition_y = (r[1]-starting_points[ii+1][1]);
+            transition_z = (r[2]-starting_points[ii+1][2]);
+
+            transition_def_x = 0.0; transition_def_y = 0.0; transition_def_z = 0.0; 
         }
 
         else if (selections[ii][2]==1.0 && selections[ii+1][2]==0.0){
@@ -322,19 +329,24 @@ void calculateDMPTransition(double ii, double &transition_x, double &transition_
             transition_x = u-starting_points[ii+1][0];
             transition_y = v-starting_points[ii+1][1];
             transition_z = 0.0;
+
+            transition_def_x = 0.0; transition_def_y = 0.0; transition_def_z = 0.0; 
         }
 
-        else if (selections[ii][2]==1.0 && selections[ii+1][2]==1.0){
+        else if (selections[ii][2]==0.0 && selections[ii+1][2]==0.0){
             // Staying on the surface - continuity of all local variables
-            transition_x = (x-starting_points[ii+1][0]);
-            transition_y = (y-starting_points[ii+1][1]);
-            transition_z = (z-starting_points[ii+1][2]);
+            transition_x = (x_imp-starting_points[ii+1][0]);
+            transition_y = (y_imp-starting_points[ii+1][1]);
+            transition_z = (z_imp-starting_points[ii+1][2]);
+
+            transition_def_x = x_def;
+            transition_def_y = y_def;
+            transition_def_z = z_def;
         }
 
         else{
-            transition_x = 0.0;
-            transition_y = 0.0;
-            transition_z = 0.0;
+            transition_x = 0.0; transition_y = 0.0; transition_z = 0.0;
+            transition_def_x = 0.0; transition_def_y = 0.0; transition_def_z = 0.0; 
         }
     }
 }
@@ -392,9 +404,6 @@ array<double,3> deformationScaling(array<double,3> &rotated_deformation, double 
     array<double,3> final_deformation;
     double k= 50;
 
-    // Force mode gain, Position mode gain
-    std::array<double, 2> sel_gains = {3000, 250}; //150
-
     // First scale based on the type of input
     final_deformation[0] = var_x*rotated_deformation[0];
     final_deformation[1] = var_y*rotated_deformation[1];
@@ -421,9 +430,7 @@ array<double,3> deformationScaling(array<double,3> &rotated_deformation, double 
         }
 
     }
-
     return final_deformation;
-
 }
 
 /**
@@ -783,6 +790,7 @@ void replay_demo(ros::Publisher pose_goal_pub, ros::NodeHandle n){
     // Variables needed for transitions and deformation collision-limiting
     bool previous_dmp_no_contact = true;
     double transition_x=0.0, transition_y=0.0, transition_z=0.0;
+    double transition_def_x=0.0, transition_def_y=0.0, transition_def_z=0.0;
     bool dmp_x_limiting;
     bool dmp_y_limiting;
     bool dmp_z_limiting;
@@ -830,7 +838,7 @@ void replay_demo(ros::Publisher pose_goal_pub, ros::NodeHandle n){
         // For the general impedance model
         double ddx_imp, ddy_imp, ddz_imp;
         double dx_imp = 0.0, dy_imp=0.0, dz_imp=0.0;
-        double x_imp = starting_points[ii][0], y_imp=starting_points[ii][1], z_imp=starting_points[ii][2];
+        double x_imp = starting_points[ii][0]+transition_def_x, y_imp=starting_points[ii][1]+transition_def_y, z_imp=starting_points[ii][2]+transition_def_z;
         double x_def = 0.0, y_def=0.0, z_def=0.0;
 
         // Set up the values for the Quaternion TODO: Move to CDMP
@@ -868,11 +876,6 @@ void replay_demo(ros::Publisher pose_goal_pub, ros::NodeHandle n){
             geometry_msgs::Quaternion constraint_frame;
             constraint_frame.x=0.0; constraint_frame.y=0.0; constraint_frame.z=0.0; constraint_frame.w=1.0;
             double x_conv, y_conv, z_conv;
-
-            // TAKE THIS OUT - BROKEN FALCON
-            // dmp_fx = 0.0;
-            // dmp_fy = 0.0;
-            // dmp_fz = 0.0;
             
             ////////////////////////////////////////////////////////////////
             //      Deformation input mapping                             //
@@ -924,7 +927,6 @@ void replay_demo(ros::Publisher pose_goal_pub, ros::NodeHandle n){
 
             z = z_imp+z_def; 
 
-
             ////////////////////////////////////////////////
             // Calculate the orientation - NO DEFORMATIONS /
             ////////////////////////////////////////////////
@@ -943,7 +945,6 @@ void replay_demo(ros::Publisher pose_goal_pub, ros::NodeHandle n){
 
             //cout << "X: " << x << " Y:" << y << endl;
 
-            
             ////////////////////////////////////////////
             // Hybrid Control For Arbitrary Surfaces  //
             ////////////////////////////////////////////
@@ -970,8 +971,10 @@ void replay_demo(ros::Publisher pose_goal_pub, ros::NodeHandle n){
                 // Using the velocity of x and y (u and v), calculate the time
                 // derivative of the surface (i.e., vector-valued function)
                 array<double,3> v_hat;
-                v_hat[0]=x_hat[0]*dx+y_hat[0]*dy; v_hat[1]=x_hat[1]*dx+y_hat[1]*dy; v_hat[2]=x_hat[2]*dx+y_hat[2]*dy; // old velocity
+                //v_hat[0]=x_hat[0]*dx+y_hat[0]*dy; v_hat[1]=x_hat[1]*dx+y_hat[1]*dy; v_hat[2]=x_hat[2]*dx+y_hat[2]*dy; // old velocity
                 //v_hat[0]=x_hat[0]*(dx+dx_imp)+y_hat[0]*(dy+dy_imp); v_hat[1]=x_hat[1]*(dx+dx_imp)+y_hat[1]*(dy+dy_imp); v_hat[2]=x_hat[2]*(dx+dx_imp)+y_hat[2]*(dy+dy_imp); // true velocity
+                //fix velocity -> transition_testing
+                v_hat[0] = 1.0; v_hat[1] = 0.0; v_hat[2]=0.0;
 
                 double v_mag = sqrt(v_hat[0]*v_hat[0] + v_hat[1]*v_hat[1] + v_hat[2]*v_hat[2]);
 
@@ -1046,10 +1049,11 @@ void replay_demo(ros::Publisher pose_goal_pub, ros::NodeHandle n){
 
         // AFTER THE DMP IS COMPLETE, look at whether transitions are needed
         // Combat the transition discontinuities if there is still a transition left
-        calculateDMPTransition(ii,transition_x, transition_y, transition_z,x,y,z,selections, starting_points, surfaces);
+        calculateDMPTransition(ii,transition_x, transition_y, transition_z,transition_def_x,transition_def_y,transition_def_z,x_imp,y_imp,z_imp,x_def,y_def,z_def,selections, starting_points, surfaces);
 
     }
 
+    // Tells simulation that things are over if necessary
     replay_str.data = "end";
     dmp_replay_pub.publish(replay_str);
 }
@@ -1396,6 +1400,10 @@ int main(int argc, char **argv) {
     bool quit_replay = false;
     while(ros::ok() && !quit_replay)
     {
+
+        // Spin off a process for the zero-displacement and such!
+
+
         array<bool,4> buttons = getButtons();
         if(buttons[0]!=last_buttons[0]){
             // Run Replay

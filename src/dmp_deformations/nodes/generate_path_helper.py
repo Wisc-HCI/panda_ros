@@ -59,9 +59,10 @@ def calculateQuaternion(normal_vector, x, y):
 def main():
     num_pts = 100
     # with open('/home/mike/Documents/MikePanda/devel/lib/dmp_deformations/painting.csv', 'w') as csvfile:
-    # with open('/home/mike/Documents/MikePanda/devel/lib/dmp_deformations/writing.csv', 'w') as csvfile:
 
-    # # COMPOSITE ROLLING - TODO: CREATE THIS!
+    ##########################################################
+    ############## COMPOSITE LAYUP ###########################
+    ##########################################################
     # with open('/home/mike/Documents/MikePanda/devel/lib/dmp_deformations/composite.csv', 'w') as csvfile:
     #
     #     # Note the goal points are specified in parameterized coordinates if it is a contact event
@@ -167,7 +168,10 @@ def main():
     #         [surface_end[0], surface_end[1], surface_end[2], qx_e, qy_e, qz_e, qw_e, 0.0, 0.0, -4.0, 0.0, 0.0, 0.0]),
     #                      np.array([-0.1, 0.0, 1.2, qx_e, qy_e, qz_e, qw_e, 0.0, 0.0, -4.0, 0.0, 0.0, 0.0]), num_pts)
 
-    # # # WRITING - TODO: UPDATE TO WORK WITH SURFACE MODEL
+
+    ##########################################################
+    ############## WRITING TASK ##############################
+    ##########################################################
     with open('/home/mike/Documents/MikePanda/devel/lib/dmp_deformations/writing.csv', 'w') as csvfile:
 
         surfaceModel = PyBSpline.BSplineSurface()
@@ -179,8 +183,8 @@ def main():
         csvfile.write('\n')
         csvfile.write("1,0,0,0,1")
         csvfile.write('\n')
-        # csvfile.write("50 50 50,250 250 3000,250 250 3000,250 250 3000,50 50 50")
-        csvfile.write("0 0 0,0 0 0,0 0 0,0 0 0,0 0 0")
+        csvfile.write("50 50 50,250 250 3000,250 250 3000,250 250 3000,50 50 50")
+        # csvfile.write("0 0 0,0 0 0,0 0 0,0 0 0,0 0 0")
         csvfile.write('\n')
 
         surface_start, normal_start, r_u, r_v = surfaceModel.calculate_surface_point(0.95, 0.17)
@@ -192,22 +196,22 @@ def main():
 
 
         printPathSection(csvfile, np.array(
-            [-0.6, 0.078, 1.2, 0, 0, 0, 1, 0.0, 0.0, -4.0, 0.0, 0.0, 0.0]),
+            [-0.6, 0.078, 1.2, 0, 0, 0, 1, 0.0, 0.0, -5.0, 0.0, 0.0, 0.0]),
                          np.array(
-                             [surface_start[0], surface_start[1], surface_start[2], qx_s, qy_s, qz_s, qw_s, 0.0, 0.0, -4.0,
+                             [surface_start[0], surface_start[1], surface_start[2], qx_s, qy_s, qz_s, qw_s, 0.0, 0.0, -5.0,
                               0.0, 0.0, 0.0]), num_pts)
 
         # Format for path section is [ru,rv,null, qx, qy, qz, qw, fx, fy, fz, tx, ty, tz]
-        printPathSection(csvfile, np.array([0.95, 0.17, 0.0, qx_s, qy_s, qz_s, qw_s, 0.0, 0.0, -4.0, 0.0, 0.0, 0.0]),
-                         np.array([0.085, 0.17, 0.0, qx_s, qy_s, qz_s, qw_s, 0.0, 0.0, -4.0, 0.0, 0.0, 0.0]), num_pts)
+        printPathSection(csvfile, np.array([0.95, 0.17, 0.0, qx_s, qy_s, qz_s, qw_s, 0.0, 0.0, -5.0, 0.0, 0.0, 0.0]),
+                         np.array([0.085, 0.17, 0.0, qx_s, qy_s, qz_s, qw_s, 0.0, 0.0, -5.0, 0.0, 0.0, 0.0]), num_pts)
 
         # Format for path section is [ru,rv,null, qx, qy, qz, qw, fx, fy, fz, tx, ty, tz]
-        printPathSection(csvfile, np.array([0.085, 0.17, 0.0, qx_s, qy_s, qz_s, qw_s, 0.0, 0.0, -4.0, 0.0, 0.0, 0.0]),
-                         np.array([0.085, 0.73, 0.0, qx_s, qy_s, qz_s, qw_s, 0.0, 0.0, -4.0, 0.0, 0.0, 0.0]), num_pts)
+        printPathSection(csvfile, np.array([0.085, 0.17, 0.0, qx_s, qy_s, qz_s, qw_s, 0.0, 0.0, -5.0, 0.0, 0.0, 0.0]),
+                         np.array([0.085, 0.73, 0.0, qx_s, qy_s, qz_s, qw_s, 0.0, 0.0, -5.0, 0.0, 0.0, 0.0]), num_pts)
 
         # Format for path section is [ru,rv,null, qx, qy, qz, qw, fx, fy, fz, tx, ty, tz]
-        printPathSection(csvfile, np.array([0.085, 0.73, 0.0, qx_s, qy_s, qz_s, qw_s, 0.0, 0.0, -4.0, 0.0, 0.0, 0.0]),
-                         np.array([0.95, 0.73, 0.0, qx_s, qy_s, qz_s, qw_s, 0.0, 0.0, -4.0, 0.0, 0.0, 0.0]), num_pts)
+        printPathSection(csvfile, np.array([0.085, 0.73, 0.0, qx_s, qy_s, qz_s, qw_s, 0.0, 0.0, -5.0, 0.0, 0.0, 0.0]),
+                         np.array([0.95, 0.73, 0.0, qx_s, qy_s, qz_s, qw_s, 0.0, 0.0, -5.0, 0.0, 0.0, 0.0]), num_pts)
 
         surface_end, normal_end, r_u, r_v = surfaceModel.calculate_surface_point(0.95, 0.72)
         ending_vel = r_u * 1.0 + r_v* 0.0
@@ -216,8 +220,8 @@ def main():
         qx_e, qy_e, qz_e, qw_e = calculateQuaternion(normal_end, ending_vel, ending_y)
 
         printPathSection(csvfile, np.array(
-            [surface_end[0], surface_end[1], surface_end[2], qx_e, qy_e, qz_e, qw_e, 0.0, 0.0, -4.0, 0.0, 0.0, 0.0]),
-                         np.array([-0.6, 0.078, 1.2, 0, 0, 0, 1, 0.0, 0.0, -4.0, 0.0, 0.0, 0.0]), num_pts)
+            [surface_end[0], surface_end[1], surface_end[2], qx_e, qy_e, qz_e, qw_e, 0.0, 0.0, -5.0, 0.0, 0.0, 0.0]),
+                         np.array([-0.6, 0.078, 1.2, 0, 0, 0, 1, 0.0, 0.0, -5.0, 0.0, 0.0, 0.0]), num_pts)
 
 
         # # PAINTING - TODO: UPDATE TO WORK WITH SURFACE MODEL
