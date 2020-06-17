@@ -200,7 +200,7 @@ def createTable():
     x = np.linspace(0.32, -0.68, 25)
     y = np.linspace(0.18, -0.32, 25)
     xv, yv = np.meshgrid(x, y)
-    z = 0.975+0.0*xv+0.0*yv
+    z = 0.795+0.0*xv+0.0*yv
 
     control_pts = np.transpose([xv, yv, z])
     # control_pts = np.ones((5,5,3))
