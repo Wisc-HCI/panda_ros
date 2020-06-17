@@ -188,28 +188,67 @@ void falconVelocity() {
     last_falcon_updated = true;
 }
 
+bool haptic_cue_increased = false;
+bool haptic_cue_decreased = false;
+int haptic_cue_count = 0;
+
 void run_falcon_deformation_controller(){
     double viscous_replay = 30; // TODO: want to get to 2 sqrt(stiffness)
     double stiffness = 100; // for replay
     array<double, 3> falconPos = {0,0,0};
+
+    long count = 0;   
 
     falconVelocity();
     
     while(1){
         m_falconDevice.runIOLoop();
         falconPos = m_falconDevice.getPosition();
+
+        count++;
+
+        // Haptic Cues
+        if (haptic_cue_increased){
+            if(haptic_cue_count>500){
+                haptic_cue_increased=false;
+                haptic_cue_count = 0;
+            }
+            else{
+                // goes up by 20 after half a second then back
+                stiffness = 200.0-(100.0/62500.0)*(haptic_cue_count-250.0)*(haptic_cue_count-250.0);
+                viscous_replay = 3.0*sqrt(stiffness);
+                haptic_cue_count++;
+                //cout << "HCI" << endl;
+            }
+        }
+
+        if (haptic_cue_decreased){
+            if(haptic_cue_count>500){
+                haptic_cue_decreased=false;
+                haptic_cue_count = 0;
+            }
+            else{
+                // goes up by 20 after half a second then back
+                stiffness = 50.0+(50.0/62500.0)*(haptic_cue_count-250.0)*(haptic_cue_count-250.0);
+                viscous_replay = 3.0*sqrt(stiffness);
+                haptic_cue_count++;
+                //cout << "HCD" << endl;
+            }
+        }
+
         //cout << "FP:" << falconPos[0] << " " << falconPos[1] << " " << falconPos[2] << endl;
         // zero displacement mode
         // falcon has offset in z
         m_falconDevice.setForce({
                 -stiffness*falconPos[0]-viscous_replay*falcon_vel[0], 
                 -stiffness*falconPos[1]-viscous_replay*falcon_vel[1], 
-                -stiffness*(falconPos[2]-0.1)-viscous_replay*falcon_vel[2]});
+                -stiffness*(falconPos[2]-0.125)-viscous_replay*falcon_vel[2]});
 
         // Store forcing from falcon for deformations
-        dmp_fx = -(falconPos[0]);
-        dmp_fy = (falconPos[2]-0.1);
-        dmp_fz = falconPos[1];
+        // Note: these should be unit-normalized (i.e., span from -1 to 1)
+        dmp_fx = -(falconPos[0])/(0.06);
+        dmp_fy = (falconPos[2]-0.125)/(0.05);
+        dmp_fz = falconPos[1]/(0.055);
         usleep(1000);
     }
 }
@@ -231,6 +270,34 @@ array<bool,4> getButtons(){
 ////////////////////////////
 // DEFORMATION FUNCTIONS  //
 ////////////////////////////
+
+/**
+ * Checks whether a haptic cue should be issues based on a changing variance
+ */
+double prev_var_x = 0.0; double prev_var_y = 0.0; double prev_var_z = 0.0;
+bool var_x_changing = false; bool var_y_changing = false; bool var_z_changing = false;
+void check_for_haptic_cue(double var_x, double var_y, double var_z){
+    if(var_x != prev_var_x && !var_x_changing)
+    {
+        var_x_changing = true;
+        if(var_x-prev_var_x>0.0){
+            // increasing range -> push user in
+            haptic_cue_increased = true;
+        }
+
+        else{
+            // decreasing range -> push user out
+            haptic_cue_decreased = true;
+        }
+    }
+
+    else if(var_x==prev_var_x){
+        var_x_changing=false;
+    }
+
+    prev_var_x = var_x; prev_var_y = var_y; prev_var_z = var_z;
+
+}
 
 // Next 3 pieces are for surface optimization
 typedef struct {
@@ -273,7 +340,6 @@ void getClosestParams(double x, double y, double z, double &u, double&v, BSpline
 
     opt.set_min_objective(obj_closest_surface,&data);
     opt.set_xtol_rel(1e-4);
-    cout << "TRYING" << endl;
 
     try{
         nlopt::result result = opt.optimize(params, minf);
@@ -305,7 +371,6 @@ void bidirectional_checker(array<double,3> &vec, array<double,3> &prev_vec){
     if(sign<0.0){
         vec[0] = -vec[0]; vec[1] = -vec[1]; vec[2] = -vec[2]; 
     }
-
 }
 
 /**
@@ -391,16 +456,12 @@ void calculateNearestContact(int ii,vector<array<double,3>> selections,vector<ar
     // TODO: check over all this collision stuff WRT to the new rotations
     // There is a next DMP, check for pos to force transition
     if (ii+1<selections.size()){
-        if(selections[ii][0] ==1 && selections[ii+1][0]==0){
-            dmp_x_collision = attractor_points[ii][0];
-            dmp_x_limiting=true;
-        }
-        if(selections[ii][1] ==1 && selections[ii+1][1]==0){
-            dmp_y_collision = attractor_points[ii][1];
-            dmp_y_limiting=true;
-        }
         if(selections[ii][2] ==1 && selections[ii+1][2]==0){
+            dmp_x_collision = attractor_points[ii][0];
+            dmp_y_collision = attractor_points[ii][1];
             dmp_z_collision = attractor_points[ii][2];
+            dmp_x_limiting=true;
+            dmp_y_limiting=true;
             dmp_z_limiting=true;
         }
     }
@@ -409,14 +470,10 @@ void calculateNearestContact(int ii,vector<array<double,3>> selections,vector<ar
     if (ii>0){
         if(selections[ii-1][0] ==0 && selections[ii][0]==1){
             dmp_x_collision = starting_points[ii][0];
-            dmp_x_limiting=true;
-        }
-        if(selections[ii-1][1] ==0 && selections[ii][1]==1){
             dmp_y_collision = starting_points[ii][1];
-            dmp_y_limiting=true;
-        }
-        if(selections[ii-1][2] ==0 && selections[ii][2]==1){
             dmp_z_collision = starting_points[ii][2];
+            dmp_x_limiting=true;
+            dmp_y_limiting=true;
             dmp_z_limiting=true;
         }
     }
@@ -425,9 +482,10 @@ void calculateNearestContact(int ii,vector<array<double,3>> selections,vector<ar
 /**
  * Calculate the final deformation based on adaptive gains, collisions, workspace limits, etc.
  */
-array<double,3> deformationScaling(array<double,3> &rotated_deformation, double var_x, double var_y, double var_z, geometry_msgs::Vector3 selection, double x, double y){
+array<double,3> deformationScaling(array<double,3> &rotated_deformation, double var_x, double var_y, double var_z, geometry_msgs::Vector3 selection, double x, double y, double collision_scaling){
     
     array<double,3> final_deformation;
+
     double k= 50;
 
     // First scale based on the type of input
@@ -456,6 +514,12 @@ array<double,3> deformationScaling(array<double,3> &rotated_deformation, double 
         }
 
     }
+
+    // Scale back based on potential collision
+    final_deformation[0] = final_deformation[0]/collision_scaling;
+    final_deformation[1] = final_deformation[1]/collision_scaling;
+    final_deformation[2] = final_deformation[2]/collision_scaling;
+
     return final_deformation;
 }
 
@@ -758,6 +822,12 @@ void replay_demo(ros::Publisher pose_goal_pub, ros::NodeHandle n){
     ros::Publisher dmp_replay_pub = 
         n.advertise<std_msgs::String>("/dmp/replay", 5);
 
+    // Publishers specifically for intent visualization
+    ros::Publisher defscaling_vector_pub = 
+        n.advertise<geometry_msgs::Vector3>("/panda/defscaling", 5);
+    ros::Publisher nominaltraj_vector_pub = 
+        n.advertise<geometry_msgs::Vector3>("/panda/nominaltraj", 5);
+
     // Pause 0.5s to allow publishers to register
     for(int jj=0; jj<500; jj++)
     {
@@ -820,6 +890,7 @@ void replay_demo(ros::Publisher pose_goal_pub, ros::NodeHandle n){
     double dmp_x_collision = 0.0;
     double dmp_y_collision = 0.0;
     double dmp_z_collision = 0.0;
+    double surface_scaling_x = 1.0; double surface_scaling_y = 1.0;
 
     BSplineSurface curr_surface;
 
@@ -830,6 +901,15 @@ void replay_demo(ros::Publisher pose_goal_pub, ros::NodeHandle n){
         {
             // Load the B-spline surface
             curr_surface.loadSurface(surfaces[ii]);
+
+            // get the surface ~ scaling
+            surface_scaling_y = 0.5;
+
+        }
+
+        else{
+            // surface scaling is 1.0
+            surface_scaling_x = 1.0; surface_scaling_y = 1.0;
         }
 
         // First, publish selection vector
@@ -888,13 +968,17 @@ void replay_demo(ros::Publisher pose_goal_pub, ros::NodeHandle n){
             double var_y = variance_dmp[ii][(int)floor(s)][1]+(variance_dmp[ii][(int)ceil(s)][1]-variance_dmp[ii][(int)floor(s)][1])*(s-floor(s));
             double var_z = variance_dmp[ii][(int)floor(s)][2]+(variance_dmp[ii][(int)ceil(s)][2]-variance_dmp[ii][(int)floor(s)][2])*(s-floor(s));
 
+            // If the variance starts changing (up or down), signal a haptic cue to the user
+            check_for_haptic_cue(var_x,var_y,var_z);
+
             // Compute a potential DMP diminishing scale based on collisions
-            double dmp_scaling_x = 1.0;
-            double dmp_scaling_y = 1.0;
-            double dmp_scaling_z = 1.0;
-            if(dmp_x_limiting) dmp_scaling_x = 1-exp(-200*abs(x-dmp_x_collision));
-            if(dmp_y_limiting) dmp_scaling_y = 1-exp(-200*abs(y-dmp_y_collision));
-            if(dmp_z_limiting) dmp_scaling_z = 1-exp(-200*abs(z-dmp_z_collision));
+            double collision_scaling = 1.0;
+
+            if(dmp_x_limiting){
+                double dist_to_collision = sqrt((x-dmp_x_collision)*(x-dmp_x_collision)+(y-dmp_y_collision)*(y-dmp_y_collision)+(z-dmp_z_collision)*(z-dmp_z_collision));
+                collision_scaling = 1-exp(-75*dist_to_collision);
+
+            }
             
             geometry_msgs::Quaternion constraint_frame;
             constraint_frame.x=0.0; constraint_frame.y=0.0; constraint_frame.z=0.0; constraint_frame.w=1.0;
@@ -905,13 +989,16 @@ void replay_demo(ros::Publisher pose_goal_pub, ros::NodeHandle n){
             ////////////////////////////////////////////////////////////////
             // 1 - Task Frame
             // 2 - Velocity Frame
-            int input_mapping_method=2;
+            int input_mapping_method=1;
             array<double,3> rotated_deformation = map_deformation_input(input_mapping_method,dmp_fx,dmp_fy,dmp_fz,dx,dy,dz);
 
             /////////////////////////////////////////////////////////////////
             //      Deformation scaling                                    //
             /////////////////////////////////////////////////////////////////
-            array<double,3> final_deformation = deformationScaling(rotated_deformation,var_x,var_y,var_z,selection,x_imp,y_imp);
+            array<double,3> final_deformation = deformationScaling(rotated_deformation,var_x,var_y,var_z,selection,x_imp,y_imp, collision_scaling);
+
+            // Turn off deformations
+            //final_deformation[0] = 0.0; final_deformation[1]=0.0; final_deformation[2]=0.0;
             
             ////////////////////////////////////////////////////////////////
             //      Calculate New DMP values                              //
@@ -994,10 +1081,10 @@ void replay_demo(ros::Publisher pose_goal_pub, ros::NodeHandle n){
                 // Using the velocity of x and y (u and v), calculate the time
                 // derivative of the surface (i.e., vector-valued function)
                 array<double,3> v_hat;
-                //v_hat[0]=x_hat[0]*dx+y_hat[0]*dy; v_hat[1]=x_hat[1]*dx+y_hat[1]*dy; v_hat[2]=x_hat[2]*dx+y_hat[2]*dy; // old velocity
-                //v_hat[0]=x_hat[0]*(dx+dx_imp)+y_hat[0]*(dy+dy_imp); v_hat[1]=x_hat[1]*(dx+dx_imp)+y_hat[1]*(dy+dy_imp); v_hat[2]=x_hat[2]*(dx+dx_imp)+y_hat[2]*(dy+dy_imp); // true velocity
+                v_hat[0]=x_hat[0]*dx+y_hat[0]*dy; v_hat[1]=x_hat[1]*dx+y_hat[1]*dy; v_hat[2]=x_hat[2]*dx+y_hat[2]*dy; // old velocity
+                v_hat[0]=x_hat[0]*(dx+dx_imp)+y_hat[0]*(dy+dy_imp); v_hat[1]=x_hat[1]*(dx+dx_imp)+y_hat[1]*(dy+dy_imp); v_hat[2]=x_hat[2]*(dx+dx_imp)+y_hat[2]*(dy+dy_imp); // true velocity
                 //fix velocity -> transition_testing
-                v_hat[0] = 1.0; v_hat[1] = 0.0; v_hat[2]=0.0;
+                // v_hat[0] = 1.0; v_hat[1] = 0.0; v_hat[2]=0.0;
 
                 double v_mag = sqrt(v_hat[0]*v_hat[0] + v_hat[1]*v_hat[1] + v_hat[2]*v_hat[2]);
 
@@ -1043,17 +1130,44 @@ void replay_demo(ros::Publisher pose_goal_pub, ros::NodeHandle n){
             double dir_x = dx/sqrt(dx*dx+dy*dy);
             double dir_y = dy/sqrt(dx*dx+dy*dy);
             // TODO: this aint right
-            double dp_in_dir = dir_x*20*rotated_deformation[0] + dir_y*20*rotated_deformation[1];
+            double dp_in_dir = dir_x*final_deformation[0] + dir_y*final_deformation[1];
             
             if(dp_in_dir > 0)
             {
                 dp_in_dir = 0.0; // only allow slowing down
             }
 
+            // TODO: fix all this stuff
+            dp_in_dir = 0.0;
+
             delta_s = 1.0+dp_in_dir;
             s+=delta_s;
 
-            // Publish everything to the simulation
+
+            /////////////////////////////////////////////////////
+            // INTENT AND EXPECTATION ///////////////////////////
+            /////////////////////////////////////////////////////
+            
+            // Publish enough to show the ellipsoid of expectation
+
+            // Need deformation amount for x,y,z
+            // Need the nominal value for x,y,z
+            geometry_msgs::Vector3 def_range;
+            def_range.x = var_x/k; def_range.y = var_y/k; def_range.z = var_z/k;
+
+            if(selection.z==0){
+                def_range.x = def_range.x*surface_scaling_x;
+                def_range.y = def_range.y*surface_scaling_y;
+            }
+            
+            geometry_msgs::Vector3 nominal;
+            nominal.x = x_def; nominal.y = y_def; nominal.z = z_def;
+
+            defscaling_vector_pub.publish(def_range);
+            nominaltraj_vector_pub.publish(nominal);
+
+
+            // PUBLISH THE ROBOT CONTROL PARAMETERS
             ft.force.x = x_conv; ft.force.y = y_conv; ft.force.z = z_conv;
             pose.position.x = x_conv; pose.position.y = y_conv; pose.position.z = z_conv;
             pose.orientation.x = qx; pose.orientation.y = qy; pose.orientation.z = qz; pose.orientation.w = qw;
