@@ -6,6 +6,6 @@
 namespace PandaController {
     std::array<double, 16> calculatePandaEE(std::array<double, 7> q);
     std::array<double, 42> calculatePandaJacobian(std::array<double, 7> q);
-    std::array<double, 42> pandaAutoJacobian(std::array<double, 7> q);
+    std::array<double, 42> pandaJacobian(std::array<double, 7> q);
 }
 #endif

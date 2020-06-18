@@ -2,23 +2,30 @@
 #include <array>
 #include <cmath>
 #include <Eigen/Core>
-#include <adept.h>
-#include <adept_arrays.h>
 
 using namespace std;
 
 namespace PandaController {
-    
+
     Eigen::Matrix<double, 4, 4> transformFromDH(double a, double d, double alpha, double theta) {
         Eigen::MatrixXd trans(4,4);
         // Column major modified DH parameters
         trans << cos(theta), sin(theta) * cos(alpha), sin(theta) * sin(alpha), 0,
                 -sin(theta), cos(theta) * cos(alpha), cos(theta) * sin(alpha), 0,
                           0,             -sin(alpha),              cos(alpha), 0,
-                          a,         -d * sin(alpha),          d * cos(alpha), 1;          
-        return trans;
+                          a,         -d * sin(alpha),          d * cos(alpha), 1;
+        return trans.transpose();
     }
 
+    Eigen::Matrix<double, 4, 4> transformDerivativeFromDH(double a, double d, double alpha, double theta) {
+        Eigen::MatrixXd trans(4,4);
+        // Column major modified DH parameters
+        trans << -sin(theta), cos(theta) * cos(alpha), cos(theta) * sin(alpha), 0,
+                 -cos(theta),-sin(theta) * cos(alpha),-sin(theta) * sin(alpha), 0,
+                          0,                        0,                       0, 0,
+                          0,                        0,                       0, 0;
+        return trans.transpose();
+    }
 
     Eigen::Matrix<double, 4, 4> EEtransform(array<double, 7> q) {
         // https://frankaemika.github.io/docs/control_parameters.html#denavithartenberg-parameters
@@ -39,79 +46,53 @@ namespace PandaController {
         return transform;
     }
 
-    adept::aMatrix44 transformFromDHA(double a, double d, double alpha, adept::adouble theta) {
-        adept::aMatrix44 trans;
-        trans(0,0) = cos(theta);
-        trans(1,0) = sin(theta) * cos(alpha);
-        trans(2,0) = sin(theta) * sin(alpha);
-        trans(3,0) = 0;
+    array<double, 42> pandaJacobian(array<double, 7> q){
+        array<Eigen::Matrix<double, 4, 4>, 8> transforms {
+            transformFromDH(       0,   0.333,       0, q[0]),
+            transformFromDH(       0,       0, -M_PI/2, q[1]),
+            transformFromDH(       0, 0.31599,  M_PI/2, q[2]),
+            transformFromDH( 0.08249,       0,  M_PI/2, q[3]),
+            transformFromDH(-0.08249,   0.384, -M_PI/2, q[4]),
+            transformFromDH(       0,       0,  M_PI/2, q[5]),
+            transformFromDH(  0.0879,       0,  M_PI/2, q[6]),
+            transformFromDH(       0,  0.1069,       0,    0)
+        };
+        array<Eigen::Matrix<double, 4, 4>, 7> transforms_derivative {
+            transformDerivativeFromDH(       0,   0.333,       0, q[0]),
+            transformDerivativeFromDH(       0,       0, -M_PI/2, q[1]),
+            transformDerivativeFromDH(       0, 0.31599,  M_PI/2, q[2]),
+            transformDerivativeFromDH( 0.08249,       0,  M_PI/2, q[3]),
+            transformDerivativeFromDH(-0.08249,   0.384, -M_PI/2, q[4]),
+            transformDerivativeFromDH(       0,       0,  M_PI/2, q[5]),
+            transformDerivativeFromDH(  0.0879,       0,  M_PI/2, q[6])
+        };
 
-        trans(0,1) = -sin(theta);
-        trans(1,1) = cos(theta) * cos(alpha);
-        trans(2,1) = cos(theta) * sin(alpha);
-        trans(3,1) = 0;
-        
-        trans(0,2) = 0;
-        trans(1,2) = -sin(alpha);
-        trans(2,2) = cos(alpha);
-        trans(3,2) = 0;
-        
-        trans(0,3) = a;
-        trans(1,3) = -d * sin(alpha);
-        trans(2,3) = d * cos(alpha);
-        trans(3,3) = 1;
-        return trans;
-    }
+        auto trans = EEtransform(q);
+        auto R = trans.topLeftCorner(3, 3);
 
-    adept::aMatrix44 EEtransform(array<adept::adouble, 7> q) {
-        // https://frankaemika.github.io/docs/control_parameters.html#denavithartenberg-parameters
-        return  transformFromDHA(       0,   0.333,       0, q[0]) **
-                transformFromDHA(       0,       0, -M_PI/2, q[1]) **
-                transformFromDHA(       0, 0.31599,  M_PI/2, q[2]) **
-                transformFromDHA( 0.08249,       0,  M_PI/2, q[3]) **
-                transformFromDHA(-0.08249,   0.384, -M_PI/2, q[4]) **
-                transformFromDHA(       0,       0,  M_PI/2, q[5]) **
-                transformFromDHA(  0.0879,       0,  M_PI/2, q[6]) **
-                transformFromDHA(       0,  0.1069,       0,    0);
-    }
-
-    array<double, 42> pandaAutoJacobian(array<double, 7> q) {
-        adept::Stack stack;
-        array<adept::adouble, 7> q_ad;
-        for (int i = 0; i < q.size(); i++) q_ad[i] = q[i];
-        stack.new_recording();
-        adept::aMatrix44 trans = EEtransform(q_ad);
-        stack.independent(q_ad.data(), 7);
-
-        stack.dependent(trans(0, 3)); // x_dot
-        stack.dependent(trans(1, 3)); // y_dot
-        stack.dependent(trans(2, 3)); // z_dot
-        Eigen::Matrix3d R;
-        for (int i = 0; i < 3; i++) {
-            for (int j = 0; j < 3; j++) {
-                stack.dependent(trans(i,j));
-                R(i,j) = trans(i,j).value();
+        Eigen::Matrix<double, 6, 7> jacobian = Eigen::MatrixXd::Zero(6, 7);
+        for (int j = 0; j < 7; j++) {
+            Eigen::Matrix4d jac = Eigen::MatrixXd::Identity(4,4);
+            for (int i = 0; i < transforms.size(); i++) {
+                if (i == j) {
+                    jac = jac * transforms_derivative[i];
+                } else {
+                    jac = jac * transforms[i];
+                }
             }
-        }
-        Eigen::Matrix<double, 12, 7> jacobian_T;
-        // This is not the jacobian WRT euler angles yet.
-        // This is the jacobian WRT the transformation matrix
-        stack.jacobian(jacobian_T.data());
+            jacobian(0, j) = jac(0, 3);
+            jacobian(1, j) = jac(1, 3);
+            jacobian(2, j) = jac(2, 3);
 
-        Eigen::Matrix<double, 6, 7> jacobian_X;
-        jacobian_X.topRows(3) = jacobian_T.topRows(3);
-        for (int i = 0; i < 7; i++) {
-            Eigen::Matrix3d dRdq;
-            for (int j = 0; j < 9; j++) {
-                dRdq((int)(j / 3), j % 3) = jacobian_T(3+j,i);
-            }
-            auto W = dRdq * R.transpose();
-            jacobian_X(3, i) = W(2,1); // w_x
-            jacobian_X(4, i) = W(0,2); // w_y
-            jacobian_X(5, i) = W(1,0); // w_z
+            auto W = jac.topLeftCorner(3,3) * R.transpose();
+            jacobian(3, j) = W(2,1); // w_x
+            jacobian(4, j) = W(0,2); // w_y
+            jacobian(5, j) = W(1,0); // w_z
         }
-        array<double, 42> jacobian_array;
-        Eigen::Map<Eigen::Matrix<double, 6, 7>>(jacobian_array.data()) = jacobian_X;
+        
+        array<double, 42> jacobian_array{};
+        // Pointer magic
+        Eigen::Map<Eigen::MatrixXd>(jacobian_array.data(), 6, 7) = jacobian;
         return jacobian_array;
     }
 
