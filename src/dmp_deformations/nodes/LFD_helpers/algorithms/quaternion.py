@@ -9,8 +9,8 @@ __author__ = "Guru Subramani and Mike Hagenow"
 
 import numpy as np
 from copy import deepcopy
-from algorithms.filters import butter_lowpass_filter
-from algorithms.rotation_identities import skew
+from filters import butter_lowpass_filter
+from rotation_identities import skew
 
 def quaternion_multiply(q0,q1):
     """
