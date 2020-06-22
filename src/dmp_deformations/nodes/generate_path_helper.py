@@ -85,7 +85,7 @@ def main():
         ########################
         ### PASS 1 #############
         ########################
-        surface_start, normal_start, r_u, r_v = surfaceModel.calculate_surface_point(0.1, 0.5)
+        surface_start, normal_start, r_u, r_v = surfaceModel.calculate_surface_point(0.3, 0.5)
         starting_point = surface_start + normal_start*0.3
 
         print("SS:",surface_start)
@@ -99,10 +99,10 @@ def main():
                          np.array([surface_start[0], surface_start[1], surface_start[2], qx_s, qy_s, qz_s, qw_s, 0.0, 0.0, -4.0, 0.0, 0.0, 0.0]),num_pts)
 
         # Format for path section is [ru,rv,null, qx, qy, qz, qw, fx, fy, fz, tx, ty, tz]
-        printPathSection(csvfile, np.array([0.1, 0.5, 0.0, qx_s, qy_s, qz_s, qw_s, 0.0, 0.0, -4.0, 0.0, 0.0, 0.0]),
+        printPathSection(csvfile, np.array([0.3, 0.5, 0.0, qx_s, qy_s, qz_s, qw_s, 0.0, 0.0, -4.0, 0.0, 0.0, 0.0]),
                          np.array([0.9, 0.5, 0.0, qx_s, qy_s, qz_s, qw_s, 0.0, 0.0, -4.0, 0.0, 0.0, 0.0]),num_pts)
 
-        surface_end, normal_end, r_u, r_v = surfaceModel.calculate_surface_point(0.9, 0.3)
+        surface_end, normal_end, r_u, r_v = surfaceModel.calculate_surface_point(0.9, 0.5)
         ending_vel = r_u * 1.0 + r_v * 0.0
         ending_vel = ending_vel / np.linalg.norm(ending_vel)
         ending_y = np.cross(normal_end, ending_vel)
@@ -139,7 +139,7 @@ def main():
 
         printPathSection(csvfile, np.array(
             [surface_end[0], surface_end[1], surface_end[2], qx_e, qy_e, qz_e, qw_e, 0.0, 0.0, -4.0, 0.0, 0.0, 0.0]),
-                         np.array([0.1, -0.1, 1.0, qx_e, qy_e, qz_e, qw_e, 0.0, 0.0, -4.0, 0.0, 0.0, 0.0]), num_pts)
+                         np.array([0.0, -0.1, 1.1, qx_e, qy_e, qz_e, qw_e, 0.0, 0.0, -4.0, 0.0, 0.0, 0.0]), num_pts)
 
         # ########################
         # ### PASS 3 #############
