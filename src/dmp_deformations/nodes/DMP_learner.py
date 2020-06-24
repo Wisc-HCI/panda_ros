@@ -21,9 +21,9 @@ from nav_msgs.msg import Path
 from geometry_msgs.msg import PoseStamped
 from visualization_msgs.msg import MarkerArray, Marker
 import csv
+from scipy.interpolate import interp1d
 from dtw import dtw
 import PyBSpline
-
 
 demonstrations = []
 
@@ -87,14 +87,14 @@ def loadPresegmentedCore(file):
     print "..."
     print "LOAD AND CALCULATIONS COMPLETE"
 
-
+# Used to remove the struct from the input for troubleshooting
 def loadPresegmented(data):
     loadPresegmentedCore(data.data)
-
 
 def calculateDMP(demonstration_data, segmentation, alignment_curves):
     print "Building DMPs"
     dmps = []
+    variance_per_segment=[]
 
     # Write a CSV with the final trajectory which can be read and executed
     with open('/home/mike/Documents/MikePanda/devel/lib/dmp_deformations/learneddmp.csv', 'w') as csvfile:
@@ -117,6 +117,11 @@ def calculateDMP(demonstration_data, segmentation, alignment_curves):
             surface=segment[3]
 
             demonstration_per_dmp = []
+
+            # 3 Deformation Directions need calculations of variances
+            var_x_temp = np.zeros((200, len(demonstration_data)))
+            var_y_temp = np.zeros((200, len(demonstration_data)))
+            var_z_temp = np.zeros((200, len(demonstration_data)))
             
             # Get the DMP sections for each of the demonstrations
             for yy in range(0,len(demonstration_data)):
@@ -147,6 +152,15 @@ def calculateDMP(demonstration_data, segmentation, alignment_curves):
                 temp[:, 5] = demo[start_index:end_index,5].reshape((end_index - start_index,))
                 temp[:, 6] = demo[start_index:end_index,6].reshape((end_index - start_index,))
 
+
+                # ADD TO VARIANCE CALCULATION
+                # TODO: does this work whatsoever?
+                two_hundred = np.linspace(0,1,200)
+                var_x_temp[:,yy] = interp1d(demo[start_index:end_index,0 + 7 * (1 - sel_vec[0])],two_hundred)(two_hundred)
+                var_y_temp[:,yy] = interp1d(demo[start_index:end_index,1 + 7 * (1 - sel_vec[1])],two_hundred)(two_hundred)
+                var_z_temp[:,yy] = interp1d(demo[start_index:end_index,2 + 7 * (1 - sel_vec[2])],two_hundred)(two_hundred)
+
+
                 # Positions for plotting
                 temp_pos = np.zeros((end_index-start_index,3))
 
@@ -156,13 +170,16 @@ def calculateDMP(demonstration_data, segmentation, alignment_curves):
                 
                 demonstration_per_dmp.append(temp)
 
+
+            # Calculate the variances and store for later
+            # TODO: apply the algorithm?
+            variance_per_segment.append((np.var(var_x_temp,axis=1),np.var(var_x_temp,axis=1),np.var(var_x_temp,axis=1)))
+
             dmps[xx].inputData(demonstration_data=demonstration_per_dmp)
             dmps[xx].computeDMP()
 
-            
             trajectories = dmps[xx].getTrajectory()
             zero_length = len(trajectories[0])
-            print "ZERO LENGTH: ",zero_length
 
 
             # Figure out how long the demonstration should be based on max difference (velocity)
@@ -173,7 +190,7 @@ def calculateDMP(demonstration_data, segmentation, alignment_curves):
             #########################################################################
 
             max_vel = 0.15 # m/s
-            panda_delta_T = 0.01 # 1 ms # TODO: MOVE TO CONFIG!
+            panda_delta_T = 0.01 # 1 ms
             # TODO: this really should probably be switched back to maximum velocity
 
             if sel_vec[2]==1: # Position control
@@ -251,12 +268,20 @@ def calculateDMP(demonstration_data, segmentation, alignment_curves):
             for ii in range(0,len(return_forces[0])-1):
                 # print trajectories[0][ii][0]
                 for jj in range(0,num_interp_pts):
-                    csvfile.write(str(variances[0])+','+str(variances[1])+','+str(variances[2]))
-                    csvfile.write('\n')
 
-        # print np.shape(trajectories_plotting[2])
-        # print demonstration_data_trimmed[0][:,2]
-        # plot_paths_rviz(demonstration_data_trimmed,trajectories_plotting)
+                    if(variances is not None):
+                        # Presegmented comes with set level of variances. Otherwise, use based on the data
+                        csvfile.write(str(variances[0])+','+str(variances[1])+','+str(variances[2]))
+                        csvfile.write('\n')
+
+                    else:
+                        # LFD gets variance based on the data
+                        # TODO: THIS IS ALL SERIOUSLY BROKENSZIES
+                        variance_per_segment[ii]
+                        var_x = variance_per_segment[ii][0] + (float(jj) / float(num_interp_pts)) * (
+                                    return_forces[0][ii + 1] - return_forces[0][ii])
+                        csvfile.write(str(variances[0]) + ',' + str(variances[1]) + ',' + str(variances[2]))
+                        csvfile.write('\n')
 
 
 def main():

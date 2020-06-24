@@ -109,7 +109,6 @@ def learn_from_demonstrations():
     surfaceModel = PyBSpline.BSplineSurface()
     surfaceModel.loadSurface(surface_file)
 
-
     # Rigid Registration parameters
     mocap_to_robot_r = np.array([0.0, 0.0, 0.0])
     mocap_to_robot_q = np.array([0.0, 0.0, 0.0, 1.0]) # xyzw
@@ -159,8 +158,7 @@ def learn_from_demonstrations():
         demonstration_data.append(np.concatenate(demo[0],demo[1], demo[2]))
 
     # initial values for u and v so that the previous is used for each next guess in the NLoptimization
-    u=0
-    v=0
+    u,v=0,0
 
     for segment_id in range(0,segmented_inds):
         # Check if contact event
