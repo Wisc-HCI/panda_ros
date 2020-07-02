@@ -16,19 +16,7 @@ from LFD_helpers.algorithms.transform import transform_coord_frame
 from scipy import signal
 from dtw import dtw
 import PyBSpline
-from scipy.optimize import minimize
 from DMP_learner import calculateDMP
-
-
-def obj_closest_surface(x,surface,xf,yf,zf):
-    r, n_hat, r_u_norm, r_v_norm = surface.calculate_surface_point(x[0],x[1])
-    return (r[0]-xf)*(r[0]-xf)+(r[1]-yf)*(r[1]-yf)+(r[2]-zf)*(r[2]-zf)
-
-def getClosestParams(x,y,z,u,v,surface):
-    x0 = np.array([u, v])
-    res = minimize(obj_closest_surface, x0, method='COBYLA',
-                   options={'xatol': 1e-8, 'disp': True}, bounds=([0.0, 0.0],[1.0, 1.0]), args=(surface,x,y,z))
-    return res.x[0], res.x[1]
 
 def getSegmentation(forces):
     # Go through demonstration and look for contact, un-contact events
@@ -75,20 +63,23 @@ def rotate_data(transform_r,transform_q,r,q,f):
     return r_rotated,q_rotated,f_rotated
 
 def calculate_alignment_curves(demonstration_data):
+    manhattan_distance = lambda x, y: np.abs(x[0] - y[0]) + np.abs(x[1] - y[1]) + np.abs(x[2] - y[2])
     x = []
-    for ii in range(0,np.shape(demonstration_data[0])[0]):
+
+    # First demonstration is used for comparison (this is also the one that is segmented)
+    for ii in range(0,np.shape(demonstration_data[0][0])[0]):
         # Features are stored as lists of tuples
-        x.append((demonstration_data[0][ii,0],demonstration_data[0][ii,1],demonstration_data[0][ii,2]))
+        x.append((demonstration_data[0][0][ii][0],demonstration_data[0][0][ii][1],demonstration_data[0][0][ii][2]))
 
     alignment_curves = []
+
+    # compare each of the demos to the first which is used for segmentation
     for ii in range(0,len(demonstration_data)):
         y = []
-        # compare each of the demos to the first which is used for segmentation
-        manhattan_distance = lambda x, y: np.abs(x[0] - y[0])+np.abs(x[1] - y[1])+np.abs(x[2] - y[2])
 
-        for jj in range(0, np.shape(demonstration_data[ii])[0]):
+        for jj in range(0, np.shape(demonstration_data[ii][0])[0]):
             # Features are stored as lists of tuples
-            y.append((demonstration_data[ii][jj, 0], demonstration_data[ii][jj, 1], demonstration_data[ii][jj, 2]))
+            y.append((demonstration_data[ii][0][jj][0], demonstration_data[ii][0][jj][1], demonstration_data[ii][0][jj][2]))
 
         d, cost_matrix, acc_cost_matrix, path = dtw(x, y, dist=manhattan_distance)
         alignment_curves.append((path[0],path[1]))
@@ -98,14 +89,15 @@ def calculate_alignment_curves(demonstration_data):
 # This is the main routine that loads recorded demonstration files
 # and the ultimately calls to construct the DMPs for robot replay
 def learn_from_demonstrations():
+
     # Specify the files where the demonstrations are located. There are bag files
     # where all of the raw data has been recorded from the instrument
     # specify the full filenames (e.g. files = ['/home/mike/desktop....','/home/mike/desktop...']
 
-    files = ['/home/mike/desktop/test.bag','/home/mike/desktop/test2.bag']
+    files = ['/home/mike/Desktop/Research/end_to_end_robust_replay/data/demos6-25-20/table_1.bag','/home/mike/Desktop/Research/end_to_end_robust_replay/data/demos6-25-20/table_2.bag','/home/mike/Desktop/Research/end_to_end_robust_replay/data/demos6-25-20/table_3.bag']
 
     # surface model for hybrid interaction (in robot frame)
-    surface_file = 'curved.csv'
+    surface_file = 'plane'
     surfaceModel = PyBSpline.BSplineSurface()
     surfaceModel.loadSurface(surface_file)
 
@@ -139,35 +131,37 @@ def learn_from_demonstrations():
 
         r_rotated, q_rotated, f_rotated = rotate_data(mocap_to_robot_r,mocap_to_robot_q,pos,rots,forces)
 
-        demonstrations.append(r_rotated,q_rotated,f_rotated)
+        demonstrations.append((r_rotated,q_rotated,f_rotated))
 
     # Next the demonstrations are segmented based on contact events (i.e., filter the forces
     # to estimate when hybrid control should be enacted)
     # Note: this is done based on the first demonstration
     segmented_inds = getSegmentation(demonstrations[0][2]) # send in the forces
 
+    print("SEGMENTATION:",segmented_inds)
+
     # Figure out the optimal alignment for the demonstrations based on DTW
-    alignment_curves = calculate_alignment_curves()
+    alignment_curves = calculate_alignment_curves(demonstrations)
 
     # Prepare the data for DMP learning
 
     demonstration_data = []
+
     # prepopulate the demonstration data with the kinematic data (x,y,z,q,f)
     for demo in demonstrations:
-        # TODO: need to check once I have data
-        demonstration_data.append(np.concatenate(demo[0],demo[1], demo[2]))
+        demonstration_data.append(np.concatenate((demo[0],demo[1], demo[2]),axis=1))
 
     # initial values for u and v so that the previous is used for each next guess in the NLoptimization
-    u,v=0,0
+    u,v=0.5,0.5
 
-    for segment_id in range(0,segmented_inds):
+    for segment_id in range(0,len(segmented_inds)):
         # Check if contact event
         segmentation_z = segmented_inds[segment_id][1][2]
 
         # don't need to do anything for position control since kinematics are already in the arrays
         if segmentation_z==0:
             # if it is a contact segment, need to convert to parameterized representation
-            for demo_ind in range(0,demonstrations):
+            for demo_ind in range(0,len(demonstrations)):
 
                 # look through each relative index and compute the closest parameterized surface point
                 start_index = alignment_curves[demo_ind][1][
@@ -178,22 +172,26 @@ def learn_from_demonstrations():
                     end_index = alignment_curves[demo_ind][1][
                         int(np.round(np.median(np.where(alignment_curves[demo_ind][0] == segmented_inds[segment_id+1][0]))))]
                 else:
-                    # todo: this might be wrong too
-                    end_index = len(demonstrations[demo_ind][0])
+                    # todo: right? get the number of rows
+                    end_index = np.shape(demonstrations[demo_ind])[0]
 
-                # convert each index... this will take a while
-                # todo: add some print statements or something...
+                # convert each index... this will take a while (runs NL opt for each point)
+                print("Segment ",str(segment_id+1)," of ",str(len(segmented_inds))," for demo ",str(demo_ind+1)," of ",str(len(demonstrations)))
                 for ii in range(start_index,end_index):
                     # convert to parameterized representation
-                    u,v = getClosestParams(demonstration_data[demo_ind][0, ii],demonstration_data[demo_ind][1, ii],demonstration_data[demo_ind][2, ii],u,v,surfaceModel)
-                    demonstration_data[demo_ind][0, ii] = u
-                    demonstration_data[demo_ind][1, ii] = v
-                    demonstration_data[demo_ind][2, ii] = 0.0 # not reqd, but for cleanliness
+                    print(ii)
+                    u,v = surfaceModel.getClosestParams(demonstration_data[demo_ind][ii][0],demonstration_data[demo_ind][ii][1],demonstration_data[demo_ind][ii][2],u,v)
+                    demonstration_data[demo_ind][ii][0] = u
+                    demonstration_data[demo_ind][ii][1] = v
+                    demonstration_data[demo_ind][ii][2] = 0.0 # not reqd, but for cleanliness
 
     # Put all of the required info needed for the segmentation for the DMP calculators!!
     segmentation=[]
     for segment in segmented_inds:
-        segmentation.append((segment[0],"",segment[1],surface_file))
+        if segment[1][2]==0:
+            segmentation.append((segment[0],"",segment[1],surface_file))
+        else:
+            segmentation.append((segment[0],"", segment[1],""))
 
     # Output
     calculateDMP(demonstration_data, segmentation, alignment_curves)

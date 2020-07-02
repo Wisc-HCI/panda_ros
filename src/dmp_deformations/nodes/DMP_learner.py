@@ -22,6 +22,7 @@ from geometry_msgs.msg import PoseStamped
 from visualization_msgs.msg import MarkerArray, Marker
 import csv
 from scipy.interpolate import interp1d
+from scipy.ndimage import interpolation
 from dtw import dtw
 import PyBSpline
 
@@ -155,10 +156,9 @@ def calculateDMP(demonstration_data, segmentation, alignment_curves):
 
                 # ADD TO VARIANCE CALCULATION
                 # TODO: does this work whatsoever?
-                two_hundred = np.linspace(0,1,200)
-                var_x_temp[:,yy] = interp1d(demo[start_index:end_index,0 + 7 * (1 - sel_vec[0])],two_hundred)(two_hundred)
-                var_y_temp[:,yy] = interp1d(demo[start_index:end_index,1 + 7 * (1 - sel_vec[1])],two_hundred)(two_hundred)
-                var_z_temp[:,yy] = interp1d(demo[start_index:end_index,2 + 7 * (1 - sel_vec[2])],two_hundred)(two_hundred)
+                var_x_temp[:,yy] = interpolation.zoom(demo[start_index:end_index,0 + 7 * (1 - sel_vec[0])],200.0/(end_index-start_index))
+                var_y_temp[:,yy] = interpolation.zoom(demo[start_index:end_index,1 + 7 * (1 - sel_vec[1])],200.0/(end_index-start_index))
+                var_z_temp[:,yy] = interpolation.zoom(demo[start_index:end_index,2 + 7 * (1 - sel_vec[2])],200.0/(end_index-start_index))
 
 
                 # Positions for plotting
@@ -173,7 +173,7 @@ def calculateDMP(demonstration_data, segmentation, alignment_curves):
 
             # Calculate the variances and store for later
             # TODO: apply the algorithm?
-            variance_per_segment.append((np.var(var_x_temp,axis=1),np.var(var_x_temp,axis=1),np.var(var_x_temp,axis=1)))
+            variance_per_segment.append((np.var(var_x_temp,axis=1),np.var(var_y_temp,axis=1),np.var(var_z_temp,axis=1)))
 
             dmps[xx].inputData(demonstration_data=demonstration_per_dmp)
             dmps[xx].computeDMP()
@@ -269,18 +269,20 @@ def calculateDMP(demonstration_data, segmentation, alignment_curves):
                 # print trajectories[0][ii][0]
                 for jj in range(0,num_interp_pts):
 
-                    if(variances is not None):
+                    if(variances is not ""):
                         # Presegmented comes with set level of variances. Otherwise, use based on the data
                         csvfile.write(str(variances[0])+','+str(variances[1])+','+str(variances[2]))
                         csvfile.write('\n')
 
                     else:
                         # LFD gets variance based on the data
-                        # TODO: THIS IS ALL SERIOUSLY BROKENSZIES
-                        variance_per_segment[ii]
-                        var_x = variance_per_segment[ii][0] + (float(jj) / float(num_interp_pts)) * (
-                                    return_forces[0][ii + 1] - return_forces[0][ii])
-                        csvfile.write(str(variances[0]) + ',' + str(variances[1]) + ',' + str(variances[2]))
+                        var_x = variance_per_segment[xx][0][ii] + (float(jj) / float(num_interp_pts)) * (
+                                    variance_per_segment[0][0][ii] - variance_per_segment[0][0][ii])
+                        var_y = variance_per_segment[xx][1][ii] + (float(jj) / float(num_interp_pts)) * (
+                                    variance_per_segment[0][1][ii] - variance_per_segment[0][1][ii])
+                        var_z = variance_per_segment[xx][2][ii] + (float(jj) / float(num_interp_pts)) * (
+                                    variance_per_segment[0][2][ii] - variance_per_segment[0][2][ii])
+                        csvfile.write(str(var_x) + ',' + str(var_y) + ',' + str(var_z))
                         csvfile.write('\n')
 
 
