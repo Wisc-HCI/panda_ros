@@ -25,6 +25,7 @@ from scipy.interpolate import interp1d
 from scipy.ndimage import interpolation
 from dtw import dtw
 import PyBSpline
+from deformation_static_scaling import getStaticScaling
 
 demonstrations = []
 
@@ -172,8 +173,16 @@ def calculateDMP(demonstration_data, segmentation, alignment_curves):
 
 
             # Calculate the variances and store for later
-            # TODO: apply the algorithm?
-            variance_per_segment.append((np.var(var_x_temp,axis=1),np.var(var_y_temp,axis=1),np.var(var_z_temp,axis=1)))
+            std_dev_x = np.sqrt(np.var(var_x_temp,axis=1))
+            std_dev_y = np.sqrt(np.var(var_y_temp,axis=1))
+            std_dev_z = np.sqrt(np.var(var_z_temp,axis=1))
+
+            # Apply the scaling algorithm
+            # std_dev_x = getStaticScaling(np.linspace(0, 1, len(std_dev_x)), std_dev_x)
+            # std_dev_y = getStaticScaling(np.linspace(0, 1, len(std_dev_y)), std_dev_y)
+            # std_dev_z = getStaticScaling(np.linspace(0, 1, len(std_dev_z)), std_dev_z)
+
+            variance_per_segment.append((std_dev_x,std_dev_y,std_dev_z))
 
             dmps[xx].inputData(demonstration_data=demonstration_per_dmp)
             dmps[xx].computeDMP()
