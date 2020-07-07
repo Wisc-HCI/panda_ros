@@ -1404,8 +1404,8 @@ void actualPose(geometry_msgs::Pose pose) {
 int main(int argc, char **argv) {    
     ros::init(argc, argv, "Falcon");
     ros::NodeHandle n("~");  
-    std::vector<double> scaling_factors = {-6.0, 6.0, 6.0};
-    std::vector<double> offsets = {-0.249, -0.6, 1.1084};
+    std::vector<double> scaling_factors = {-6.0, 6.0, 6.0}; //-6,6,6
+    std::vector<double> offsets = {0.4587, -0.45, 0.354};
     //n.getParam("offsets",offsets);
     //n.getParam("scaling_factors",scaling_factors);
 
