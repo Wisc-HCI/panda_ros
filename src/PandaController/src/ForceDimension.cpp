@@ -226,10 +226,8 @@ int main() {
 
     // Start Panda controller and poll force dimension to make sure it has reasonable starting values
     //CartesianPosition
-    pid_t pid = PandaController::initPandaController(PandaController::ControlMode::HybridControl);
-    if (pid < 0) {
-       cout << "Failed to start panda process" << endl;
-    }
+    PandaController::initPandaController(PandaController::ControlMode::HybridControl);
+    
 
     // Initialize Hybrid Controller
     std::array<double, 3> selectionVector = {1.0, 1.0, 1.0};

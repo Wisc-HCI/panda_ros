@@ -18,23 +18,8 @@ using namespace std;
 
 void signalHandler(int sig)
 {
-    std::cout << "Interrupt " << sig << " recieved in panda_ros.cpp\n";
     PandaController::stopControl();
-    ros::NodeHandle n("~");
-    ros::Publisher wrenchPub = n.advertise<geometry_msgs::Wrench>("/panda/wrench", 10);
-    geometry_msgs::Wrench wrench;
-    wrench.force.x = 0;
-    wrench.force.y = 0;
-    wrench.force.z = 0;
-    wrench.torque.x = 0;
-    wrench.torque.y = 0;
-    wrench.torque.z = 0;
-
-    wrenchPub.publish(wrench);   
     ros::shutdown();
-
-    std::array<double, 6> data = {0.0,0.0,0.0,0.0,0.0,0.0};
-    PandaController::writeCommandedVelocity(data);
     exit(sig);
 }
 
@@ -70,19 +55,6 @@ void updateCallbackJointPos(const relaxed_ik::JointAngles::ConstPtr& msg){
 void updateCallbackJointVel(const relaxed_ik::JointAngles::ConstPtr& msg){
     //TODO
     return;
-}
-
-void updateCallbackCartVel(const geometry_msgs::Twist::ConstPtr& msg){
-    if (PandaController::isRunning()){
-        std::array<double, 6> velocity;
-        velocity[0] = msg->linear.x;
-        velocity[1] = msg->linear.y;
-        velocity[2] = msg->linear.z;
-        velocity[3] = msg->angular.x;
-        velocity[4] = msg->angular.y;
-        velocity[5] = msg->angular.z;
-        PandaController::writeCommandedVelocity(velocity);
-    }
 }
 
 void callbackCommands(const std_msgs::String& msg){

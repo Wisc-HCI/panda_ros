@@ -155,7 +155,9 @@ namespace PandaController {
         desired_a.pitch = commandedPosition[4];
         desired_a.yaw = commandedPosition[5];
 
-        Eigen::Quaterniond desired_q=eulerToQuaternion(desired_a);
+        auto current_a = quaternionToEuler(orientation);
+
+        Eigen::Quaterniond desired_q=eulerToQuaternion(current_a);
         
         Eigen::Quaterniond difference(desired_q*orientation.inverse());
         
@@ -170,9 +172,11 @@ namespace PandaController {
         double v_yaw = difference_a.yaw * scaling_factor;
         Eigen::VectorXd v(6);
         v << v_x, v_y, v_z, v_roll, v_pitch, v_yaw;
+        cout << v.transpose() << endl;
 
         constrainForces(v, robot_state);
         Eigen::VectorXd jointVelocities = Eigen::Map<Eigen::MatrixXd>(readJacobian().data(), 6, 7).completeOrthogonalDecomposition().solve(v);
+        cout << "    " << jointVelocities.transpose() << endl;
         franka::JointVelocities output = {{
             jointVelocities[0], 
             jointVelocities[1], 

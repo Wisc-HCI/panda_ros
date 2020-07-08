@@ -201,7 +201,7 @@ namespace PandaController {
     }
     void writeRobotState(franka::RobotState data){
         boost::lock_guard<boost::mutex> guard(mutex);
-        jacobian = calculatePandaJacobian(data.q);
+        jacobian = pandaJacobian(data.q);
         current_state = data;
     }
     array<double, 42> readJacobian() {

@@ -192,10 +192,7 @@ int main() {
         return -1;
     }
     pollFalcon();
-    pid_t pid = PandaController::initPandaController(PandaController::ControlMode::CartesianPosition);
-    if (pid < 0) {
-        cout << "Failed to start panda process" << endl;
-    }
+    PandaController::initPandaController(PandaController::ControlMode::CartesianPosition);
     while (PandaController::isRunning()) {
         pollFalcon();
         feedbackFalcon();

@@ -9,7 +9,6 @@ SET( CMAKE_INSTALL_PREFIX ../../../devel )
 
 find_library(franka libfranka.so.0.7.1 REQUIRED)
 find_package(Eigen3 REQUIRED)
-find_library(adept REQUIRED)
 find_library(boost_system REQUIRED)
 find_package(Boost REQUIRED)
 find_library(LIBNIFALCON nifalcon RECOMMENDED)
@@ -18,7 +17,7 @@ find_library(DRDC libdrd.so.3.8.0 RECOMMENDED)
 
 add_library(common SHARED ${CMAKE_CURRENT_SOURCE_DIR}/src/Common.cpp)
 target_link_libraries(common PUBLIC franka)
-target_include_directories(common PUBLIC ${EIGEN3_INCLUDE_DIR} boost_system ${CMAKE_CURRENT_SOURCE_DIR}/include)
+target_include_directories(common PUBLIC ${EIGEN3_INCLUDE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/include)
 list(APPEND installTargets common)
 
 add_library(PandaController SHARED 
@@ -27,14 +26,14 @@ add_library(PandaController SHARED
   ${CMAKE_CURRENT_SOURCE_DIR}/src/ForceTorqueListener.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/src/PandaControllerAccessors.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/src/Kinematics.cpp)
-target_link_libraries(PandaController PUBLIC common franka)
+target_link_libraries(PandaController PUBLIC common franka boost_system)
 target_include_directories(PandaController PUBLIC ${EIGEN3_INCLUDE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/include)
 list(APPEND installTargets PandaController)
 
 
 
 add_executable(testKinematics ${CMAKE_CURRENT_SOURCE_DIR}/src/test_kinematics.cpp)
-target_link_libraries(testKinematics franka PandaController adept ${Boost_LIBRARIES})
+target_link_libraries(testKinematics franka PandaController ${Boost_LIBRARIES})
 target_include_directories(testKinematics PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
 if(LIBNIFALCON)

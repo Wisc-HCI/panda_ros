@@ -22,23 +22,8 @@ using namespace std;
 
 void signalHandler(int sig)
 {
-    std::cout << "Interrupt " << sig << " recieved in panda_ros.cpp\n";
     PandaController::stopControl();
-    ros::NodeHandle n("~");
-    ros::Publisher wrenchPub = n.advertise<geometry_msgs::Wrench>("/panda/wrench", 10);
-    geometry_msgs::Wrench wrench;
-    wrench.force.x = 0;
-    wrench.force.y = 0;
-    wrench.force.z = 0;
-    wrench.torque.x = 0;
-    wrench.torque.y = 0;
-    wrench.torque.z = 0;
-
-    wrenchPub.publish(wrench);   
     ros::shutdown();
-
-    std::array<double, 6> data = {0.0,0.0,0.0,0.0,0.0,0.0};
-    PandaController::writeCommandedVelocity(data);
     exit(sig);
 }
 
@@ -88,10 +73,6 @@ void updateCallbackPath(const nav_msgs::Path::ConstPtr& msg) {
     }
 }
 
-void updateCallbackControlCamera(const std_msgs::Bool::ConstPtr & msg) {
-    PandaController::setControlCamera(msg->data);
-}
-
 void updateCallbackJointPos(const relaxed_ik::JointAngles::ConstPtr& msg){
     if (PandaController::isRunning()){
         std::array<double, 7> position;
@@ -109,19 +90,6 @@ void updateCallbackJointPos(const relaxed_ik::JointAngles::ConstPtr& msg){
 void updateCallbackJointVel(const relaxed_ik::JointAngles::ConstPtr& msg){
     //TODO
     return;
-}
-
-void updateCallbackCartVel(const geometry_msgs::Twist::ConstPtr& msg){
-    if (PandaController::isRunning()){
-        std::array<double, 6> velocity;
-        velocity[0] = msg->linear.x;
-        velocity[1] = msg->linear.y;
-        velocity[2] = msg->linear.z;
-        velocity[3] = msg->angular.x;
-        velocity[4] = msg->angular.y;
-        velocity[5] = msg->angular.z;
-        PandaController::writeCommandedVelocity(velocity);
-    }
 }
 
 void updateCallbackSelectionVector(const geometry_msgs::Vector3::ConstPtr& msg){
@@ -235,10 +203,6 @@ int main(int argc, char **argv) {
     n.param<std::string>("control_mode", mode_str, "none");
     PandaController::ControlMode mode;
 
-    if(mode_str == "cartesian_velocity")
-        mode = PandaController::ControlMode::CartesianVelocity;
-    if(mode_str == "joint_velocity")
-        mode = PandaController::ControlMode::JointVelocity;
     if(mode_str == "cartesian_position")
         mode = PandaController::ControlMode::CartesianPosition;
     if(mode_str == "joint_position")
@@ -256,26 +220,16 @@ int main(int argc, char **argv) {
     ros::Subscriber sub_commands = n.subscribe("/panda/commands", 10, callbackCommands);
     ros::Subscriber sub_position;
     ros::Subscriber sub_trajectory;
-    ros::Subscriber sub_controlCamera;
     ros::Subscriber sub_selectionVector;
     switch(mode){
-        case PandaController::ControlMode::CartesianVelocity:
-            sub_position = n.subscribe("/panda/cart_vel", 10, updateCallbackCartVel);
-            break;
-        case PandaController::ControlMode::JointVelocity:
-            //TODO: we don't actually have anything that uses this, not set up correctly in PandaController
-            sub_position = n.subscribe("/relaxed_ik/joint_angle_solutions", 10, updateCallbackJointVel);
-            break;
         case PandaController::ControlMode::CartesianPosition:
             sub_position = n.subscribe("/panda/cart_pose", 10, updateCallbackCartPos);
             sub_trajectory = n.subscribe("/panda/path", 10, updateCallbackPath);
-            sub_controlCamera = n.subscribe("/panda/controlCamera", 10, updateCallbackControlCamera);
             
             break;
         case PandaController::ControlMode::HybridControl:
             sub_position = n.subscribe("/panda/cart_pose", 10, updateCallbackCartPos);
             sub_trajectory = n.subscribe("/panda/path", 10, updateCallbackPath);
-            sub_controlCamera = n.subscribe("/panda/controlCamera", 10, updateCallbackControlCamera);
             sub_selectionVector = n.subscribe("/panda/selection_vector", 10, updateCallbackSelectionVector);
             PandaController::writeCommandedFT({0,0,-4,0,0,0});
             PandaController::writeSelectionVector({1,1,1});

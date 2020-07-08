@@ -18,6 +18,7 @@ find_library(
     PATHS ${CMAKE_CURRENT_SOURCE_DIR}/../../devel/lib
 )
 
+message(STATUS ${CMAKE_CURRENT_SOURCE_DIR}/../../devel/lib)
 
 message(STATUS ${pandaController})
 find_library(

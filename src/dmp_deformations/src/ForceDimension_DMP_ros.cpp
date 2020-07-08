@@ -472,10 +472,8 @@ int main(int argc, char **argv) {
 
 
     // Start Panda controller and poll force dimension to make sure it has reasonable starting values
-    pid_t pid = PandaController::initPandaController(PandaController::ControlMode::HybridControl);
-    if (pid < 0) {
-       cout << "Failed to start panda process" << endl;
-    }
+    PandaController::initPandaController(PandaController::ControlMode::HybridControl);
+    
     poll_forcedimension(false,false,0.0,0.0,0.0);
 
     // Initialize Hybrid Controller

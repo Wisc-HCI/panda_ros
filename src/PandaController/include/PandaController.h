@@ -19,7 +19,7 @@ namespace PandaController {
     };
 
     void stopControl();
-    pid_t initPandaController(ControlMode, char* = NULL);
+    void initPandaController(ControlMode, bool = false);
 
     std::array<double, 6> readCommandedPosition();
     void writeCommandedPosition(std::array<double, 6> data);
