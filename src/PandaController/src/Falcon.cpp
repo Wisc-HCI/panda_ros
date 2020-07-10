@@ -192,7 +192,7 @@ int main() {
         return -1;
     }
     pollFalcon();
-    PandaController::initPandaController(PandaController::ControlMode::CartesianPosition);
+    PandaController::initPandaController();
     while (PandaController::isRunning()) {
         pollFalcon();
         feedbackFalcon();

@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.4)
 project(pandacontroller CXX)
 set(CMAKE_CXX_STANDARD 14)
-SET(CMAKE_CXX_FLAGS  "-O3 -fopenmp")
+#SET(CMAKE_CXX_FLAGS  "-O3 -fopenmp")
 SET(CMAKE_BUILD_TYPE Release)
 SET(CMAKE_SKIP_RPATH False)
 SET(CMAKE_INSTALL_RPATH ../lib)
@@ -25,18 +25,14 @@ add_library(PandaController SHARED
   ${CMAKE_CURRENT_SOURCE_DIR}/src/Gripper.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/src/ForceTorqueListener.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/src/PandaControllerAccessors.cpp
-  ${CMAKE_CURRENT_SOURCE_DIR}/src/Kinematics.cpp)
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/Kinematics.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/Trajectory.cpp)
 target_link_libraries(PandaController PUBLIC common franka boost_system)
 target_include_directories(PandaController PUBLIC ${EIGEN3_INCLUDE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/include)
 list(APPEND installTargets PandaController)
 
 
-
-add_executable(testKinematics ${CMAKE_CURRENT_SOURCE_DIR}/src/test_kinematics.cpp)
-target_link_libraries(testKinematics franka PandaController ${Boost_LIBRARIES})
-target_include_directories(testKinematics PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
-
-if(LIBNIFALCON)
+if(LIBNIFALCON) 
   add_executable(Falcon ${CMAKE_CURRENT_SOURCE_DIR}/src/Falcon.cpp)
   target_link_libraries(Falcon franka ${LIBNIFALCON} PandaController)
   target_include_directories(Falcon PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)

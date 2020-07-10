@@ -226,7 +226,7 @@ int main() {
 
     // Start Panda controller and poll force dimension to make sure it has reasonable starting values
     //CartesianPosition
-    PandaController::initPandaController(PandaController::ControlMode::HybridControl);
+    PandaController::initPandaController();
     
 
     // Initialize Hybrid Controller

@@ -8,25 +8,24 @@
 #include <eigen3/Eigen/Core>
 #include <eigen3/Eigen/Dense>
 #include <franka/gripper.h>
+#include "Trajectory.h"
 
 
 namespace PandaController {
-
-    enum ControlMode {CartesianPosition, JointPosition, HybridControl, None};
 
     struct EulerAngles {
         double roll, pitch, yaw;
     };
 
     void stopControl();
-    void initPandaController(ControlMode, bool = false);
+    void initPandaController(bool = false);
 
-    std::array<double, 6> readCommandedPosition();
+    std::vector<double> getNextCommand(TrajectoryType & t);
+
     void writeCommandedPosition(std::array<double, 6> data);
     void writeCommandedPath(const std::array<double, 7>* data, const int & length);
     EulerAngles quaternionToEuler(Eigen::Quaterniond q);
 
-    std::array<double, 6> readCommandedVelocity();
     void writeCommandedVelocity(std::array<double, 6> data);
 
     std::array<double, 6> readFTForces();
@@ -48,7 +47,6 @@ namespace PandaController {
     void writeRobotState(franka::RobotState data);
     std::array<double, 42> readJacobian();
     void printRobotJointAngles(franka::RobotState data);
-    void consumeBuffer(int &, franka::RobotState*, long *);
 
     void startLogging();
     bool isRunning();

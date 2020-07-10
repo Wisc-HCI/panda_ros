@@ -472,7 +472,7 @@ int main(int argc, char **argv) {
 
 
     // Start Panda controller and poll force dimension to make sure it has reasonable starting values
-    PandaController::initPandaController(PandaController::ControlMode::HybridControl);
+    PandaController::initPandaController();
     
     poll_forcedimension(false,false,0.0,0.0,0.0);
 

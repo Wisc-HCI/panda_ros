@@ -201,46 +201,19 @@ int main(int argc, char **argv) {
     std::string mode_str;
     //Always specify parameter, it uses cached parameter instead of default value.
     n.param<std::string>("control_mode", mode_str, "none");
-    PandaController::ControlMode mode;
-
-    if(mode_str == "cartesian_position")
-        mode = PandaController::ControlMode::CartesianPosition;
-    if(mode_str == "joint_position")
-        mode = PandaController::ControlMode::JointPosition;
-    if(mode_str == "hybrid")
-        mode = PandaController::ControlMode::HybridControl;
-    if(mode_str == "none")
-        mode = PandaController::ControlMode::None;
         
     //Setup the signal handler for exiting, must be called after ros is intialized
     signal(SIGINT, signalHandler); 
 
-    PandaController::initPandaController(mode);
+    PandaController::initPandaController();
     
     ros::Subscriber sub_commands = n.subscribe("/panda/commands", 10, callbackCommands);
     ros::Subscriber sub_position;
     ros::Subscriber sub_trajectory;
     ros::Subscriber sub_selectionVector;
-    switch(mode){
-        case PandaController::ControlMode::CartesianPosition:
-            sub_position = n.subscribe("/panda/cart_pose", 10, updateCallbackCartPos);
-            sub_trajectory = n.subscribe("/panda/path", 10, updateCallbackPath);
-            
-            break;
-        case PandaController::ControlMode::HybridControl:
-            sub_position = n.subscribe("/panda/cart_pose", 10, updateCallbackCartPos);
-            sub_trajectory = n.subscribe("/panda/path", 10, updateCallbackPath);
-            sub_selectionVector = n.subscribe("/panda/selection_vector", 10, updateCallbackSelectionVector);
-            PandaController::writeCommandedFT({0,0,-4,0,0,0});
-            PandaController::writeSelectionVector({1,1,1});
-            
-            break;
-        case PandaController::ControlMode::JointPosition:
-            sub_position = n.subscribe("/panda/joint_angles", 10, updateCallbackJointPos);
-            break;
-        case PandaController::ControlMode::None:
-            break;     
-    }
+    sub_position = n.subscribe("/panda/cart_pose", 10, updateCallbackCartPos);
+    sub_trajectory = n.subscribe("/panda/path", 10, updateCallbackPath);
+    sub_selectionVector = n.subscribe("/panda/selection_vector", 10, updateCallbackSelectionVector);
     ros::Publisher wrenchPub = n.advertise<geometry_msgs::Wrench>("/panda/wrench", 10);
     ros::Publisher jointPub = n.advertise<sensor_msgs::JointState>("/panda/joint_states", 1);
     ros::Rate loopRate(1000);
