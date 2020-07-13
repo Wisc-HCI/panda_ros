@@ -126,20 +126,18 @@ void setVelocityBoundPath(const panda_ros::VelocityBoundPath::ConstPtr& msg) {
         vector<double> timestamps = vector<double>();
         double now = std::chrono::system_clock::now().time_since_epoch() / std::chrono::milliseconds(1);
         for (size_t i = 0; i < msg->poses.size(); i++) {
-            auto poseStamped = msg->poses[i];
-            long secs = poseStamped.header.stamp.sec;
-            long nsecs = poseStamped.header.stamp.nsec;
+            auto pose = msg->poses[i];
             PandaController::EulerAngles angles = 
                 PandaController::quaternionToEuler(Eigen::Quaternion<double>(
-                    poseStamped.pose.orientation.w,
-                    poseStamped.pose.orientation.x,
-                    poseStamped.pose.orientation.y,
-                    poseStamped.pose.orientation.z
+                    pose.orientation.w,
+                    pose.orientation.x,
+                    pose.orientation.y,
+                    pose.orientation.z
                 ));
             vector<double> command{
-                poseStamped.pose.position.x,
-                poseStamped.pose.position.y,
-                poseStamped.pose.position.z,
+                pose.position.x,
+                pose.position.y,
+                pose.position.z,
                 angles.roll,
                 angles.pitch,
                 angles.yaw
