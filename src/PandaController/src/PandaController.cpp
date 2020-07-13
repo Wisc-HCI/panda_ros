@@ -25,6 +25,7 @@ namespace PandaController {
         thread ft_listener;
         thread controller;
         bool running = false;
+        
     } 
 
     //Adapted from https://en.wikipedia.org/wiki/Conversion_between_quaternions_and_Euler_angles
@@ -99,21 +100,21 @@ namespace PandaController {
     }
 
     void commandPositionFromState(const franka::RobotState & state) {
-        array<double, 6> positionArray;
+        vector<double> positionArray;
         Eigen::Affine3d transformMatrix(Eigen::Matrix4d::Map(state.O_T_EE.data()));
         Eigen::Vector3d positionVector(transformMatrix.translation());
         for (size_t i = 0; i < 3; i++) {
-            positionArray[i] = positionVector[i];
+            positionArray.push_back(positionVector[i]);
         }
         for (size_t i = 0; i < 3; i++) {
-            positionArray[3 + i] = 0;
+            positionArray.push_back(0);
         }
         writeCommandedPosition(positionArray);
     }
 
     franka::JointVelocities positionControlLoop(const franka::RobotState& robot_state, vector<double> commandedPosition) {
 
-        Eigen::Affine3d transform(Eigen::Matrix4d::Map(robot_state.O_T_EE.data()));
+        Eigen::Affine3d transform(getEETransform());
         Eigen::Vector3d position(transform.translation());
         Eigen::Quaterniond orientation(transform.linear());
         
@@ -171,7 +172,7 @@ namespace PandaController {
         // TEMP FORCE THE COMMANDED POSITION TO BE THE SAME!!!
         //commandedPosition = {0.42, 0.1, 0.25, 0.0, 0.0, 0.0};
 
-        Eigen::Affine3d transform(Eigen::Matrix4d::Map(robot_state.O_T_EE.data()));
+        Eigen::Affine3d transform(getEETransform());
         Eigen::Vector3d position(transform.translation());
         Eigen::Quaterniond orientation(transform.linear());
 
@@ -304,7 +305,7 @@ namespace PandaController {
             velocities = innerLoop(state, franka::Duration(1));
             state.dq = velocities.dq;
             Eigen::Map<Eigen::VectorXd>(state.q.data(), 7) = Eigen::Map<Eigen::VectorXd>(state.q.data(), 7) + 0.001*Eigen::Map<Eigen::VectorXd>(state.dq.data(), 7);
-            Eigen::Map<Eigen::Matrix4d>(state.O_T_EE.data()) = EEFromDHA(state.q, PandaController::Kinematics::PandaGripperDHA);//calculatePandaEE(state.q);
+            Eigen::Map<Eigen::Matrix4d>(state.O_T_EE.data()) = getEETransform();//calculatePandaEE(state.q);
         } while (!velocities.motion_finished);
     }
 

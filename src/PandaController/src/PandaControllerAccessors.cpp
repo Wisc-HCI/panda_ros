@@ -5,6 +5,7 @@
 #include <boost/thread/locks.hpp>
 #include <array>
 #include <deque>
+#include "DHA.h"
 
 using namespace std;
 
@@ -12,6 +13,7 @@ namespace PandaController {
     Trajectory motionlessTrajectory();
     namespace {
         boost::mutex mutex;
+        boost::mutex trajectory_mutex;
         Trajectory trajectory = motionlessTrajectory();
         franka::RobotState current_state;
 
@@ -23,10 +25,38 @@ namespace PandaController {
         array<double, 6> FT_command{};
         
 	    double maxForce = 15;
+
+        vector<DHA> PandaGripperDHA{
+            DHA(       0,   0.333,       0, -1),
+            DHA(       0,       0, -M_PI/2,  0),
+            DHA(       0, 0.31599,  M_PI/2,  1),
+            DHA( 0.08249,       0,  M_PI/2,  2),
+            DHA(-0.08249,   0.384, -M_PI/2,  3),
+            DHA(       0,       0,  M_PI/2,  4),
+            DHA(  0.0879,       0,  M_PI/2,  5),
+            DHA(       0,  0.1069,       0, -1)
+        };
+        vector<DHA> ee_chain = PandaGripperDHA;
+    }
+
+    void setKinematicChain(KinematicChain chain) {
+        switch (chain){
+            case KinematicChain::PandaGripper:
+                ee_chain = PandaGripperDHA;
+                break;
+            default:
+                ee_chain = PandaGripperDHA;
+                break;
+        }
+    }
+
+    void setTrajectory(Trajectory t) {
+        boost::lock_guard<boost::mutex> guard(trajectory_mutex);
+        trajectory = t;
     }
 
     vector<double> getNextCommand(TrajectoryType & t) {
-        boost::lock_guard<boost::mutex> guard(mutex);
+        boost::lock_guard<boost::mutex> guard(trajectory_mutex);
         t = trajectory.type;
         return trajectory();
     }
@@ -42,8 +72,9 @@ namespace PandaController {
     }
 
     void dontMove() {
-        boost::lock_guard<boost::mutex> guard(mutex);
-        trajectory = motionlessTrajectory();
+        boost::lock_guard<boost::mutex> guard(trajectory_mutex);
+        auto t = motionlessTrajectory();
+        trajectory = t;
     }
 
     bool isMotionDone(array<double, 7> command) {
@@ -122,29 +153,16 @@ namespace PandaController {
         FT_command = data;
     }
 
-    void writeCommandedPosition(array<double, 6> data){
+    void writeCommandedPosition(vector<double> data){
         boost::lock_guard<boost::mutex> guard(mutex);
         trajectory = Trajectory(
             TrajectoryType::Cartesian,
             [data]() {
-                return vector<double>(data.data(), data.data() + data.size());
+                return data;
             }
         );
     }
 
-    void writeCommandedPath(const array<double, 7>* data, const int & length) {
-        // boost::lock_guard<boost::mutex> guard(mutex);
-        // commanded_position.clear();
-        // for (int i = 0; i < length; i++ ) {
-        //     commanded_position.push_back(data[i]);
-        // }
-        // updateInterpolationCoefficients();
-    }
-
-    array<double, 7> readPoseGoal(){
-        boost::lock_guard<boost::mutex> guard(mutex);
-        return pose_goal;
-    }
     array<double, 3> readSelectionVector(){
         boost::lock_guard<boost::mutex> guard(mutex);
         return selection_vector;
@@ -154,27 +172,38 @@ namespace PandaController {
         boost::lock_guard<boost::mutex> guard(mutex);
         selection_vector = data;
     }
-    void writePoseGoals(array<double, 7> data){
-        boost::lock_guard<boost::mutex> guard(mutex);
-        pose_goal = data;
-    }
-    void writeJointAngles(array<double, 7> data){
+    void writeJointAngles(vector<double> data){
         boost::lock_guard<boost::mutex> guard(mutex);
         trajectory = Trajectory(
             TrajectoryType::Joint,
             [data]() {
-                return vector<double>(data.data(), data.data() + data.size());
+                return data;
             }
         );
     }
     
+    Eigen::Matrix4d getEETransform() {
+        boost::lock_guard<boost::mutex> guard(mutex);
+        return EEFromDHA(current_state.q, ee_chain);
+    }
+
+    Eigen::VectorXd getEEVector() {
+        Eigen::Affine3d transform(getEETransform());
+        Eigen::Vector3d position(transform.translation());
+        Eigen::Quaterniond orientation(transform.linear());
+        EulerAngles current_a = quaternionToEuler(orientation);
+        Eigen::VectorXd ee(6);
+        ee << position[0], position[1], position[2], current_a.roll, current_a.pitch, current_a.yaw;
+        return ee;
+    }
+
     franka::RobotState readRobotState(){
-        //boost::lock_guard<boost::mutex> guard(mutex);
+        boost::lock_guard<boost::mutex> guard(mutex);
         return current_state;
     }
     void writeRobotState(franka::RobotState data){
         boost::lock_guard<boost::mutex> guard(mutex);
-        jacobian = jacobianFromDHA(data.q, PandaController::Kinematics::PandaGripperDHA);//pandaJacobian(data.q);
+        jacobian = jacobianFromDHA(data.q, ee_chain);//pandaJacobian(data.q);
         current_state = data;
     }
     array<double, 42> readJacobian() {

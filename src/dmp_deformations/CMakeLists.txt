@@ -28,10 +28,15 @@ find_library(
 )
 message(STATUS ${pandaCommon})
 
-add_executable(forcedimensionDMP src/ForceDimension_DMP_ros.cpp)
-target_include_directories(forcedimensionDMP PUBLIC ${catkin_INCLUDE_DIRS} ${EIGEN3_INCLUDE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/include ${CMAKE_CURRENT_SOURCE_DIR}/../../devel/include)
-target_link_libraries(forcedimensionDMP ${catkin_LIBRARIES} ${pandaController} ${pandaCommon} franka ${DRDC} ${DHDC})
 
-install(TARGETS forcedimensionDMP
-  RUNTIME DESTINATION lib/forcedimensionDMP
-)
+if(DHDC)
+  if(DRDC)
+    add_executable(forcedimensionDMP src/ForceDimension_DMP_ros.cpp)
+    target_include_directories(forcedimensionDMP PUBLIC ${catkin_INCLUDE_DIRS} ${EIGEN3_INCLUDE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/include ${CMAKE_CURRENT_SOURCE_DIR}/../../devel/include)
+    target_link_libraries(forcedimensionDMP ${catkin_LIBRARIES} ${pandaController} ${pandaCommon} franka ${DRDC} ${DHDC})
+
+    install(TARGETS forcedimensionDMP
+      RUNTIME DESTINATION lib/forcedimensionDMP
+    )
+  endif()
+endif()
