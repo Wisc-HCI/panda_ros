@@ -26,26 +26,37 @@ namespace PandaController {
         
 	    double maxForce = 15;
 
-        vector<DHA> PandaGripperDHA{
-            DHA(       0,   0.333,       0, -1),
-            DHA(       0,       0, -M_PI/2,  0),
-            DHA(       0, 0.31599,  M_PI/2,  1),
-            DHA( 0.08249,       0,  M_PI/2,  2),
-            DHA(-0.08249,   0.384, -M_PI/2,  3),
-            DHA(       0,       0,  M_PI/2,  4),
-            DHA(  0.0879,       0,  M_PI/2,  5),
-            DHA(       0,  0.1069,       0, -1)
+        vector<DHA> PandaFlangeDHA{
+            DHA(       0,   0.333,       0,  0),
+            DHA(       0,       0, -M_PI/2,  1),
+            DHA(       0, 0.31599,  M_PI/2,  2),
+            DHA( 0.08249,       0,  M_PI/2,  3),
+            DHA(-0.08249,   0.384, -M_PI/2,  4),
+            DHA(       0,       0,  M_PI/2,  5),
+            DHA(  0.0879,       0,  M_PI/2,  6),
+            DHA(       0,  0.1069,       0, -1),
         };
-        vector<DHA> ee_chain = PandaGripperDHA;
+        Eigen::Matrix4d pandaGripperEELink = (Eigen::Matrix4d() << 0.7071, 0.7071, 0, 0, -0.7071, -0.7071, 0, 0, 0, 0, -1, 0.16874, 0, 0, 0, 1).finished();
+
+        vector<DHA> ee_chain = PandaFlangeDHA;
+        Eigen::Matrix4d ee_link = pandaGripperEELink;
     }
 
-    void setKinematicChain(KinematicChain chain) {
+    void setKinematicChain(KinematicChain chain, EELink link) {
         switch (chain){
-            case KinematicChain::PandaGripper:
-                ee_chain = PandaGripperDHA;
+            case KinematicChain::PandaFlange:
+                ee_chain = PandaFlangeDHA;
                 break;
             default:
-                ee_chain = PandaGripperDHA;
+                ee_chain = PandaFlangeDHA;
+                break;
+        }
+        switch (link) {
+            case EELink::PandaGripper:
+                ee_link = pandaGripperEELink;
+                break;
+            default:
+                ee_link = pandaGripperEELink;
                 break;
         }
     }
@@ -184,17 +195,17 @@ namespace PandaController {
     
     Eigen::Matrix4d getEETransform() {
         boost::lock_guard<boost::mutex> guard(mutex);
-        return EEFromDHA(current_state.q, ee_chain);
+        return EEFromDHA(current_state.q, ee_chain, ee_link);
     }
 
-    Eigen::VectorXd getEEVector() {
+    Eigen::VectorXd getEEPos() {
         Eigen::Affine3d transform(getEETransform());
-        Eigen::Vector3d position(transform.translation());
-        Eigen::Quaterniond orientation(transform.linear());
-        EulerAngles current_a = quaternionToEuler(orientation);
-        Eigen::VectorXd ee(6);
-        ee << position[0], position[1], position[2], current_a.roll, current_a.pitch, current_a.yaw;
-        return ee;
+        return Eigen::Vector3d(transform.translation());
+    }
+
+    Eigen::Quaterniond getEEOrientation() {
+        Eigen::Affine3d transform(getEETransform());
+        return Eigen::Quaterniond(transform.linear());
     }
 
     franka::RobotState readRobotState(){
@@ -203,7 +214,7 @@ namespace PandaController {
     }
     void writeRobotState(franka::RobotState data){
         boost::lock_guard<boost::mutex> guard(mutex);
-        jacobian = jacobianFromDHA(data.q, ee_chain);//pandaJacobian(data.q);
+        jacobian = jacobianFromDHA(data.q, ee_chain, ee_link);//pandaJacobian(data.q);
         current_state = data;
     }
     array<double, 42> readJacobian() {

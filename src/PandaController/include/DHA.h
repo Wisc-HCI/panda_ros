@@ -2,13 +2,16 @@
 #define DHA_INCLUDE_H
 
 #include <Eigen/Core>
+#include <iostream>
+#include <cmath>
+using namespace std;
 
 class DHA {
+public:
     double a, alpha, d;
     int n;
-public:
-    DHA(double a, double alpha, double d, int n = -1)
-        : a(a), alpha(alpha), d(d), n(n) {}
+    DHA(double a, double d, double alpha, int n = -1)
+        : a(a), d(d), alpha(alpha), n(n) {}
     
     Eigen::Matrix4d to_matrix(const std::array<double, 7>& q) {
         double theta = 0;

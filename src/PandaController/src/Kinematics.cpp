@@ -4,20 +4,22 @@
 #include <cmath>
 #include <Eigen/Core>
 #include "DHA.h"
+#include <iostream>
 using namespace std;
 
 namespace PandaController {
-    Eigen::Matrix<double, 4, 4> EEFromDHA(array<double, 7> q, vector<DHA> dha) {
+
+    Eigen::Matrix<double, 4, 4> EEFromDHA(array<double, 7> q, vector<DHA> dha, Eigen::Matrix<double, 4, 4> ee_link) {
         // https://frankaemika.github.io/docs/control_parameters.html#denavithartenberg-parameters
         
         Eigen::Matrix<double, 4, 4> ee_trans = Eigen::MatrixXd::Identity(4,4);
         for (int i = 0; i < dha.size(); i++) {
             ee_trans = ee_trans * dha[i].to_matrix(q);
         }
-        return ee_trans;
+        return ee_trans * ee_link;
     }
 
-    array<double, 42> jacobianFromDHA(array<double, 7> q, vector<DHA> dha) {
+    array<double, 42> jacobianFromDHA(array<double, 7> q, vector<DHA> dha, Eigen::Matrix<double, 4, 4> ee_link) {
         vector<Eigen::Matrix4d> transforms = vector<Eigen::Matrix4d>();
         vector<Eigen::Matrix4d> transforms_derivative = vector<Eigen::Matrix4d>();
         Eigen::Matrix4d ee_trans = Eigen::MatrixXd::Identity(4,4);
@@ -27,7 +29,7 @@ namespace PandaController {
             transforms.push_back(trans);
             transforms_derivative.push_back(dha[i].to_matrix_derivative(q));
         }
-        auto R = ee_trans.topLeftCorner(3, 3);
+        auto R = (ee_trans * ee_link).topLeftCorner(3, 3);
 
         Eigen::Matrix<double, 6, 7> jacobian = Eigen::MatrixXd::Zero(6, 7);
         for (int j = 0; j < 7; j++) {

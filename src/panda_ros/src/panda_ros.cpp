@@ -25,17 +25,24 @@ using namespace std;
 
 namespace {
     PandaController::KinematicChain kinematicChain;
+    PandaController::EELink eeLink;
 }
 
 void setKinematicChain(const std_msgs::String& msg) {
+    if (msg.data == "pandaFlange") {
+        kinematicChain = PandaController::KinematicChain::PandaFlange;
+    }
+}
+
+void setEELink(const std_msgs::String& msg) {
     if (msg.data == "pandaGripper") {
-        kinematicChain = PandaController::KinematicChain::PandaGripper;
+        eeLink = PandaController::EELink::PandaGripper;
     }
 }
 
 void setCartPos(const geometry_msgs::Pose::ConstPtr& msg){
     if (PandaController::isRunning()){
-        PandaController::setKinematicChain(kinematicChain);
+        PandaController::setKinematicChain(kinematicChain, eeLink);
         PandaController::EulerAngles angles = 
             PandaController::quaternionToEuler(Eigen::Quaternion<double>(
                 msg->orientation.w,
@@ -44,41 +51,59 @@ void setCartPos(const geometry_msgs::Pose::ConstPtr& msg){
                 msg->orientation.z
             ));
         vector<double> position{
-            position[0] = msg->position.x,
-            position[1] = msg->position.y,
-            position[2] = msg->position.z,
-            position[3] = angles.roll,
-            position[4] = angles.pitch,
-            position[5] = angles.yaw
+            msg->position.x,
+            msg->position.y,
+            msg->position.z,
+            angles.roll,
+            angles.pitch,
+            angles.yaw
         };
         PandaController::writeCommandedPosition(position);
     }
 }
 
-void setStampedTrajectory(vector<vector<double>> path, vector<double> timestamps) {
-    PandaController::setKinematicChain(kinematicChain);
+void setStampedTrajectory(vector<Eigen::VectorXd> path, vector<double> timestamps) {
+    PandaController::setKinematicChain(kinematicChain, eeLink);
     PandaController::setTrajectory(PandaController::Trajectory(
         PandaController::TrajectoryType::Cartesian, 
         [path, timestamps]() {
             double now_ms = std::chrono::system_clock::now().time_since_epoch() / std::chrono::milliseconds(1);
-            int goal_index = path.size() - 1;
+            int goal_index = path.size();
             for(int i = 0; i < path.size(); i++) {
                 if (timestamps[i] > now_ms) {
                     goal_index = i;
                     break;
                 }
             }
-            
-            return path[goal_index];
+
+            Eigen::VectorXd goal(6);
+            Eigen::Quaterniond goal_q;
+
+            if (goal_index == 0) {
+                goal.topLeftCorner(3, 1) = path[0].topLeftCorner(3,1);
+                goal_q = Eigen::Quaterniond(path[0].bottomRightCorner(4,1).data());
+            } else if (goal_index == path.size()) {
+                goal.topLeftCorner(3, 1) = path[goal_index-1].topLeftCorner(3,1);
+                goal_q = Eigen::Quaterniond(path[goal_index-1].bottomRightCorner(4,1).data());
+            } else {
+                double t = (now_ms - timestamps[goal_index-1]) / (timestamps[goal_index] - timestamps[goal_index-1]);
+                goal.topLeftCorner(3, 1) = path[goal_index-1].topLeftCorner(3,1) + t * (path[goal_index].topLeftCorner(3,1) - path[goal_index-1].topLeftCorner(3,1));
+                goal_q = Eigen::Quaterniond(path[goal_index-1].bottomRightCorner(4,1).data()).slerp(t, Eigen::Quaterniond(path[goal_index-1].bottomRightCorner(4,1).data()));
+            }
+            auto goal_angles = PandaController::quaternionToEuler(goal_q);
+            goal[3] = goal_angles.roll;
+            goal[4] = goal_angles.pitch;
+            goal[5] = goal_angles.yaw;
+            return vector<double>(goal.data(), goal.data() + 6);
         }
     ));
 }
 
 void setStampedPath(const nav_msgs::Path::ConstPtr& msg) {
     if (PandaController::isRunning()){
-        PandaController::setKinematicChain(kinematicChain);
-        vector<vector<double>> path = vector<vector<double>>();
-        vector<double> timestamps = vector<double>();
+        vector<Eigen::VectorXd> path;//{PandaController::getEEVector()};
+        double now = std::chrono::system_clock::now().time_since_epoch() / std::chrono::milliseconds(1);
+        vector<double> timestamps{now};
         for (size_t i = 0; i < msg->poses.size(); i++) {
             auto poseStamped = msg->poses[i];
             long secs = poseStamped.header.stamp.sec;
@@ -92,15 +117,15 @@ void setStampedPath(const nav_msgs::Path::ConstPtr& msg) {
                 ));
 
             timestamps.push_back(secs * 1000 + nsecs / 1000000);
-            vector<double> command{
-                poseStamped.pose.position.x,
-                poseStamped.pose.position.y,
-                poseStamped.pose.position.z,
-                angles.roll,
-                angles.pitch,
-                angles.yaw
-            };
-            path.push_back(command);
+            path.push_back(
+                (Eigen::VectorXd(6) << 
+                    poseStamped.pose.position.x,
+                    poseStamped.pose.position.y,
+                    poseStamped.pose.position.z,
+                    angles.roll,
+                    angles.pitch,
+                    angles.yaw).finished()
+            );
         }
         setStampedTrajectory(path, timestamps);
     }
@@ -108,40 +133,26 @@ void setStampedPath(const nav_msgs::Path::ConstPtr& msg) {
 
 void setVelocityBoundPath(const panda_ros::VelocityBoundPath::ConstPtr& msg) {
     if (PandaController::isRunning()) {
-        PandaController::setKinematicChain(kinematicChain);
-        auto position = PandaController::getEEVector();
-
-        vector<double> current_position{
-            position[0],
-            position[1],
-            position[2],
-            position[3],
-            position[4],
-            position[5]
-        };
-
+        Eigen::VectorXd current_position(7);
+        current_position.topLeftCorner(3, 1) = PandaController::getEEPos();
+        current_position.bottomRightCorner(4, 1) = PandaController::getEEOrientation().coeffs();
         double maxV = msg->maxV;
 
-        vector<vector<double>> path = vector<vector<double>>();
-        vector<double> timestamps = vector<double>();
         double now = std::chrono::system_clock::now().time_since_epoch() / std::chrono::milliseconds(1);
+        vector<Eigen::VectorXd> path{current_position};
+        vector<double> timestamps{now};
+
         for (size_t i = 0; i < msg->poses.size(); i++) {
             auto pose = msg->poses[i];
-            PandaController::EulerAngles angles = 
-                PandaController::quaternionToEuler(Eigen::Quaternion<double>(
-                    pose.orientation.w,
-                    pose.orientation.x,
-                    pose.orientation.y,
-                    pose.orientation.z
-                ));
-            vector<double> command{
+            Eigen::VectorXd command(7);
+            command << 
                 pose.position.x,
                 pose.position.y,
                 pose.position.z,
-                angles.roll,
-                angles.pitch,
-                angles.yaw
-            };
+                pose.orientation.w,
+                pose.orientation.x,
+                pose.orientation.y,
+                pose.orientation.z;
 
             double distance = sqrt(
                 (command[0] - current_position[0]) * (command[0] - current_position[0]) + 
@@ -161,8 +172,11 @@ void setVelocityBoundPath(const panda_ros::VelocityBoundPath::ConstPtr& msg) {
 
 void setVelocity(const geometry_msgs::TwistStamped::ConstPtr& msg) {
     if (PandaController::isRunning()) {
-        PandaController::setKinematicChain(kinematicChain);
+        PandaController::setKinematicChain(kinematicChain, eeLink);
         auto twist = msg->twist;
+
+        auto start_pos = PandaController::getEEPos();
+        auto start_orientation = PandaController::getEEOrientation();
         Eigen::VectorXd velocity(6);
         velocity << 
             twist.linear.x,
@@ -171,25 +185,30 @@ void setVelocity(const geometry_msgs::TwistStamped::ConstPtr& msg) {
             twist.angular.x,
             twist.angular.y,
             twist.angular.z;
+        
         long secs = msg->header.stamp.sec;
         long nsecs = msg->header.stamp.nsec;
         double end_time = secs * 1000 + nsecs / 1000000;
 
-        auto start_pos = PandaController::getEEVector();
         double start_time = std::chrono::system_clock::now().time_since_epoch() / std::chrono::milliseconds(1);
         PandaController::setTrajectory(PandaController::Trajectory(
             PandaController::TrajectoryType::Cartesian, 
-            [start_pos, start_time, velocity, end_time]() {
+            [start_pos, start_orientation, start_time, velocity, end_time]() {
                 double now_ms = std::chrono::system_clock::now().time_since_epoch() / std::chrono::milliseconds(1);
-                double dt = now_ms - start_time;
-                auto target_pos = start_pos + (now_ms < end_time)*(dt / 1000)*velocity;
+                double dt = (min(now_ms, end_time) - start_time) / 1000;
+                Eigen::Vector3d target_pos = start_pos.topLeftCorner(3, 1) + dt * velocity.topLeftCorner(1,3);
+
+                PandaController::EulerAngles angles;
+                angles.roll = dt * velocity[3]; angles.pitch = dt * velocity[4]; angles.yaw = dt * velocity[5];
+                Eigen::Quaterniond rotation = PandaController::eulerToQuaternion(angles);
+                auto target_angles = PandaController::quaternionToEuler(rotation * start_orientation);
                 return vector<double>({
                     target_pos[0],
                     target_pos[1],
                     target_pos[2],
-                    target_pos[3],
-                    target_pos[4],
-                    target_pos[5]
+                    target_angles.roll,
+                    target_angles.pitch,
+                    target_angles.yaw
                 });
             }
         ));
@@ -319,7 +338,7 @@ int main(int argc, char **argv) {
     ros::Subscriber sub_commands = n.subscribe("/panda/commands", 10, callbackCommands);
     ros::Subscriber sub_position = n.subscribe("/panda/cart_pose", 10, setCartPos);
     ros::Subscriber sub_trajectory = n.subscribe("/panda/path", 10, setStampedPath);
-    ros::Subscriber sub_vel_trajectory = n.subscribe("/panda/velocity_bound_path", 10, setStampedPath);
+    ros::Subscriber sub_vel_trajectory = n.subscribe("/panda/velocity_bound_path", 10, setVelocityBoundPath);
     ros::Subscriber sub_selectionVector = n.subscribe("/panda/selection_vector", 10, setSelectionVector);
     ros::Subscriber sub_kinematicChain = n.subscribe("/panda/set_kinematic_chain", 10, setKinematicChain);
     ros::Subscriber sub_velocity = n.subscribe("/panda/cart_velocity", 10, setVelocity);

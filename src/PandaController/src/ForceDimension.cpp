@@ -72,7 +72,7 @@ void poll_forcedimension(bool buttonPressed, bool resetCenter, double velcenterx
     // Scaling Values
     array<double,3> scaling_factors = {-5.0, -5.0, 5.0};
 
-    array<double, 6> panda_pos = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
+    vector<double> panda_pos{0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
     
     double vx=0.0;
     double vy=0.0;

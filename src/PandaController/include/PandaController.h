@@ -12,7 +12,8 @@
 
 
 namespace PandaController {
-    enum KinematicChain {PandaGripper};
+    enum KinematicChain {PandaFlange};
+    enum EELink {PandaGripper};
     struct EulerAngles {
         double roll, pitch, yaw;
     };
@@ -22,11 +23,13 @@ namespace PandaController {
 
     std::vector<double> getNextCommand(TrajectoryType & t);
     Eigen::Matrix4d getEETransform();
-    Eigen::VectorXd getEEVector();
+    Eigen::VectorXd getEEPos();
+    Eigen::Quaterniond getEEOrientation();
 
     void setTrajectory(Trajectory);
     void writeCommandedPosition(std::vector<double> data);
     EulerAngles quaternionToEuler(Eigen::Quaterniond q);
+    Eigen::Quaterniond eulerToQuaternion(EulerAngles angle);
 
     std::array<double, 6> readFTForces();
     void writeFTForces(std::array<double, 6> data);
@@ -60,7 +63,7 @@ namespace PandaController {
     void releaseObject(std::function<void ()> onRelease = NULL);
 
     void forceTorqueListener();
-    void setKinematicChain(KinematicChain chain);
+    void setKinematicChain(KinematicChain chain = KinematicChain::PandaFlange, EELink link = EELink::PandaGripper);
 
 } //end namespace PandaController
 
