@@ -310,10 +310,7 @@ void signalHandler(int sig)
 int main(int argc, char **argv) {
     ros::init(argc, argv, "PandaListener");
     ros::NodeHandle n("~");
-    std::string mode_str;
-    //Always specify parameter, it uses cached parameter instead of default value.
-    n.param<std::string>("control_mode", mode_str, "none");
-        
+    
     //Setup the signal handler for exiting, must be called after ros is intialized
     signal(SIGINT, signalHandler); 
 
@@ -325,7 +322,7 @@ int main(int argc, char **argv) {
     ros::Subscriber sub_vel_trajectory = n.subscribe("/panda/velocity_bound_path", 10, setStampedPath);
     ros::Subscriber sub_selectionVector = n.subscribe("/panda/selection_vector", 10, setSelectionVector);
     ros::Subscriber sub_kinematicChain = n.subscribe("/panda/set_kinematic_chain", 10, setKinematicChain);
-    ros::Subscriber sub_velocity = n.subscribe("/panda/set_velocity", 10, setVelocity);
+    ros::Subscriber sub_velocity = n.subscribe("/panda/cart_velocity", 10, setVelocity);
 
     ros::Publisher wrenchPub = n.advertise<geometry_msgs::Wrench>("/panda/wrench", 10);
     ros::Publisher jointPub = n.advertise<sensor_msgs::JointState>("/panda/joint_states", 1);

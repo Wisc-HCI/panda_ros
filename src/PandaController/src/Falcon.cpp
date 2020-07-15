@@ -158,7 +158,7 @@ void pollFalcon() {
     array<double,3> scaling_factors = {-0.20, -0.35, 0.25};
     array<double,3> offsets = {0.35, 0., 0.5};
 
-    array<double, 6> panda_pos = {0.0, 0.0, 0.0, 0.0, 0.0, yaw};
+    vector<double> panda_pos{0.0, 0.0, 0.0, 0.0, 0.0, yaw};
     array<double, 3> normalized_falcon = {0.0, 0.0, 0.0};
 
     normalized_falcon[0] = (falconPos[2]-0.12377318)/.049856;
