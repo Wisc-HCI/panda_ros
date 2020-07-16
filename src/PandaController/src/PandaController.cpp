@@ -117,20 +117,18 @@ namespace PandaController {
         Eigen::Affine3d transform(getEETransform());
         Eigen::Vector3d position(transform.translation());
         Eigen::Quaterniond orientation(transform.linear());
+        orientation.normalize();
         
         EulerAngles desired_a;
-        //Adding pi as panda control consider pi, 0, 0 to be the vertical orientation
         desired_a.roll = commandedPosition[3];
         desired_a.pitch = commandedPosition[4];
         desired_a.yaw = commandedPosition[5];
-        cout << quaternionToEuler(orientation).roll << "|" << desired_a.roll << endl;
-
+        auto current_a = quaternionToEuler(orientation);
         Eigen::Quaterniond desired_q=eulerToQuaternion(desired_a);
         
         Eigen::Quaterniond difference(desired_q*orientation.inverse());
         
-        EulerAngles difference_a = quaternionToEuler(difference);
-        cout << difference_a.roll << endl;
+        EulerAngles difference_a = quaternionToEuler(difference.normalized());
 
         double scaling_factor = 5;
         double v_x = (commandedPosition[0] - position[0]) * scaling_factor;
@@ -318,7 +316,7 @@ namespace PandaController {
 
     void resetRobot(franka::Robot & robot) {
         robot.automaticErrorRecovery();
-        array<double,7> q_goal = {{0,0,0,-M_PI_2,0,M_PI_2,0}};//{{0.0754606,-0.337453,0.150729,-2.46194,0.0587094,2.12597,0.972193}};
+        array<double,7> q_goal = {{0.0754606,-0.337453,0.150729,-2.46194,0.0587094,2.12597,0.972193}};
         MotionGenerator motion_generator(0.5, q_goal);
         robot.control(motion_generator);
         setDefaultBehavior(robot);

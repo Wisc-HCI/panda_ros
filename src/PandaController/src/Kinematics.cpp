@@ -41,6 +41,7 @@ namespace PandaController {
                     jac = jac * transforms[i];
                 }
             }
+            jac = jac * ee_link;
             jacobian(0, j) = jac(0, 3);
             jacobian(1, j) = jac(1, 3);
             jacobian(2, j) = jac(2, 3);

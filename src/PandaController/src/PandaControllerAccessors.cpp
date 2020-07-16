@@ -36,7 +36,13 @@ namespace PandaController {
             DHA(  0.0879,       0,  M_PI/2,  6),
             DHA(       0,  0.1069,       0, -1),
         };
-        Eigen::Matrix4d pandaGripperEELink = (Eigen::Matrix4d() << 0.7071, 0.7071, 0, 0, -0.7071, -0.7071, 0, 0, 0, 0, -1, 0.16874, 0, 0, 0, 1).finished();
+        Eigen::Matrix4d pandaGripperEELink = (
+            Eigen::Matrix4d() << 
+                 0.7071, -0.7071,  0,       0, 
+                -0.7071, -0.7071,  0,       0, 
+                      0,       0, -1, 0.16874, 
+                      0,       0,  0,       1
+        ).finished();
 
         vector<DHA> ee_chain = PandaFlangeDHA;
         Eigen::Matrix4d ee_link = pandaGripperEELink;
@@ -205,7 +211,7 @@ namespace PandaController {
 
     Eigen::Quaterniond getEEOrientation() {
         Eigen::Affine3d transform(getEETransform());
-        return Eigen::Quaterniond(transform.linear());
+        return Eigen::Quaterniond(transform.linear()).normalized();
     }
 
     franka::RobotState readRobotState(){

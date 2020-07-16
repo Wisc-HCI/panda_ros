@@ -88,9 +88,9 @@ void setStampedTrajectory(vector<Eigen::VectorXd> path, vector<double> timestamp
             } else {
                 double t = (now_ms - timestamps[goal_index-1]) / (timestamps[goal_index] - timestamps[goal_index-1]);
                 goal.topLeftCorner(3, 1) = path[goal_index-1].topLeftCorner(3,1) + t * (path[goal_index].topLeftCorner(3,1) - path[goal_index-1].topLeftCorner(3,1));
-                goal_q = Eigen::Quaterniond(path[goal_index-1].bottomRightCorner(4,1).data()).slerp(t, Eigen::Quaterniond(path[goal_index-1].bottomRightCorner(4,1).data()));
+                goal_q = Eigen::Quaterniond(path[goal_index-1].bottomRightCorner(4,1).data()).slerp(t, Eigen::Quaterniond(path[goal_index].bottomRightCorner(4,1).data()));
             }
-            auto goal_angles = PandaController::quaternionToEuler(goal_q);
+            auto goal_angles = PandaController::quaternionToEuler(goal_q.normalized());
             goal[3] = goal_angles.roll;
             goal[4] = goal_angles.pitch;
             goal[5] = goal_angles.yaw;
@@ -141,7 +141,6 @@ void setVelocityBoundPath(const panda_ros::VelocityBoundPath::ConstPtr& msg) {
         double now = std::chrono::system_clock::now().time_since_epoch() / std::chrono::milliseconds(1);
         vector<Eigen::VectorXd> path{current_position};
         vector<double> timestamps{now};
-
         for (size_t i = 0; i < msg->poses.size(); i++) {
             auto pose = msg->poses[i];
             Eigen::VectorXd command(7);
@@ -149,10 +148,10 @@ void setVelocityBoundPath(const panda_ros::VelocityBoundPath::ConstPtr& msg) {
                 pose.position.x,
                 pose.position.y,
                 pose.position.z,
-                pose.orientation.w,
                 pose.orientation.x,
                 pose.orientation.y,
-                pose.orientation.z;
+                pose.orientation.z,
+                pose.orientation.w;
 
             double distance = sqrt(
                 (command[0] - current_position[0]) * (command[0] - current_position[0]) + 
@@ -196,7 +195,7 @@ void setVelocity(const geometry_msgs::TwistStamped::ConstPtr& msg) {
             [start_pos, start_orientation, start_time, velocity, end_time]() {
                 double now_ms = std::chrono::system_clock::now().time_since_epoch() / std::chrono::milliseconds(1);
                 double dt = (min(now_ms, end_time) - start_time) / 1000;
-                Eigen::Vector3d target_pos = start_pos.topLeftCorner(3, 1) + dt * velocity.topLeftCorner(1,3);
+                Eigen::Vector3d target_pos = start_pos.topLeftCorner(3, 1) + dt * velocity.topLeftCorner(3, 1);
 
                 PandaController::EulerAngles angles;
                 angles.roll = dt * velocity[3]; angles.pitch = dt * velocity[4]; angles.yaw = dt * velocity[5];
