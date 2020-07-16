@@ -37,7 +37,7 @@ def obj_plane_dist(x, pts):
 
 def findPlane(pts):
     best_opt = np.inf
-    for ii in range(0,10):
+    for ii in range(0,5):
         wx = np.random.rand()*np.pi/2
         wy = np.random.rand()*np.pi/2
         d = 1.0*(np.random.rand()-0.5)
@@ -61,6 +61,9 @@ def main():
 
     # Turn STL into a point cloud of the desired surface using even sampling
     points, something = sample.sample_surface_even(mesh,200)
+
+
+    # TODO: adjust the location
 
     # convert properly for mm to m issue
     points = points/1000
@@ -156,6 +159,12 @@ def main():
             pt_2 = projected_pts[simplex_id[0]]+max_edge*edge_vec+min_orth_edge*orth_edge_vec
             pt_3 = projected_pts[simplex_id[0]] + max_edge * edge_vec + max_orth_edge * orth_edge_vec
             pt_4 = projected_pts[simplex_id[0]] + min_edge * edge_vec + max_orth_edge * orth_edge_vec
+            max_edge_b = max_edge
+            min_edge_b = min_edge
+            max_orth_edge_b = max_orth_edge
+            min_orth_edge_b = min_orth_edge
+            edge_vec_b = edge_vec
+            orth_edge_vec_b = orth_edge_vec
 
 
 
@@ -167,9 +176,36 @@ def main():
 
 
 
+    ##############################################################
+    # Create a starting point for the control points             #
+    ##############################################################
     # create evenly spaced candidates along this new grid
 
-    # conform back to the surface as control points (Do I need a spring - start wo it!)
+    # number of control points
+    num_ctrl_pts = 20
+
+    ctrl_pts = np.zeros((num_ctrl_pts,num_ctrl_pts,3))
+    ctrl_pts_plotting = []
+    for ii in range(0,num_ctrl_pts):
+        for jj in range(0,num_ctrl_pts):
+            pt_on_plane = pt_1+(max_edge_b-min_edge_b)*(ii*1.0/(num_ctrl_pts-1.0))*edge_vec_b+(max_orth_edge_b-min_orth_edge_b)*(jj*1.0/(num_ctrl_pts-1.0))*orth_edge_vec_b
+            pt_3d = np.matmul(exp_map_np([wx,wy,0.0]),np.array([pt_on_plane[0], pt_on_plane[1], d]).reshape((3,1)))
+            ctrl_pts[ii,jj,:]=pt_3d.reshape((3,))
+
+    # conform back to the surface as control points (Do I need a spring - start w/o it!)
+    points_rich, something = sample.sample_surface_even(mesh, 10000)
+    points_rich = points_rich/1000 # mm to m issue
+    for ii in range(0, num_ctrl_pts):
+        for jj in range(0, num_ctrl_pts):
+            best_match = np.inf
+            temp_pt = ctrl_pts[ii,jj,:]
+            for point in points_rich:
+                if np.linalg.norm(point-temp_pt)<best_match:
+                    best_match = np.linalg.norm(point-temp_pt)
+                    best_pt = point
+            ctrl_pts[ii, jj, :] = best_pt
+            ctrl_pts_plotting.append(best_pt.reshape((3,)))
+    ctrl_pts_plotting = np.array(ctrl_pts_plotting)
 
     # print points
     # print(np.shape(points))
@@ -185,13 +221,14 @@ def main():
             plane_pts.append(np.matmul(exp_map_np([wx, wy, 0.0]),np.array([[ii], [jj], [d]])))
     plane_pts = np.array(plane_pts)
 
-    center_pt = np.matmul(exp_map_np([wx, wy, 0.0]), np.array([[0.0], [0.0], [d]]))
-    ax.scatter(center_pt[0], center_pt[1], center_pt[2], color='red')
-    ax.scatter(plane_pts[:,0],plane_pts[:,1],plane_pts[:,2],color='orange')
-    ax.scatter(points[:,0],points[:,1],points[:,2])
+    ax.scatter(ctrl_pts_plotting[:,0], ctrl_pts_plotting[:,1], ctrl_pts_plotting[:,2], color='green')
+    # ax.scatter(plane_pts[:,0],plane_pts[:,1],plane_pts[:,2],color='orange')
+    # ax.scatter(points[:,0],points[:,1],points[:,2])
     ax.set_xlim3d(-0.2, 0.2)
     ax.set_ylim3d(-0.2, 0.2)
     ax.set_zlim3d(-0.2, 0.2)
+
+
 
     plt.show()
 
