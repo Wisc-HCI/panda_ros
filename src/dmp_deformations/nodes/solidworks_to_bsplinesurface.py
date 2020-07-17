@@ -63,10 +63,20 @@ def main():
     points, something = sample.sample_surface_even(mesh,200)
 
 
-    # TODO: adjust the location
+
+
 
     # convert properly for mm to m issue
     points = points/1000
+
+    # Apply a rotation and a translation to all of the points
+    R = np.array([[0.0, 0.0, -1.0],
+                  [-1.0, 0.0, 0.0],
+                  [0.0, 1.0, 0.0]])
+    t = np.array([0.4, 0.0, 1.0])
+
+    for ii in range(0, len(points)):
+        points[ii] = (np.matmul(R, points[ii].reshape((3, 1))) + t.reshape((3, 1))).reshape(3, )
 
     ###########################################################################################
     ##  Algorithm for fitting the B Spline Surface to the Point Cloud                        ##
@@ -195,6 +205,10 @@ def main():
     # conform back to the surface as control points (Do I need a spring - start w/o it!)
     points_rich, something = sample.sample_surface_even(mesh, 10000)
     points_rich = points_rich/1000 # mm to m issue
+
+    for ii in range(0, len(points_rich)):
+        points_rich[ii] = (np.matmul(R, points_rich[ii].reshape((3, 1))) + t.reshape((3, 1))).reshape(3, )
+
     for ii in range(0, num_ctrl_pts):
         for jj in range(0, num_ctrl_pts):
             best_match = np.inf
@@ -207,8 +221,6 @@ def main():
             ctrl_pts_plotting.append(best_pt.reshape((3,)))
     ctrl_pts_plotting = np.array(ctrl_pts_plotting)
 
-    # print points
-    # print(np.shape(points))
 
     fig = plt.figure()
     ax = fig.gca(projection='3d')
@@ -222,11 +234,27 @@ def main():
     plane_pts = np.array(plane_pts)
 
     ax.scatter(ctrl_pts_plotting[:,0], ctrl_pts_plotting[:,1], ctrl_pts_plotting[:,2], color='green')
-    # ax.scatter(plane_pts[:,0],plane_pts[:,1],plane_pts[:,2],color='orange')
-    # ax.scatter(points[:,0],points[:,1],points[:,2])
+    ax.scatter(plane_pts[:,0],plane_pts[:,1],plane_pts[:,2],color='orange')
+    ax.scatter(points[:,0],points[:,1],points[:,2])
+
+    # Check that the normals are facing the correct direction
+    u_dir = ctrl_pts[5,0,:]-ctrl_pts[0,0,:]
+    v_dir = ctrl_pts[0,5,:]-ctrl_pts[0,0,:]
+
+    normal_dir = np.cross(u_dir,v_dir)
+    normal_dir = normal_dir*10.0
+    ax.quiver(ctrl_pts[0,0,0],ctrl_pts[0,0,1],ctrl_pts[0,0,2],normal_dir[0],normal_dir[1],normal_dir[2])
+
+
     ax.set_xlim3d(-0.2, 0.2)
     ax.set_ylim3d(-0.2, 0.2)
     ax.set_zlim3d(-0.2, 0.2)
+
+    print "CORNER PTS"
+    print(ctrl_pts[0,0,:])
+    print(ctrl_pts[-1,0,:])
+    print(ctrl_pts[0,-1,:])
+    print(ctrl_pts[-1,-1,:])
 
 
 
