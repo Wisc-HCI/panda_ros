@@ -32,3 +32,8 @@ target_link_libraries(pandaRosWrapper ${catkin_LIBRARIES} ${pandaController} ${p
 install(TARGETS pandaRosWrapper
   RUNTIME DESTINATION lib/panda_ros
 )
+
+catkin_install_python(PROGRAMS
+    test/velocity_control_test
+    test/path_control_test
+    DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION})

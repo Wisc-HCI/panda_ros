@@ -102,30 +102,26 @@ void setStampedTrajectory(vector<Eigen::VectorXd> path, vector<double> timestamp
 
 void setStampedPath(const nav_msgs::Path::ConstPtr& msg) {
     if (PandaController::isRunning()){
-        vector<Eigen::VectorXd> path;//{PandaController::getEEVector()};
+        Eigen::VectorXd current_position(7);
+        current_position.topLeftCorner(3, 1) = PandaController::getEEPos();
+        current_position.bottomRightCorner(4, 1) = PandaController::getEEOrientation().coeffs();
+        vector<Eigen::VectorXd> path{current_position};//{PandaController::getEEVector()};
         double now = std::chrono::system_clock::now().time_since_epoch() / std::chrono::milliseconds(1);
         vector<double> timestamps{now};
         for (size_t i = 0; i < msg->poses.size(); i++) {
             auto poseStamped = msg->poses[i];
             long secs = poseStamped.header.stamp.sec;
             long nsecs = poseStamped.header.stamp.nsec;
-            PandaController::EulerAngles angles = 
-                PandaController::quaternionToEuler(Eigen::Quaternion<double>(
-                    poseStamped.pose.orientation.w,
-                    poseStamped.pose.orientation.x,
-                    poseStamped.pose.orientation.y,
-                    poseStamped.pose.orientation.z
-                ));
-
             timestamps.push_back(secs * 1000 + nsecs / 1000000);
             path.push_back(
-                (Eigen::VectorXd(6) << 
+                (Eigen::VectorXd(7) << 
                     poseStamped.pose.position.x,
                     poseStamped.pose.position.y,
                     poseStamped.pose.position.z,
-                    angles.roll,
-                    angles.pitch,
-                    angles.yaw).finished()
+                    poseStamped.pose.orientation.x,
+                    poseStamped.pose.orientation.y,
+                    poseStamped.pose.orientation.z,
+                    poseStamped.pose.orientation.w).finished()
             );
         }
         setStampedTrajectory(path, timestamps);
