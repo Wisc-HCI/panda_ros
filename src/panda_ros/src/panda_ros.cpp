@@ -19,8 +19,8 @@
 #include <csignal>
 #include <deque>
 #include <boost/algorithm/string.hpp>
-#include "panda_ros/VelocityBoundPath.h"
-#include "panda_ros/HybridPose.h"
+#include "panda_ros_msgs/VelocityBoundPath.h"
+#include "panda_ros_msgs/HybridPose.h"
 
 using namespace std;
 
@@ -132,7 +132,7 @@ void setStampedPath(const nav_msgs::Path::ConstPtr& msg) {
     }
 }
 
-void setVelocityBoundPath(const panda_ros::VelocityBoundPath::ConstPtr& msg) {
+void setVelocityBoundPath(const panda_ros_msgs::VelocityBoundPath::ConstPtr& msg) {
     if (PandaController::isRunning()) {
         Eigen::VectorXd current_position(7);
         current_position.topLeftCorner(3, 1) = PandaController::getEEPos();
@@ -215,7 +215,7 @@ void setVelocity(const geometry_msgs::TwistStamped::ConstPtr& msg) {
     }
 }
 
-void setHybrid(const panda_ros::HybridPose::ConstPtr& msg){
+void setHybrid(const panda_ros_msgs::HybridPose::ConstPtr& msg){
     if (PandaController::isRunning()){        
         PandaController::setKinematicChain(kinematicChain, eeLink);
         vector<double> command{
