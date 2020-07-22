@@ -30,7 +30,7 @@ namespace PandaController {
     void writeCommandedPosition(std::vector<double> data);
     EulerAngles quaternionToEuler(Eigen::Quaterniond q);
     Eigen::Quaterniond eulerToQuaternion(EulerAngles angle);
-
+    
     std::array<double, 6> readFTForces();
     void writeFTForces(std::array<double, 6> data);
 
@@ -40,11 +40,7 @@ namespace PandaController {
     std::array<double, 7> readJointAngles();
     void writeJointAngles(std::array<double, 7> data);
 
-    std::array<double, 3> readSelectionVector();
-    void writeSelectionVector(std::array<double, 3> data);
-
-    std::array<double, 6> readCommandedFT();
-    void writeCommandedFT(std::array<double, 6> data);
+    void writeHybridCommand(std::vector<double> data);
 
     franka::RobotState readRobotState();
     void writeRobotState(franka::RobotState data);

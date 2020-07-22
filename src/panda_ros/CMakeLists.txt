@@ -11,6 +11,7 @@ find_package(catkin REQUIRED COMPONENTS roscpp tf2_ros geometry_msgs sensor_msgs
 add_message_files(
   FILES
   VelocityBoundPath.msg
+  HybridPose.msg
 )
 generate_messages(
   DEPENDENCIES

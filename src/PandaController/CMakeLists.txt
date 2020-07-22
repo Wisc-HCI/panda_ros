@@ -32,29 +32,6 @@ target_include_directories(PandaController PUBLIC ${EIGEN3_INCLUDE_DIR} ${CMAKE_
 list(APPEND installTargets PandaController)
 
 
-if(LIBNIFALCON) 
-  add_executable(Falcon ${CMAKE_CURRENT_SOURCE_DIR}/src/Falcon.cpp)
-  target_link_libraries(Falcon franka ${LIBNIFALCON} PandaController)
-  target_include_directories(Falcon PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
-  list(APPEND installTargets Falcon)
-endif(LIBNIFALCON)
-
-if(DRDC)
-  if(DHDC)
-    add_executable(ForceDimension ${CMAKE_CURRENT_SOURCE_DIR}/src/ForceDimension.cpp)
-    target_link_libraries(ForceDimension franka ${LIBNIFALCON} PandaController ${DRDC} ${DHDC})
-    target_include_directories(ForceDimension PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
-    
-    add_executable(ForceDimensionClutch ${CMAKE_CURRENT_SOURCE_DIR}/src/ForceDimension_clutch.cpp)
-    target_link_libraries(ForceDimensionClutch franka ${LIBNIFALCON} PandaController ${DRDC} ${DHDC})
-    target_include_directories(ForceDimensionClutch PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
-
-    list(APPEND installTargets ForceDimension)
-    list(APPEND installTargets ForceDimensionClutch)
-  endif(DHDC)
-endif(DRDC)
-
-
 message(${CMAKE_INSTALL_PREFIX})
 set(CMAKE_INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/lib")
 install(TARGETS ${installTargets}

@@ -156,9 +156,8 @@ namespace PandaController {
 
     franka::JointVelocities hybridControlLoop(const franka::RobotState& robot_state, vector<double> command) {
         // Selection vector represents directions for position (admittance) control
-        array<double, 3> currentSelectionMatrix = readSelectionVector();
         Eigen::VectorXd selection_vector(3);
-        selection_vector << command[0], command[1], command[2]; // Currently just cartesian directions and assumed no rotation
+        selection_vector << command[7], command[8], command[9]; // Currently just cartesian directions and assumed no rotation
         Eigen::Matrix< double, 3, 3> position_selection_matrix = selection_vector.array().matrix().asDiagonal();
         
         Eigen::Matrix< double, 3, 3> force_selection_matrix;
@@ -166,15 +165,15 @@ namespace PandaController {
         force_selection_matrix =  eye3 - position_selection_matrix;
         
         // COME BACK TO THIS!!!
-        vector<double> commandedPosition(command.data() + 3, command.data() + 9);
+        vector<double> commandedPosition(command.data(), command.data() + 3);
         vector<double> commandedWrench(command.data() + 9, command.data() + 15);
 
         // TEMP FORCE THE COMMANDED POSITION TO BE THE SAME!!!
         //commandedPosition = {0.42, 0.1, 0.25, 0.0, 0.0, 0.0};
 
-        Eigen::Affine3d transform(getEETransform());
-        Eigen::Vector3d position(transform.translation());
-        Eigen::Quaterniond orientation(transform.linear());
+
+        auto position = getEEPos();
+        auto orientation = getEEOrientation();
 
         array<double, 6> currentWrench = readFTForces();
         //cout << "Current Z Force: " << currentWrench[2] << endl;

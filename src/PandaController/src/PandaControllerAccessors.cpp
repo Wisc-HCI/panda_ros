@@ -20,9 +20,6 @@ namespace PandaController {
         array<double, 7> pose_goal{}; //<x, y, z, x, y, z, w>
 
         array<double, 42> jacobian{};
-
-        array<double, 3> selection_vector{};
-        array<double, 6> FT_command{};
         
 	    double maxForce = 15;
 
@@ -158,18 +155,6 @@ namespace PandaController {
         // pathEndTime_ms = (long)command[0];
     }
 
-    array<double, 6> readCommandedFT(){
-        boost::lock_guard<boost::mutex> guard(mutex);
-
-        return FT_command;
-    }
-
-    void writeCommandedFT(array<double, 6> data){
-        boost::lock_guard<boost::mutex> guard(mutex);
-
-        FT_command = data;
-    }
-
     void writeCommandedPosition(vector<double> data){
         boost::lock_guard<boost::mutex> guard(mutex);
         trajectory = Trajectory(
@@ -180,14 +165,14 @@ namespace PandaController {
         );
     }
 
-    array<double, 3> readSelectionVector(){
+    void writeHybridCommand(vector<double> data){
         boost::lock_guard<boost::mutex> guard(mutex);
-        return selection_vector;
-    }
-    void writeSelectionVector(array<double, 3> data){
-
-        boost::lock_guard<boost::mutex> guard(mutex);
-        selection_vector = data;
+        trajectory = Trajectory(
+            TrajectoryType::Hybrid,
+            [data]() {
+                return data;
+            }
+        );
     }
     void writeJointAngles(vector<double> data){
         boost::lock_guard<boost::mutex> guard(mutex);

@@ -20,6 +20,7 @@
 #include <deque>
 #include <boost/algorithm/string.hpp>
 #include "panda_ros/VelocityBoundPath.h"
+#include "panda_ros/HybridPose.h"
 
 using namespace std;
 
@@ -194,13 +195,13 @@ void setVelocity(const geometry_msgs::TwistStamped::ConstPtr& msg) {
             PandaController::TrajectoryType::Cartesian, 
             [start_pos, start_orientation, start_time, velocity, end_time]() {
                 double now_ms = std::chrono::system_clock::now().time_since_epoch() / std::chrono::milliseconds(1);
-                double dt = (min(now_ms, end_time) - start_time) / 1000;
+                double dt = (max(min(now_ms, end_time), start_time) - start_time) / 1000;
                 Eigen::Vector3d target_pos = start_pos.topLeftCorner(3, 1) + dt * velocity.topLeftCorner(3, 1);
 
                 PandaController::EulerAngles angles;
                 angles.roll = dt * velocity[3]; angles.pitch = dt * velocity[4]; angles.yaw = dt * velocity[5];
                 Eigen::Quaterniond rotation = PandaController::eulerToQuaternion(angles);
-                auto target_angles = PandaController::quaternionToEuler(rotation * start_orientation);
+                auto target_angles = PandaController::quaternionToEuler((rotation * start_orientation).normalized());
                 return vector<double>({
                     target_pos[0],
                     target_pos[1],
@@ -214,14 +215,40 @@ void setVelocity(const geometry_msgs::TwistStamped::ConstPtr& msg) {
     }
 }
 
-void setSelectionVector(const geometry_msgs::Vector3::ConstPtr& msg){
-    if (PandaController::isRunning()){
-        PandaController::setKinematicChain(kinematicChain);
-        std::array<double, 3> vec;
-        vec[0] = msg->x;
-        vec[1] = msg->y;
-        vec[2] = msg->z;
-        PandaController::writeSelectionVector(vec);
+void setHybrid(const panda_ros::HybridPose::ConstPtr& msg){
+    if (PandaController::isRunning()){        
+        PandaController::setKinematicChain(kinematicChain, eeLink);
+        vector<double> command{
+            //Position
+            msg->pose.position.x,
+            msg->pose.position.y,
+            msg->pose.position.z,
+            msg->pose.orientation.x,
+            msg->pose.orientation.y,
+            msg->pose.orientation.z,
+            msg->pose.orientation.w,
+            //Selection vector
+            double(msg->sel_vector[0]),
+            double(msg->sel_vector[1]),
+            double(msg->sel_vector[2]),
+            double(msg->sel_vector[3]),
+            double(msg->sel_vector[4]),
+            double(msg->sel_vector[5]),
+            //Wrench
+            msg->wrench.force.x,
+            msg->wrench.force.y,
+            msg->wrench.force.z,
+            msg->wrench.torque.x,
+            msg->wrench.torque.y,
+            msg->wrench.torque.z,
+            //Constraint frame
+            msg->constraint_frame.x,
+            msg->constraint_frame.y,
+            msg->constraint_frame.z,
+            msg->constraint_frame.w
+        };
+
+        PandaController::writeHybridCommand(command);
     }
 }
 
@@ -240,9 +267,9 @@ void callbackCommands(const std_msgs::String& msg){
     }
     if(command[0] == "setMaxForce") {
         cout<<"Setting max force to "<<command[1]<<endl;
-        PandaController::writeCommandedFT({0,0,-stod(command[1]),0,0,0});
-    }
-    
+        PandaController::writeMaxForce(stod(command[1]));
+        //PandaController::writeCommandedFT({0,0,-stod(command[1]),0,0,0});
+    }   
 }
 
 void publishJointState(franka::RobotState robot_state, ros::Publisher jointPub){
@@ -338,9 +365,9 @@ int main(int argc, char **argv) {
     ros::Subscriber sub_position = n.subscribe("/panda/cart_pose", 10, setCartPos);
     ros::Subscriber sub_trajectory = n.subscribe("/panda/path", 10, setStampedPath);
     ros::Subscriber sub_vel_trajectory = n.subscribe("/panda/velocity_bound_path", 10, setVelocityBoundPath);
-    ros::Subscriber sub_selectionVector = n.subscribe("/panda/selection_vector", 10, setSelectionVector);
     ros::Subscriber sub_kinematicChain = n.subscribe("/panda/set_kinematic_chain", 10, setKinematicChain);
     ros::Subscriber sub_velocity = n.subscribe("/panda/cart_velocity", 10, setVelocity);
+    ros::Subscriber sub_hybrid = n.subscribe("/panda/hybrid_pose", 10, setHybrid);
 
     ros::Publisher wrenchPub = n.advertise<geometry_msgs::Wrench>("/panda/wrench", 10);
     ros::Publisher jointPub = n.advertise<sensor_msgs::JointState>("/panda/joint_states", 1);

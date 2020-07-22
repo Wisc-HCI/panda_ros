@@ -5,7 +5,7 @@
 #include <vector>
 
 namespace PandaController {
-    enum TrajectoryType {Cartesian, Joint};
+    enum TrajectoryType {Cartesian, Joint, Hybrid};
     class Trajectory {
     private:
         std::function<std::vector<double>()> trajectory_generator;
