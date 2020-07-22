@@ -178,16 +178,9 @@ namespace PandaController {
         array<double, 6> currentWrench = readFTForces();
         //cout << "Current Z Force: " << currentWrench[2] << endl;
         
-        // Eigen initialise quaternions as w, x, y, z
-        EulerAngles desired_a;
-        //Adding pi as panda control consider pi, 0, 0 to be the vertical orientation
-        desired_a.roll = commandedPosition[3];
-        desired_a.pitch = commandedPosition[4];
-        desired_a.yaw = commandedPosition[5];
-
-        Eigen::Quaterniond desired_q=eulerToQuaternion(desired_a);
+        Eigen::Quaterniond desired_q = Eigen::Quaterniond(command[3], command[4], command[5], command[6]);
         
-        Eigen::Quaterniond difference(desired_q*orientation.inverse());
+        Eigen::Quaterniond difference((desired_q*orientation.inverse()).normalized());
         
         // Not working for all configuration 
         //https://stackoverflow.com/questions/31589901/euler-to-quaternion-quaternion-to-euler-using-eigen
@@ -283,6 +276,9 @@ namespace PandaController {
                 break;
             case TrajectoryType::Joint:
                 velocities = jointPositionControlLoop(robot_state, command);
+                break;
+            case TrajectoryType::Hybrid:
+                velocities = hybridControlLoop(robot_state, command);
                 break;
         }
         iteration++;

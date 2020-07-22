@@ -219,10 +219,10 @@ void setHybrid(const panda_ros_msgs::HybridPose::ConstPtr& msg){
             msg->pose.position.x,
             msg->pose.position.y,
             msg->pose.position.z,
+            msg->pose.orientation.w,
             msg->pose.orientation.x,
             msg->pose.orientation.y,
             msg->pose.orientation.z,
-            msg->pose.orientation.w,
             //Selection vector
             double(msg->sel_vector[0]),
             double(msg->sel_vector[1]),
