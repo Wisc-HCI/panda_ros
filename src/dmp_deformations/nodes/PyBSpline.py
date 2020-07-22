@@ -308,6 +308,50 @@ def createTable():
 
     test_curve.writeSurface('table')
 
+def createBoeing():
+    x = np.linspace(0.0, 0.2032, 30)
+    y = np.linspace(0.0, 0.2032, 30)
+    xv, yv = np.meshgrid(x, y)
+    z = 0.0762+0.0*xv+0.0*yv
+    z[14:,14:]=0.0762/2
+
+    control_pts = np.transpose([xv, yv, z])
+    # control_pts = np.ones((5,5,3))
+    print("Control Points:")
+    print(np.shape(control_pts))
+    print(control_pts[0,24,:])
+
+    # Create a B-Spline instance
+    test_curve = BSplineSurface()
+    test_curve.initialize(k=3, control_pts=control_pts)
+
+    a,b,c,d = test_curve.calculate_surface_point(0.3, 0.6)
+    print("PT:",a)
+
+    # Evaluate a new point
+    # eval_pt, n_hat = test_curve.calculate_surface_point(0.5, 0.25)
+    # print "NHAT: ", n_hat
+
+    # 3D plotting code
+    ax = plt.gca(projection='3d')
+    ax.scatter(xv.flatten(), yv.flatten(), z.flatten(), color='blue')
+    ax.scatter(a[0],a[1],a[2],color='red')
+    # ax.scatter(eval_pt[0], eval_pt[1], eval_pt[2], color='red', s=50)
+    # ax.quiver(eval_pt[0], eval_pt[1], eval_pt[2], n_hat[0], n_hat[1], n_hat[2], length=0.1, normalize=True)
+    # ax.set_xlim3d(0, 1)
+    # ax.set_ylim3d(0, 1)
+    # ax.set_zlim3d(0, 1)
+
+    # # 2D plotting code
+    # ax = plt.gca()
+    # ax.scatter(xv.flatten(), z.flatten(), color='blue')
+    # ax.scatter(eval_pt[0], eval_pt[2], color='red', s=50)
+    # ax.quiver(eval_pt[0], eval_pt[2],n_hat[0], n_hat[2])
+
+    plt.show()
+
+    test_curve.writeSurface('boeinglayup')
+
 def testing():
     # Create surface test data
     x = np.linspace(0, 1, 25)

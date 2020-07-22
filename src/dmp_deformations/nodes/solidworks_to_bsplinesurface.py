@@ -73,7 +73,7 @@ def main():
     R = np.array([[0.0, 0.0, -1.0],
                   [-1.0, 0.0, 0.0],
                   [0.0, 1.0, 0.0]])
-    t = np.array([0.4, 0.0, 1.0])
+    t = np.array([0.62, 0.307, 0.7585])
 
     for ii in range(0, len(points)):
         points[ii] = (np.matmul(R, points[ii].reshape((3, 1))) + t.reshape((3, 1))).reshape(3, )
@@ -246,15 +246,16 @@ def main():
     ax.quiver(ctrl_pts[0,0,0],ctrl_pts[0,0,1],ctrl_pts[0,0,2],normal_dir[0],normal_dir[1],normal_dir[2])
 
 
-    ax.set_xlim3d(-0.2, 0.2)
-    ax.set_ylim3d(-0.2, 0.2)
-    ax.set_zlim3d(-0.2, 0.2)
+    # ax.set_xlim3d(-0.2, 0.2)
+    # ax.set_ylim3d(-0.2, 0.2)
+    # ax.set_zlim3d(-0.2, 0.2)
+    print("----------------")
 
-    print "CORNER PTS"
-    print(ctrl_pts[0,0,:])
-    print(ctrl_pts[-1,0,:])
-    print(ctrl_pts[0,-1,:])
-    print(ctrl_pts[-1,-1,:])
+    for ii in range(0,num_ctrl_pts):
+        for jj in range(0,num_ctrl_pts):
+            print("point = {"+str(ctrl_pts[ii,jj,0])+", "+str(ctrl_pts[ii,jj,1])+", "+str(ctrl_pts[ii,jj,2])+"}")
+            print("pt=sim.addDrawingObject(dr,0.001,0.0,-1,30000,color)")
+            print("sim.addDrawingObjectItem(pt,point)")
 
 
 
