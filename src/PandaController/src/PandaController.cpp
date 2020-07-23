@@ -154,6 +154,30 @@ namespace PandaController {
         return output;
     }
 
+    franka::JointVelocities velocityControlLoop(const franka::RobotState& robot_state, vector<double> commandedVelocity) {
+        double v_x = commandedVelocity[0];
+        double v_y = commandedVelocity[1];
+        double v_z = commandedVelocity[2];
+        double v_roll = commandedVelocity[3];
+        double v_pitch = commandedVelocity[4];
+        double v_yaw = commandedVelocity[5];
+        Eigen::VectorXd v(6);
+        v << v_x, v_y, v_z, v_roll, v_pitch, v_yaw;
+
+        constrainForces(v, robot_state);
+        Eigen::VectorXd jointVelocities = Eigen::Map<Eigen::MatrixXd>(readJacobian().data(), 6, 7).completeOrthogonalDecomposition().solve(v);
+        franka::JointVelocities output = {{
+            jointVelocities[0], 
+            jointVelocities[1], 
+            jointVelocities[2], 
+            jointVelocities[3], 
+            jointVelocities[4], 
+            jointVelocities[5], 
+            jointVelocities[6]
+        }};
+        return output;
+    }
+
     franka::JointVelocities hybridControlLoop(const franka::RobotState& robot_state, vector<double> command) {
         // Selection vector represents directions for position (admittance) control
         Eigen::VectorXd selection_vector(3);
@@ -272,6 +296,9 @@ namespace PandaController {
         switch (t) {
             case TrajectoryType::Cartesian:
                 velocities = positionControlLoop(robot_state, command);
+                break;
+            case TrajectoryType::Velocity:
+                velocities = velocityControlLoop(robot_state, command);
                 break;
             case TrajectoryType::Joint:
                 velocities = jointPositionControlLoop(robot_state, command);

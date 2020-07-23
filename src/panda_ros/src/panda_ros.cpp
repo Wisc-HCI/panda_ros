@@ -171,48 +171,31 @@ void setVelocity(const geometry_msgs::TwistStamped::ConstPtr& msg) {
         PandaController::setKinematicChain(kinematicChain, eeLink);
         auto twist = msg->twist;
 
-        auto start_pos = PandaController::getEEPos();
-        auto start_orientation = PandaController::getEEOrientation();
-        Eigen::VectorXd velocity(6);
-        velocity << 
+        vector<double> velocity({
             twist.linear.x,
             twist.linear.y,
             twist.linear.z,
             twist.angular.x,
             twist.angular.y,
-            twist.angular.z;
-        
-        long secs = msg->header.stamp.sec;
-        long nsecs = msg->header.stamp.nsec;
-        double end_time = secs * 1000 + nsecs / 1000000;
+            twist.angular.z});
+        double end_time = msg->header.stamp.toSec();
 
-        double start_time = std::chrono::system_clock::now().time_since_epoch() / std::chrono::milliseconds(1);
         PandaController::setTrajectory(PandaController::Trajectory(
-            PandaController::TrajectoryType::Cartesian, 
-            [start_pos, start_orientation, start_time, velocity, end_time]() {
-                double now_ms = std::chrono::system_clock::now().time_since_epoch() / std::chrono::milliseconds(1);
-                double dt = (max(min(now_ms, end_time), start_time) - start_time) / 1000;
-                Eigen::Vector3d target_pos = start_pos.topLeftCorner(3, 1) + dt * velocity.topLeftCorner(3, 1);
-
-                PandaController::EulerAngles angles;
-                angles.roll = dt * velocity[3]; angles.pitch = dt * velocity[4]; angles.yaw = dt * velocity[5];
-                Eigen::Quaterniond rotation = PandaController::eulerToQuaternion(angles);
-                auto target_angles = PandaController::quaternionToEuler((rotation * start_orientation).normalized());
-                return vector<double>({
-                    target_pos[0],
-                    target_pos[1],
-                    target_pos[2],
-                    target_angles.roll,
-                    target_angles.pitch,
-                    target_angles.yaw
-                });
+            PandaController::TrajectoryType::Velocity, 
+            [velocity, end_time]() {
+                if (ros::Time::now().toSec() > end_time){
+                    double scale = RAND_MAX*100000.;
+                    return vector<double>({rand()/scale,rand()/scale,rand()/scale,rand()/scale,rand()/scale,rand()/scale});
+                }
+                else
+                    return velocity;
             }
         ));
     }
 }
 
 void setHybrid(const panda_ros_msgs::HybridPose::ConstPtr& msg){
-    if (PandaController::isRunning()){        
+    if (PandaController::isRunning()){    
         PandaController::setKinematicChain(kinematicChain, eeLink);
         vector<double> command{
             //Position
