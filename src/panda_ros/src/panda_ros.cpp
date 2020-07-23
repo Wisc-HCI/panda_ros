@@ -21,6 +21,7 @@
 #include <boost/algorithm/string.hpp>
 #include "panda_ros_msgs/VelocityBoundPath.h"
 #include "panda_ros_msgs/HybridPose.h"
+#include "panda_ros_msgs/JointPose.h"
 
 using namespace std;
 
@@ -194,6 +195,43 @@ void setVelocity(const geometry_msgs::TwistStamped::ConstPtr& msg) {
     }
 }
 
+void setJointPose(const panda_ros_msgs::JointPose::ConstPtr& msg) {
+    if (PandaController::isRunning()) {
+        PandaController::setKinematicChain(kinematicChain, eeLink);
+        double start_time = ros::Time::now().toSec();
+        double end_time = msg->header.stamp.toSec();
+        vector<double> goal({
+            msg->joint_pose[0],
+            msg->joint_pose[1],
+            msg->joint_pose[2],
+            msg->joint_pose[3],
+            msg->joint_pose[4],
+            msg->joint_pose[5],
+            msg->joint_pose[6]});
+
+        PandaController::setTrajectory(PandaController::Trajectory(
+            PandaController::TrajectoryType::Joint, 
+            [goal, start_time, end_time]() {
+                double progress = (ros::Time::now().toSec() - start_time) / (end_time - start_time);
+                franka::RobotState robot_state = PandaController::readRobotState();
+                vector<double>  q_v({robot_state.q[0],robot_state.q[1],robot_state.q[2],robot_state.q[3],robot_state.q[4],robot_state.q[5],robot_state.q[6]});
+                if (progress > 1){
+                    return q_v;
+                }
+                else
+                    return vector<double>({
+                        q_v[0]+(goal[0]-q_v[0])*progress,
+                        q_v[1]+(goal[1]-q_v[1])*progress,
+                        q_v[2]+(goal[2]-q_v[2])*progress,
+                        q_v[3]+(goal[3]-q_v[3])*progress,
+                        q_v[4]+(goal[4]-q_v[4])*progress,
+                        q_v[5]+(goal[5]-q_v[5])*progress,
+                        q_v[6]+(goal[6]-q_v[6])*progress});
+            }
+        ));
+    }
+}
+
 void setHybrid(const panda_ros_msgs::HybridPose::ConstPtr& msg){
     if (PandaController::isRunning()){    
         PandaController::setKinematicChain(kinematicChain, eeLink);
@@ -346,6 +384,7 @@ int main(int argc, char **argv) {
     ros::Subscriber sub_vel_trajectory = n.subscribe("/panda/velocity_bound_path", 10, setVelocityBoundPath);
     ros::Subscriber sub_kinematicChain = n.subscribe("/panda/set_kinematic_chain", 10, setKinematicChain);
     ros::Subscriber sub_velocity = n.subscribe("/panda/cart_velocity", 10, setVelocity);
+    ros::Subscriber sub_joint_pose = n.subscribe("/panda/joint_pose", 10, setJointPose);
     ros::Subscriber sub_hybrid = n.subscribe("/panda/hybrid_pose", 10, setHybrid);
 
     ros::Publisher wrenchPub = n.advertise<geometry_msgs::Wrench>("/panda/wrench", 10);

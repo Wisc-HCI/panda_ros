@@ -9,6 +9,7 @@ add_message_files(
   FILES
   VelocityBoundPath.msg
   HybridPose.msg
+  JointPose.msg
 )
 generate_messages(
   DEPENDENCIES
