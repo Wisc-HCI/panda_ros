@@ -14,6 +14,8 @@ import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 from scipy.optimize import minimize, Bounds
 from scipy.spatial import ConvexHull
+from PyBSpline import BSplineSurface
+import time
 
 def exp_map_np(w):
     w = np.array(w)
@@ -73,7 +75,7 @@ def main():
     R = np.array([[0.0, 0.0, -1.0],
                   [-1.0, 0.0, 0.0],
                   [0.0, 1.0, 0.0]])
-    t = np.array([0.62, 0.307, 0.7585])
+    t = np.array([0.5787, 0.307, 0.0125])
 
     for ii in range(0, len(points)):
         points[ii] = (np.matmul(R, points[ii].reshape((3, 1))) + t.reshape((3, 1))).reshape(3, )
@@ -113,8 +115,6 @@ def main():
     # key idea: orientation of minimized rectangle is the same as one of the edges of the point cloud convex hull
     # get the direction and the normal direction
     # using all points, find the min and max of these
-    fig = plt.figure()
-    plt.scatter(projected_pts[:, 0], projected_pts[:, 1])
     hull = ConvexHull(projected_pts)
     # for simplex in hull.simplices:
     #     print "simplex:",simplex
@@ -176,13 +176,16 @@ def main():
             edge_vec_b = edge_vec
             orth_edge_vec_b = orth_edge_vec
 
-
+    fig1 = plt.figure(1)
+    plt.scatter(projected_pts[:, 0], projected_pts[:, 1])
 
     # PLOT THE RECTANGLE!!!!
     plt.plot([pt_1[0], pt_2[0]],[pt_1[1], pt_2[1]], color='green')
     plt.plot([pt_2[0], pt_3[0]], [pt_2[1], pt_3[1]], color='green')
     plt.plot([pt_3[0], pt_4[0]], [pt_3[1], pt_4[1]], color='green')
     plt.plot([pt_4[0], pt_1[0]], [pt_4[1], pt_1[1]], color='green')
+
+    plt.show(block=False)
 
 
 
@@ -221,16 +224,16 @@ def main():
             ctrl_pts_plotting.append(best_pt.reshape((3,)))
     ctrl_pts_plotting = np.array(ctrl_pts_plotting)
 
-
-    fig = plt.figure()
-    ax = fig.gca(projection='3d')
+    fig2 = plt.figure(2)
+    ax = fig2.gca(projection='3d')
 
 
     # Plot the plane!!!
     plane_pts = []
-    for ii in np.linspace(-0.2, 0.2, 10):
-        for jj in np.linspace(-0.2, 0.2, 10):
-            plane_pts.append(np.matmul(exp_map_np([wx, wy, 0.0]),np.array([[ii], [jj], [d]])))
+    plane_center = np.average(projected_pts,axis=0)
+    for ii in np.linspace(-0.1, 0.1, 8):
+        for jj in np.linspace(-0.1, 0.1, 8):
+            plane_pts.append(np.matmul(exp_map_np([wx, wy, 0.0]),np.array([[ii+plane_center[0]], [jj+plane_center[1]], [d]])))
     plane_pts = np.array(plane_pts)
 
     ax.scatter(ctrl_pts_plotting[:,0], ctrl_pts_plotting[:,1], ctrl_pts_plotting[:,2], color='green')
@@ -255,12 +258,45 @@ def main():
         for jj in range(0,num_ctrl_pts):
             print("point = {"+str(ctrl_pts[ii,jj,0])+", "+str(ctrl_pts[ii,jj,1])+", "+str(ctrl_pts[ii,jj,2])+"}")
             print("pt=sim.addDrawingObject(dr,0.001,0.0,-1,30000,color)")
+            print("point[1]=point[1]+panda_frame[1]")
+            print("point[2]=point[2]+panda_frame[2]")
+            print("point[3]=point[3]+panda_frame[3]")
             print("sim.addDrawingObjectItem(pt,point)")
 
+    plt.show(block=False)
+    time.sleep(2)
 
+    print(" ")
+    print(" ")
+    print(" ")
+    flipNormals=raw_input("Should the normal be flipped? (Y/N)\n")
+
+    if flipNormals is "Y" or flipNormals is "y":
+        # flip u and v in order to flip the normals
+        ctrl_pts_flipped = np.zeros((num_ctrl_pts,num_ctrl_pts,3))
+        for ii in range(0,num_ctrl_pts):
+            for jj in range(0,num_ctrl_pts):
+                ctrl_pts_flipped[jj][ii][:]=ctrl_pts[ii][jj][:]
+
+        ctrl_pts = ctrl_pts_flipped
+
+    fig = plt.figure()
+    ax = fig.gca(projection='3d')
+    ax.scatter(ctrl_pts_plotting[:, 0], ctrl_pts_plotting[:, 1], ctrl_pts_plotting[:, 2], color='green')
+    # Check that the normals are facing the correct direction
+    u_dir = ctrl_pts[5, 0, :] - ctrl_pts[0, 0, :]
+    v_dir = ctrl_pts[0, 5, :] - ctrl_pts[0, 0, :]
+
+    normal_dir = np.cross(u_dir, v_dir)
+    normal_dir = normal_dir * 10.0
+    ax.quiver(ctrl_pts[0, 0, 0], ctrl_pts[0, 0, 1], ctrl_pts[0, 0, 2], normal_dir[0], normal_dir[1], normal_dir[2])
 
     plt.show()
 
+    # Create a B-Spline instance
+    curve = BSplineSurface()
+    curve.initialize(k=3, control_pts=ctrl_pts)
+    curve.writeSurface('layup1')
 if __name__ == "__main__":
     main()
 
