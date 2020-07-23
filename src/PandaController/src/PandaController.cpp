@@ -164,10 +164,9 @@ namespace PandaController {
         Eigen::MatrixXd eye3 = Eigen::MatrixXd::Identity(3, 3);
         force_selection_matrix =  eye3 - position_selection_matrix;
         
-        // COME BACK TO THIS!!!
         vector<double> commandedPosition(command.data(), command.data() + 3);
-        vector<double> commandedWrench(command.data() + 9, command.data() + 15);
-
+        vector<double> commandedWrench(command.data() + 13, command.data() + 18);
+        
         // TEMP FORCE THE COMMANDED POSITION TO BE THE SAME!!!
         //commandedPosition = {0.42, 0.1, 0.25, 0.0, 0.0, 0.0};
 
@@ -354,6 +353,7 @@ namespace PandaController {
     void initPandaController(bool simulate) {
         char * ip = getenv("PANDA_IP");
         cout << "Panda ip is " << ip << endl;
+        initGripper(ip);
         controller = thread(runController, ip, simulate);
         ft_listener = thread(forceTorqueListener);
     }

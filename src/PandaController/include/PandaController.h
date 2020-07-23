@@ -54,6 +54,7 @@ namespace PandaController {
     double readMaxForce();
     
     franka::GripperState readGripperState();
+    void initGripper(const char * ip);
     void toggleGrip(std::function<void ()> onToggle = NULL);
     void graspObject(std::function<void ()> onGrasp = NULL);
     void releaseObject(std::function<void ()> onRelease = NULL);
