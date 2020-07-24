@@ -12,6 +12,7 @@
 #include "geometry_msgs/Quaternion.h"
 #include "std_msgs/String.h"
 #include "std_msgs/Float64.h"
+#include <panda_ros_msgs/HybridPose.h>
 
 #include "falcon/core/FalconDevice.h"
 #include "falcon/grip/FalconGripFourButton.h"
@@ -564,7 +565,7 @@ array<double,3> map_deformation_input(int method, double dmp_fx,double dmp_fy,do
         // Task-Oriented Frame
         /////////////////
         // This quaternion rotates it to be aligned with the general camera/x-y directions
-        deformation_rotation = vectorIntoConstraintFrame(dmp_fx, dmp_fy, dmp_fz, 0.0, 0.0, -1.0, 0.0);
+        deformation_rotation = vectorIntoConstraintFrame(dmp_fx, dmp_fy, dmp_fz, 0.0, 0.0, -0.7071068, 0.7071068);
         return deformation_rotation;
     }
 
@@ -605,7 +606,7 @@ array<double,3> map_deformation_input(int method, double dmp_fx,double dmp_fy,do
 /**
  * TODO: fill this out
  */
-void forceOnloading(int ii, geometry_msgs::Vector3 selection, vector<array<double,7>> starting_points, vector<array<double,7>> attractor_points, vector<vector<array<double,7>>> dmps, BSplineSurface curr_surface, ros::Publisher &selection_vector_pub, ros::Publisher &constraint_frame_pub, ros::Publisher pose_goal_pub, ros::Publisher wrench_goal_pub){
+void forceOnloading(int ii, geometry_msgs::Vector3 selection, vector<array<double,7>> starting_points, vector<array<double,7>> attractor_points, vector<vector<array<double,7>>> dmps, BSplineSurface curr_surface, ros::Publisher &selection_vector_pub, ros::Publisher &constraint_frame_pub, ros::Publisher pose_goal_pub, ros::Publisher wrench_goal_pub, ros::Publisher hybrid_pub){
     // Do force onloading with the first sample
     cout << "Force Onloading Started..." << endl;
     geometry_msgs::Wrench ft;
@@ -650,10 +651,16 @@ void forceOnloading(int ii, geometry_msgs::Vector3 selection, vector<array<doubl
     // cout << "RV " << y_hat[0] << " " << y_hat[1] << " " << y_hat[2] << endl;
     // cout << "NHAT " << n_hat[0] << " " << n_hat[1] << " " << n_hat[2] << endl;
 
-    selection_vector_pub.publish(selection);
-    constraint_frame_pub.publish(constraint_frame);
-    pose_goal_pub.publish(pose);
-    wrench_goal_pub.publish(ft);
+    //selection_vector_pub.publish(selection);
+    //constraint_frame_pub.publish(constraint_frame);
+    //pose_goal_pub.publish(pose);
+    //wrench_goal_pub.publish(ft);
+    panda_ros_msgs::HybridPose hybridPose;
+    hybridPose.pose = pose;
+    hybridPose.wrench.force.x = ft.force.x; hybridPose.wrench.force.y = ft.force.y; hybridPose.wrench.force.z = ft.force.z;
+    hybridPose.constraint_frame = constraint_frame;
+    hybridPose.sel_vector = {selection.x, selection.y, selection.z, 1, 1, 1};
+    hybrid_pub.publish(hybridPose);
 
     // This loop monitors the robot which has started moving in the
     // force direction until it achieves the desired force (within a tolerance)
@@ -822,6 +829,9 @@ void replay_demo(ros::Publisher pose_goal_pub, ros::NodeHandle n){
     ros::Publisher dmp_replay_pub = 
         n.advertise<std_msgs::String>("/dmp/replay", 5);
 
+    ros::Publisher hybrid_pub = 
+        n.advertise<panda_ros_msgs::HybridPose>("/panda/hybrid_pose", 1);   
+
     // Publishers specifically for intent visualization
     ros::Publisher defscaling_vector_pub = 
         n.advertise<geometry_msgs::Vector3>("/panda/defscaling", 5);
@@ -921,7 +931,7 @@ void replay_demo(ros::Publisher pose_goal_pub, ros::NodeHandle n){
         if((selection.x==0 || selection.y==0 || selection.z==0)){
             if(previous_dmp_no_contact){
                 // If selection has force control and is transitioning from no-contact, need force onloading
-                forceOnloading(ii,selection,starting_points,attractor_points,dmps,curr_surface,selection_vector_pub,constraint_frame_pub,pose_goal_pub,wrench_goal_pub);
+                forceOnloading(ii,selection,starting_points,attractor_points,dmps,curr_surface,selection_vector_pub,constraint_frame_pub,pose_goal_pub,wrench_goal_pub,hybrid_pub);
             }
             previous_dmp_no_contact = false;
         }
@@ -1168,13 +1178,13 @@ void replay_demo(ros::Publisher pose_goal_pub, ros::NodeHandle n){
 
 
             // PUBLISH THE ROBOT CONTROL PARAMETERS
-            ft.force.x = x_conv; ft.force.y = y_conv; ft.force.z = z_conv;
-            pose.position.x = x_conv; pose.position.y = y_conv; pose.position.z = z_conv;
-            pose.orientation.x = qx; pose.orientation.y = qy; pose.orientation.z = qz; pose.orientation.w = qw;
-            selection_vector_pub.publish(selection);
-            constraint_frame_pub.publish(constraint_frame);
-            pose_goal_pub.publish(pose);
-            wrench_goal_pub.publish(ft);
+            panda_ros_msgs::HybridPose hybridPose;
+            hybridPose.pose.position.x = x_conv; hybridPose.pose.position.y = y_conv; hybridPose.pose.position.z = z_conv;
+            hybridPose.pose.orientation.x = qx; hybridPose.pose.orientation.y = qy; hybridPose.pose.orientation.z = qz; hybridPose.pose.orientation.w = qw;
+            hybridPose.wrench.force.x = x_conv; hybridPose.wrench.force.y = y_conv; hybridPose.wrench.force.z = z_conv;
+            hybridPose.constraint_frame = constraint_frame;
+            hybridPose.sel_vector = {selection.x, selection.y, selection.z, 1, 1, 1};
+            hybrid_pub.publish(hybridPose);
             
             // Pause for 0.01 seconds, but calculate velocities at 0.001s
             for (int yy=0; yy<10; yy++)

@@ -186,7 +186,7 @@ def main():
         csvfile.write("1,0,1")
         csvfile.write('\n')
         # csvfile.write("2 2 2,3 10 150,2 2 2")
-        csvfile.write("0 0 0,0 0 0,0 0 0")
+        csvfile.write("2 2 2,10 10 150,2 2 2")
         csvfile.write('\n')
 
         surface_start, normal_start, r_u, r_v = surfaceModel.calculate_surface_point(0.8, 0.8)
