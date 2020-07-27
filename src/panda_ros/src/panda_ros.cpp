@@ -30,6 +30,10 @@ namespace {
     PandaController::EELink eeLink;
 }
 
+ros::Publisher g_eventPub {};
+ros::Publisher g_wrenchPub {};
+ros::Publisher g_jointPub {};
+
 void setKinematicChain(const std_msgs::String& msg) {
     if (msg.data == "pandaFlange") {
         kinematicChain = PandaController::KinematicChain::PandaFlange;
@@ -272,12 +276,15 @@ void setHybrid(const panda_ros_msgs::HybridPose::ConstPtr& msg){
 void callbackCommands(const std_msgs::String& msg){
     std::vector<std::string> command;
     boost::split(command, msg.data, [](char c){return c == ';';});
+    std_msgs::String result;
     if(msg.data == "grasp"){
         cout<<"Grasping"<<endl;
-        PandaController::graspObject();
+        result.data = "grasp_finished";
+        PandaController::graspObject([result](){g_eventPub.publish(result);});
     }
     if(msg.data == "release"){
-        PandaController::releaseObject();
+        result.data = "release_finished";
+        PandaController::releaseObject([result](){g_eventPub.publish(result);});
     }
     if(msg.data == "toggleGrip") {
         PandaController::toggleGrip();
@@ -289,7 +296,7 @@ void callbackCommands(const std_msgs::String& msg){
     }   
 }
 
-void publishJointState(franka::RobotState robot_state, ros::Publisher jointPub){
+void publishJointState(franka::RobotState robot_state){
     const vector<string> joint_names{"panda_joint1", "panda_joint2","panda_joint3","panda_joint4","panda_joint5","panda_joint6","panda_joint7","panda_finger_joint1","panda_finger_joint2"};
     franka::GripperState gripperState = PandaController::readGripperState();
 
@@ -310,7 +317,7 @@ void publishJointState(franka::RobotState robot_state, ros::Publisher jointPub){
     states.position[joint_names.size()-2] = gripperState.width/2.;
     states.position[joint_names.size()-1] = gripperState.width/2.;
     
-    jointPub.publish(states);
+    g_jointPub.publish(states);
 }
 
 void publishTf(franka::RobotState robot_state){
@@ -339,7 +346,7 @@ void publishTf(franka::RobotState robot_state){
     br.sendTransform(transformStamped);
 }
 
-void publishWrench(franka::RobotState robot_state, ros::Publisher wrenchPub){
+void publishWrench(franka::RobotState robot_state){
     std::array<double, 6> forces;
     //forces = robot_state.O_F_ext_hat_K;
     forces = PandaController::readFTForces();
@@ -352,14 +359,14 @@ void publishWrench(franka::RobotState robot_state, ros::Publisher wrenchPub){
     wrench.torque.y = forces[4];
     wrench.torque.z = forces[5];
 
-    wrenchPub.publish(wrench);
+    g_wrenchPub.publish(wrench);
 }
 
-void publishState(ros::Publisher wrenchPub, ros::Publisher jointPub){
+void publishState(){
     franka::RobotState robot_state = PandaController::readRobotState();
-    publishJointState(robot_state, jointPub);
+    publishJointState(robot_state);
     publishTf(robot_state);
-    publishWrench(robot_state, wrenchPub);
+    publishWrench(robot_state);
 }
 
 void signalHandler(int sig)
@@ -387,11 +394,12 @@ int main(int argc, char **argv) {
     ros::Subscriber sub_joint_pose = n.subscribe("/panda/joint_pose", 10, setJointPose);
     ros::Subscriber sub_hybrid = n.subscribe("/panda/hybrid_pose", 10, setHybrid);
 
-    ros::Publisher wrenchPub = n.advertise<geometry_msgs::Wrench>("/panda/wrench", 10);
-    ros::Publisher jointPub = n.advertise<sensor_msgs::JointState>("/panda/joint_states", 1);
+    g_wrenchPub = n.advertise<geometry_msgs::Wrench>("/panda/wrench", 10);
+    g_jointPub = n.advertise<sensor_msgs::JointState>("/panda/joint_states", 1);
+    g_eventPub = n.advertise<std_msgs::String>("/panda/events", 1);
     ros::Rate loopRate(1000);
     while (ros::ok() && PandaController::isRunning()) {
-        publishState(wrenchPub,jointPub);
+        publishState();
         ros::spinOnce();
         loopRate.sleep();
     }
