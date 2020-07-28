@@ -24,34 +24,19 @@
 
 // Force Dimension
 #include "dhdc.h"
-#include "drdc.h"
 
 using namespace std;
 using namespace std::chrono;
 
 class DeformationController{
-    public:
-
-        // For calculating the velocity of the input device
-        array<double, 3> inputDevice_velocity;
-
-        array<double, 3> actual_pos;
-        string trajectoryFile;
+    private:
+        array<double, 3> actual_pos;       
 
         // For recording
         std::ofstream outputfile;
         double x, y, z, fx, fy, fz;
-        double dmp_fx, dmp_fy, dmp_fz;
 
         bool replay_active = false;
-
-        bool haptic_cue_increased = false;
-        bool haptic_cue_decreased = false;
-        int haptic_cue_count = 0;
-
-        //haptic cue related
-        double prev_var_x, prev_var_y, prev_var_z;
-        bool var_x_changing,var_y_changing,var_z_changing;
 
         // For the NL optimization
         typedef struct {
@@ -59,15 +44,12 @@ class DeformationController{
             BSplineSurface surface;
         } opt_data;
 
-        DeformationController();
-        DeformationController(string file);
+        // General robotics mathematical operations
         array<double,3> crossProduct(array<double,3> x, array<double,3> y);
         array<double,3> vectorIntoConstraintFrame(double x, double y, double z, double qx, double qy, double qz, double qw);
         array<double,3> vectorOutOfConstraintFrame(double x, double y, double z, double qx, double qy, double qz, double qw);
         void rotationToQuaternion(array<double,3> x_hat, array<double,3> y_hat, array<double,3>z_hat, array<double,4> &q_out);
-        int init_inputDevice();
-        void getInputDeviceVelocity();
-        void run_zero_displacement_controller();
+
         void check_for_haptic_cue(double var_x, double var_y, double var_z);
         static double obj_closest_surface(const std::vector<double> &x, std::vector<double> &grad, void *data);
         void getClosestParams(double x, double y, double z, double &u, double&v, BSplineSurface surface);
@@ -81,8 +63,29 @@ class DeformationController{
         void readDemo(vector<vector<array<double,7>>> &dmps,vector<array<double,3>> &selections,vector<array<double,7>> &starting_points,vector<array<double,7>> &attractor_points, vector<string> &surfaces, vector<vector<array<double,3>>> &variance_dmp);
         void replay_demo(ros::Publisher pose_goal_pub, ros::NodeHandle n);
         void actualPose(geometry_msgs::Pose pose);
-        void feedbackFD(geometry_msgs::Wrench wrench);
+        void readPandaForces(geometry_msgs::Wrench wrench);
+    
+    public:
+        array<double, 3> inputDevice_velocity;
+        bool haptic_cue_increased = false;
+        bool haptic_cue_decreased = false;
+        int haptic_cue_count = 0;
+        double dmp_fx, dmp_fy, dmp_fz;
+        //haptic cue related
+        double prev_var_x, prev_var_y, prev_var_z;
+        bool var_x_changing,var_y_changing,var_z_changing;
+        string trajectoryFile;
+
+        DeformationController();
+        DeformationController(string file);
+
+        // Run the deformation controller and replay
         int run_deformation_controller(int argc, char **argv);
+
+        // Functions specific to the particular input device
+        virtual int init_inputDevice() = 0;
+        virtual array<double, 3> getInputDeviceVelocity() = 0;
+        virtual void run_zero_displacement_controller() = 0;
 };
 
 // Default Constructor
@@ -212,95 +215,6 @@ void DeformationController::rotationToQuaternion(array<double,3> x_hat, array<do
     // Make sure it is normalized
     double mag = sqrt(q_out[0]*q_out[0]+q_out[1]*q_out[1]+q_out[2]*q_out[2]+q_out[3]*q_out[3]);
     q_out[0] = q_out[0]/mag; q_out[1] = q_out[1]/mag; q_out[2] = q_out[2]/mag; q_out[3] = q_out[3]/mag;
-}
-
-/////////////////////////////////////
-// INPUT DEVICE-SPECIFIC FUNCTIONS //
-/////////////////////////////////////
-
-int DeformationController::init_inputDevice() {
-    cout <<"Setting up Force Dimension\n";
-    int deviceID = dhdOpen();
-    if (deviceID < 0) {
-        cout << "Unable to open device" << endl;
-        dhdSleep (1.0);
-        return -1;
-    }
-    cout << "Force Dimension Setup Complete" << endl;
-    return deviceID;
-}   
-
-void DeformationController::getInputDeviceVelocity() {
-    double v_x,v_y,v_z;
-    dhdGetLinearVelocity(&v_x,&v_y,&v_z);
-    inputDevice_velocity = {v_x, v_y, v_z};
-}
-
-
-
-void DeformationController::run_zero_displacement_controller(){
-    double viscous_replay = 60; // TODO: want to get to 2 sqrt(stiffness)
-    double stiffness = 200; // for replay - everything is 2x of the falcon
-    array<double, 3> forceDimensionPos = {0,0,0};
-
-    long count = 0;   
-
-    getInputDeviceVelocity();
-    
-    while(1){
-        dhdGetPosition (&forceDimensionPos[0],&forceDimensionPos[1],&forceDimensionPos[2]);
-
-        count++;
-
-        // Haptic Cues
-        if (haptic_cue_increased){
-            if(haptic_cue_count>500){
-                haptic_cue_increased=false;
-                haptic_cue_count = 0;
-            }
-            else{
-                // goes up by 20 after half a second then back
-                stiffness = 2*(200.0-(100.0/62500.0)*(haptic_cue_count-250.0)*(haptic_cue_count-250.0));
-                viscous_replay = 3.0*sqrt(stiffness);
-                haptic_cue_count++;
-                //cout << "HCI" << endl;
-            }
-        }
-
-        if (haptic_cue_decreased){
-            if(haptic_cue_count>500){
-                haptic_cue_decreased=false;
-                haptic_cue_count = 0;
-            }
-            else{
-                // goes up by 20 after half a second then back
-                stiffness = 2*(50.0+(50.0/62500.0)*(haptic_cue_count-250.0)*(haptic_cue_count-250.0));
-                viscous_replay = 3.0*sqrt(stiffness);
-                haptic_cue_count++;
-                //cout << "HCD" << endl;
-            }
-        }
-
-        double x_d = 0.0125;
-        double y_d = 0.0;
-        double z_d = 0.025;
-        
-        //cout << "FP:" << falconPos[0] << " " << falconPos[1] << " " << falconPos[2] << endl;
-        // zero displacement mode
-        // falcon has offset in z
-        // TODO: fix these!!!!
-        dhdSetForceAndTorque(-stiffness*(forceDimensionPos[0]-x_d)-viscous_replay*inputDevice_velocity[0], 
-                -stiffness*(forceDimensionPos[1]-y_d)-viscous_replay*inputDevice_velocity[1], 
-                -stiffness*(forceDimensionPos[2]-z_d)-viscous_replay*inputDevice_velocity[2],0.0,0.0,0.0);
-
-        // Store forcing from falcon for deformations
-        // Note: these should be unit-normalized (i.e., span from -1 to 1)
-        // TODO: fix these
-        dmp_fx = (forceDimensionPos[0]-x_d)/(0.0625);
-        dmp_fy = (forceDimensionPos[1]-y_d)/(0.12);
-        dmp_fz = (forceDimensionPos[2]-z_d)/(0.105);
-        usleep(1000);
-    }
 }
 
 ////////////////////////////
@@ -1235,80 +1149,31 @@ void DeformationController::actualPose(geometry_msgs::Pose pose) {
     actual_pos[2] = pose.position.z;
 }
 
-void DeformationController::feedbackFD(geometry_msgs::Wrench wrench) {
-    double scale = 0.1; // force reflection
-    double stiffness = 200; // for replay
-    double viscous = 50; // friction
-
-    if(!replay_active){
-        array<double, 3> forceDimensionPos = {0,0,0};
-        array<double, 3> forceDimensionVel = {0,0,0};
-        dhdGetLinearVelocity(&forceDimensionVel[0],&forceDimensionVel[1],&forceDimensionVel[2]);
-        // Send force (bilateral + friction) to the falcon
-        dhdSetForceAndTorque(-wrench.force.x * scale-viscous*forceDimensionVel[0], 
-                -wrench.force.y * scale-viscous*forceDimensionVel[1], 
-                -wrench.force.z * scale-viscous*forceDimensionVel[2],0.0,0.0,0.0);
-    }
-
-    else{
-        // zero displacement running in other process
-    }
-
-    // For recording and hybrid replay
+void DeformationController::readPandaForces(geometry_msgs::Wrench wrench) {
+    // Mainly used for force onloading during replay
     fx = wrench.force.x;
     fy = wrench.force.y;
     fz = wrench.force.z;
 }
 
-    
 int DeformationController::run_deformation_controller(int argc, char **argv){
     ros::init(argc, argv, "DeformationController");
     ros::NodeHandle n("~");  
-    std::vector<double> scaling_factors = {-4.0, 4.0, 4.0}; //-6,6,6
-    std::vector<double> offsets = {0.4, 0.0, 0.25};
-    //n.getParam("offsets",offsets);
-    //n.getParam("scaling_factors",scaling_factors);
 
     int deviceID = init_inputDevice();
     if (deviceID==-1) {
         cout << endl << "Failed to initialize input device." << endl;
         return -1;
     }
-
-    // Turn on gravity compensation
-    dhdEnableForce (DHD_ON);
-
-    // Second button press to start control & forces
-    bool buttonReleased=false;
-    while(!buttonReleased)
-        if(dhdGetButton(0)==0) // button released
-        {
-            buttonReleased = true;
-        }
-
-    cout << "Press Button again to enable Forces and Panda Control" << endl;
-
-    bool buttonPressed=false;
-    while(!buttonPressed)
-        if(dhdGetButton(0)==1) // button pressed
-        {
-            buttonPressed = true;
-        }
     
-    buttonReleased=false;
-    while(!buttonReleased)
-        if(dhdGetButton(0)==0) // button released
-        {
-            buttonReleased = true;
-        }
+    cout << "Press 'r' to run replay" << endl << "Press 'q' to quit" << endl << endl;
 
-    
     ros::Publisher pose_goal_pub = 
         n.advertise<geometry_msgs::Pose>("/panda/ee_pose_goals", 5);
 
     ros::Publisher command_pub = 
         n.advertise<std_msgs::String>("/panda/commands", 5);
-    ros::Subscriber force_sub = n.subscribe("/panda/wrench", 10, &DeformationController::feedbackFD, this);
+    ros::Subscriber force_sub = n.subscribe("/panda/wrench", 10, &DeformationController::readPandaForces, this);
     ros::Subscriber actual_pose_sub = n.subscribe("/panda/pose_actual", 10, &DeformationController::actualPose, this);
     
 
@@ -1347,11 +1212,13 @@ int DeformationController::run_deformation_controller(int argc, char **argv){
             
             char keypress = dhdKbGet();
             if (keypress == 'r'){
-                cout << "Running the replay." << endl;
+                cout << endl << "Running the replay." << endl;
                 replay_demo(pose_goal_pub, n);
+                cout << endl << endl << "Press 'r' to run replay" << endl << "Press 'q' to quit" << endl << endl;
             }
 
             else if(keypress == 'q'){
+                cout << endl << "Quitting the routine." << endl;
                 quit_replay = true;
             }
         }
@@ -1363,10 +1230,3 @@ int DeformationController::run_deformation_controller(int argc, char **argv){
     dhdClose();
     return 0;
 }
-
-// int main(int argc, char **argv) {    
-//     DeformationController controller;
-//     //cout << controller.init_forcedimension() << endl;
-//     int success = controller.run_deformation_controller(argc,argv);
-//     return 0;
-// }
