@@ -4,3 +4,7 @@ src/PandaController/build/
 .catkin_workspace
 *.pyc
 .vscode/*
+*.log
+*.stderr
+.catkin_tools/
+.vscode

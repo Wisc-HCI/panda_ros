@@ -56,14 +56,14 @@ void setCartPos(const geometry_msgs::Pose::ConstPtr& msg){
                 msg->orientation.y,
                 msg->orientation.z
             ));
-        vector<double> position{
+        Eigen::VectorXd position(6);
+        position << 
             msg->position.x,
             msg->position.y,
             msg->position.z,
             angles.roll,
             angles.pitch,
-            angles.yaw
-        };
+            angles.yaw;
         PandaController::writeCommandedPosition(position);
     }
 }
@@ -100,7 +100,7 @@ void setStampedTrajectory(vector<Eigen::VectorXd> path, vector<double> timestamp
             goal[3] = goal_angles.roll;
             goal[4] = goal_angles.pitch;
             goal[5] = goal_angles.yaw;
-            return vector<double>(goal.data(), goal.data() + 6);
+            return goal;
         }
     ));
 }
@@ -176,21 +176,23 @@ void setVelocity(const geometry_msgs::TwistStamped::ConstPtr& msg) {
         PandaController::setKinematicChain(kinematicChain, eeLink);
         auto twist = msg->twist;
 
-        vector<double> velocity({
+        Eigen::VectorXd velocity;
+        velocity << 
             twist.linear.x,
             twist.linear.y,
             twist.linear.z,
             twist.angular.x,
             twist.angular.y,
-            twist.angular.z});
+            twist.angular.z;
         double end_time = msg->header.stamp.toSec();
 
         PandaController::setTrajectory(PandaController::Trajectory(
             PandaController::TrajectoryType::Velocity, 
             [velocity, end_time]() {
                 if (ros::Time::now().toSec() > end_time){
-                    double scale = RAND_MAX*100000.;
-                    return vector<double>({rand()/scale,rand()/scale,rand()/scale,rand()/scale,rand()/scale,rand()/scale});
+                    Eigen::VectorXd velocity(6);
+                    velocity.setZero();
+                    return velocity;
                 }
                 else
                     return velocity;
@@ -204,33 +206,27 @@ void setJointPose(const panda_ros_msgs::JointPose::ConstPtr& msg) {
         PandaController::setKinematicChain(kinematicChain, eeLink);
         double start_time = ros::Time::now().toSec();
         double end_time = msg->header.stamp.toSec();
-        vector<double> goal({
+        Eigen::VectorXd goal(7);
+        goal <<
             msg->joint_pose[0],
             msg->joint_pose[1],
             msg->joint_pose[2],
             msg->joint_pose[3],
             msg->joint_pose[4],
             msg->joint_pose[5],
-            msg->joint_pose[6]});
+            msg->joint_pose[6];
 
         PandaController::setTrajectory(PandaController::Trajectory(
             PandaController::TrajectoryType::Joint, 
             [goal, start_time, end_time]() {
                 double progress = (ros::Time::now().toSec() - start_time) / (end_time - start_time);
                 franka::RobotState robot_state = PandaController::readRobotState();
-                vector<double>  q_v({robot_state.q[0],robot_state.q[1],robot_state.q[2],robot_state.q[3],robot_state.q[4],robot_state.q[5],robot_state.q[6]});
+                Eigen::VectorXd q_v = Eigen::Map<Eigen::VectorXd>(robot_state.q.data(), 7);
                 if (progress > 1){
                     return q_v;
                 }
                 else
-                    return vector<double>({
-                        q_v[0]+(goal[0]-q_v[0])*progress,
-                        q_v[1]+(goal[1]-q_v[1])*progress,
-                        q_v[2]+(goal[2]-q_v[2])*progress,
-                        q_v[3]+(goal[3]-q_v[3])*progress,
-                        q_v[4]+(goal[4]-q_v[4])*progress,
-                        q_v[5]+(goal[5]-q_v[5])*progress,
-                        q_v[6]+(goal[6]-q_v[6])*progress});
+                    return (q_v + (goal - q_v) * progress).eval();
             }
         ));
     }
@@ -239,7 +235,8 @@ void setJointPose(const panda_ros_msgs::JointPose::ConstPtr& msg) {
 void setHybrid(const panda_ros_msgs::HybridPose::ConstPtr& msg){
     if (PandaController::isRunning()){    
         PandaController::setKinematicChain(kinematicChain, eeLink);
-        vector<double> command{
+        Eigen::VectorXd command(23);
+        command << 
             //Position
             msg->pose.position.x,
             msg->pose.position.y,
@@ -266,9 +263,7 @@ void setHybrid(const panda_ros_msgs::HybridPose::ConstPtr& msg){
             msg->constraint_frame.x,
             msg->constraint_frame.y,
             msg->constraint_frame.z,
-            msg->constraint_frame.w
-        };
-
+            msg->constraint_frame.w;
         PandaController::writeHybridCommand(command);
     }
 }

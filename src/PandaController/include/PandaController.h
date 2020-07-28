@@ -21,13 +21,13 @@ namespace PandaController {
     void stopControl();
     void initPandaController(bool = false);
 
-    std::vector<double> getNextCommand(TrajectoryType & t);
+    Eigen::VectorXd getNextCommand(TrajectoryType & t);
     Eigen::Matrix4d getEETransform();
     Eigen::VectorXd getEEPos();
     Eigen::Quaterniond getEEOrientation();
 
     void setTrajectory(Trajectory);
-    void writeCommandedPosition(std::vector<double> data);
+    void writeCommandedPosition(Eigen::VectorXd data);
     EulerAngles quaternionToEuler(Eigen::Quaterniond q);
     Eigen::Quaterniond eulerToQuaternion(EulerAngles angle);
     
@@ -38,9 +38,9 @@ namespace PandaController {
     void writePoseGoal(std::array<double, 7> data);
 
     std::array<double, 7> readJointAngles();
-    void writeJointAngles(std::array<double, 7> data);
+    void writeJointAngles(Eigen::VectorXd data);
 
-    void writeHybridCommand(std::vector<double> data);
+    void writeHybridCommand(Eigen::VectorXd data);
 
     franka::RobotState readRobotState();
     void writeRobotState(franka::RobotState data);

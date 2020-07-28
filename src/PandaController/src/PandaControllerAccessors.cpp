@@ -69,10 +69,11 @@ namespace PandaController {
         trajectory = t;
     }
 
-    vector<double> getNextCommand(TrajectoryType & t) {
+    Eigen::VectorXd getNextCommand(TrajectoryType & t) {
         boost::lock_guard<boost::mutex> guard(trajectory_mutex);
         t = trajectory.type;
-        return trajectory();
+        auto v = trajectory();
+        return v;
     }
 
     Trajectory motionlessTrajectory() {
@@ -80,7 +81,7 @@ namespace PandaController {
             TrajectoryType::Joint,
             []() {
                 auto q = readRobotState().q;
-                return vector<double>({q[0], q[1], q[2], q[3], q[4], q[5], q[6]});
+                return Eigen::Map<const Eigen::VectorXd>(q.data(), 7).eval();
             }
         );
     }
@@ -155,8 +156,8 @@ namespace PandaController {
         // pathEndTime_ms = (long)command[0];
     }
 
-    void writeCommandedPosition(vector<double> data){
-        boost::lock_guard<boost::mutex> guard(mutex);
+    void writeCommandedPosition(Eigen::VectorXd data){
+        boost::lock_guard<boost::mutex> guard(trajectory_mutex);
         trajectory = Trajectory(
             TrajectoryType::Cartesian,
             [data]() {
@@ -165,8 +166,8 @@ namespace PandaController {
         );
     }
 
-    void writeHybridCommand(vector<double> data){
-        boost::lock_guard<boost::mutex> guard(mutex);
+    void writeHybridCommand(Eigen::VectorXd data){
+        boost::lock_guard<boost::mutex> guard(trajectory_mutex);
         trajectory = Trajectory(
             TrajectoryType::Hybrid,
             [data]() {
@@ -174,8 +175,8 @@ namespace PandaController {
             }
         );
     }
-    void writeJointAngles(vector<double> data){
-        boost::lock_guard<boost::mutex> guard(mutex);
+    void writeJointAngles(Eigen::VectorXd data){
+        boost::lock_guard<boost::mutex> guard(trajectory_mutex);
         trajectory = Trajectory(
             TrajectoryType::Joint,
             [data]() {

@@ -100,19 +100,19 @@ namespace PandaController {
     }
 
     void commandPositionFromState(const franka::RobotState & state) {
-        vector<double> positionArray;
+        Eigen::VectorXd positionArray(6);
         Eigen::Affine3d transformMatrix(Eigen::Matrix4d::Map(state.O_T_EE.data()));
         Eigen::Vector3d positionVector(transformMatrix.translation());
         for (size_t i = 0; i < 3; i++) {
-            positionArray.push_back(positionVector[i]);
+            positionArray[i] = positionVector[i];
         }
         for (size_t i = 0; i < 3; i++) {
-            positionArray.push_back(0);
+            positionArray[3+i] = 0;
         }
         writeCommandedPosition(positionArray);
     }
 
-    franka::JointVelocities positionControlLoop(const franka::RobotState& robot_state, vector<double> commandedPosition) {
+    franka::JointVelocities positionControlLoop(const franka::RobotState& robot_state, Eigen::VectorXd commandedPosition) {
 
         Eigen::Affine3d transform(getEETransform());
         Eigen::Vector3d position(transform.translation());
@@ -154,7 +154,7 @@ namespace PandaController {
         return output;
     }
 
-    franka::JointVelocities velocityControlLoop(const franka::RobotState& robot_state, vector<double> commandedVelocity) {
+    franka::JointVelocities velocityControlLoop(const franka::RobotState& robot_state, Eigen::VectorXd commandedVelocity) {
         double v_x = commandedVelocity[0];
         double v_y = commandedVelocity[1];
         double v_z = commandedVelocity[2];
@@ -178,7 +178,7 @@ namespace PandaController {
         return output;
     }
 
-    franka::JointVelocities hybridControlLoop(const franka::RobotState& robot_state, vector<double> command) {
+    franka::JointVelocities hybridControlLoop(const franka::RobotState& robot_state, Eigen::VectorXd command) {
         // Selection vector represents directions for position (admittance) control
         Eigen::VectorXd selection_vector(3);
         selection_vector << command[7], command[8], command[9]; // Currently just cartesian directions and assumed no rotation
@@ -256,7 +256,7 @@ namespace PandaController {
         return output;
     }
 
-    franka::JointVelocities jointPositionControlLoop(const franka::RobotState& robot_state, vector<double> joint_angles) {
+    franka::JointVelocities jointPositionControlLoop(const franka::RobotState& robot_state, Eigen::VectorXd joint_angles) {
         double scale = 5;
         Eigen::VectorXd joint_velocity(7);
         joint_velocity << 
@@ -291,8 +291,8 @@ namespace PandaController {
                                         const franka::RobotState& robot_state, franka::Duration duration) {
         PandaController::writeRobotState(robot_state);
         TrajectoryType t;
-        vector<double> command = getNextCommand(t);
-        franka::JointVelocities velocities = {0,0,0,0,0,0,0};
+        Eigen::VectorXd command = getNextCommand(t);
+        franka::JointVelocities velocities{0,0,0,0,0,0,0};
         switch (t) {
             case TrajectoryType::Cartesian:
                 velocities = positionControlLoop(robot_state, command);

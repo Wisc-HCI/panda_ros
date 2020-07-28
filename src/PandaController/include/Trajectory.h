@@ -3,17 +3,18 @@
 
 #include <functional>
 #include <vector>
+#include <eigen3/Eigen/Core>
 
 namespace PandaController {
     enum TrajectoryType {Cartesian, Joint, Hybrid, Velocity};
     class Trajectory {
     private:
-        std::function<std::vector<double>()> trajectory_generator;
+        std::function<Eigen::VectorXd ()> trajectory_generator;
     public:
         TrajectoryType type;
-        Trajectory(TrajectoryType t, std::function<std::vector<double>()> trajectory_generator);
+        Trajectory(TrajectoryType t, std::function<Eigen::VectorXd ()> trajectory_generator);
 
-        std::vector<double> operator()();
+        Eigen::VectorXd operator()();
     };
 }
 #endif
