@@ -40,11 +40,11 @@ add_executable(falconVREPDMP src/Falcon_DMP_VREP_ros.cpp)
 target_include_directories(falconVREPDMP PUBLIC ${catkin_INCLUDE_DIRS} ${EIGEN3_INCLUDE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/include ${CMAKE_CURRENT_SOURCE_DIR}/../../devel/include)
 target_link_libraries(falconVREPDMP ${catkin_LIBRARIES} ${LIBNIFALCON} ${pandaController} ${pandaCommon} franka ${DRDC} ${DHDC} ${BSpline} ${NLopt})
 
-add_executable(FDdeformations src/ForceDimension_Deformation_Emmanuel.cpp)
-target_include_directories(FDdeformations PUBLIC ${catkin_INCLUDE_DIRS} ${EIGEN3_INCLUDE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/include ${CMAKE_CURRENT_SOURCE_DIR}/../../devel/include)
-target_link_libraries(FDdeformations ${catkin_LIBRARIES} ${DRDC} ${DHDC})
+add_executable(fdVREPDMP src/ForceDimension_DMP_VREP_ros.cpp)
+target_include_directories(fdVREPDMP PUBLIC ${catkin_INCLUDE_DIRS} ${EIGEN3_INCLUDE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/include ${CMAKE_CURRENT_SOURCE_DIR}/../../devel/include)
+target_link_libraries(fdVREPDMP ${catkin_LIBRARIES} ${DRDC} ${DHDC} ${BSpline} ${NLopt})
 
-install(TARGETS FDdeformations
+install(TARGETS fdVREPDMP
   RUNTIME DESTINATION lib/FDdeformations
 )
 
