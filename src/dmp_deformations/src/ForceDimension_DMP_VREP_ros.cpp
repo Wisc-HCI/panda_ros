@@ -1228,9 +1228,9 @@ void pollFD(ros::Publisher pose_goal_pub, ros::Publisher command_pub, double* sc
     // The first time the clutch is initiated, freeze the position of the falcon
     if (*freeze)
     {
-        frozen_position[0] = normalized_falcon[0];
-        frozen_position[1] = normalized_falcon[1];
-        frozen_position[2] = normalized_falcon[2];
+        frozen_position[0] = fdPos[0];
+        frozen_position[1] = fdPos[1];
+        frozen_position[2] = fdPos[2];
         *freeze = false;
     }
 
@@ -1249,16 +1249,16 @@ void pollFD(ros::Publisher pose_goal_pub, ros::Publisher command_pub, double* sc
         // based on the movement during the clutching action
         if(*reset_center)
         {
-            offsets[0] = offsets[0]-scaling_factors[0]*(normalized_falcon[0]-frozen_position[0]);
-            offsets[1] = offsets[1]-scaling_factors[1]*(normalized_falcon[1]-frozen_position[1]);
-            offsets[2] = offsets[2]-scaling_factors[2]*(normalized_falcon[2]-frozen_position[2]);
+            offsets[0] = offsets[0]-scaling_factors[0]*(fdPos[0]-frozen_position[0]);
+            offsets[1] = offsets[1]-scaling_factors[1]*(fdPos[1]-frozen_position[1]);
+            offsets[2] = offsets[2]-scaling_factors[2]*(fdPos[2]-frozen_position[2]);
             *reset_center = false;
         }
 
         // When not clutching, command based on the actual falcon position
-        panda_pos[0] = scaling_factors[0] * normalized_falcon[0] + offsets[0];
-        panda_pos[1] = scaling_factors[1] * normalized_falcon[1] + offsets[1];
-        panda_pos[2] = scaling_factors[2] * normalized_falcon[2] + offsets[2];
+        panda_pos[0] = scaling_factors[0] * fdPos[0] + offsets[0];
+        panda_pos[1] = scaling_factors[1] * fdPos[1] + offsets[1];
+        panda_pos[2] = scaling_factors[2] * fdPos[2] + offsets[2];
         panda_pos[6] = 1;
 
         // For recording
@@ -1348,7 +1348,6 @@ int main(int argc, char **argv) {
     int file_iter = 0;
     bool replay_mode = false;
     auto start = high_resolution_clock::now();
-    bool resetCenter = true;
     
     bool timing_press = false;
     chrono::time_point<chrono::steady_clock> start_timer;
@@ -1376,7 +1375,7 @@ int main(int argc, char **argv) {
             buttonPressed=false;
         
             clutch=false;
-            resetCenter=true;
+            reset_center=true;
         }
 
         if (dhdKbHit()) {
