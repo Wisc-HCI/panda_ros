@@ -29,18 +29,78 @@
 using namespace std;
 using namespace std::chrono;
 
-// For calculating the falcon velocity
-array<double, 3> forceDimension_velocity = {0.0, 0.0, 0.0};
-std::array<double, 3> frozen_position = {0.0, 0.0, 0.0};
+class DeformationController{
+    public:
 
-array<double, 3> actual_pos;
+        // For calculating the velocity of the input device
+        array<double, 3> inputDevice_velocity;
 
-// For recording
-std::ofstream outputfile;
-double x, y, z, fx, fy, fz;
-double dmp_fx, dmp_fy, dmp_fz;
+        array<double, 3> actual_pos;
+        string trajectoryFile;
 
-bool replay_active = false;
+        // For recording
+        std::ofstream outputfile;
+        double x, y, z, fx, fy, fz;
+        double dmp_fx, dmp_fy, dmp_fz;
+
+        bool replay_active = false;
+
+        bool haptic_cue_increased = false;
+        bool haptic_cue_decreased = false;
+        int haptic_cue_count = 0;
+
+        //haptic cue related
+        double prev_var_x, prev_var_y, prev_var_z;
+        bool var_x_changing,var_y_changing,var_z_changing;
+
+        // For the NL optimization
+        typedef struct {
+            double x, y, z;
+            BSplineSurface surface;
+        } opt_data;
+
+        DeformationController();
+        DeformationController(string file);
+        array<double,3> crossProduct(array<double,3> x, array<double,3> y);
+        array<double,3> vectorIntoConstraintFrame(double x, double y, double z, double qx, double qy, double qz, double qw);
+        array<double,3> vectorOutOfConstraintFrame(double x, double y, double z, double qx, double qy, double qz, double qw);
+        void rotationToQuaternion(array<double,3> x_hat, array<double,3> y_hat, array<double,3>z_hat, array<double,4> &q_out);
+        int init_inputDevice();
+        void getInputDeviceVelocity();
+        void run_zero_displacement_controller();
+        void check_for_haptic_cue(double var_x, double var_y, double var_z);
+        static double obj_closest_surface(const std::vector<double> &x, std::vector<double> &grad, void *data);
+        void getClosestParams(double x, double y, double z, double &u, double&v, BSplineSurface surface);
+        void bidirectional_checker(array<double,3> &vec, array<double,3> &prev_vec);
+        void calculateDMPTransition(double ii, double &transition_x, double &transition_y, double &transition_z, double &transition_def_x, double &transition_def_y, double &transition_def_z, double x_imp, double y_imp, double z_imp, double x_def, double y_def, double z_def, vector<array<double,3>> selections,vector<array<double,7>> starting_points, vector<string> surfaces);
+        void calculateNearestContact(int ii,vector<array<double,3>> selections,vector<array<double,7>> starting_points,vector<array<double,7>> attractor_points,bool &dmp_x_limiting,bool &dmp_y_limiting,bool &dmp_z_limiting,double &dmp_x_collision, double &dmp_y_collision, double &dmp_z_collision);
+        array<double,3> deformationScaling(array<double,3> &rotated_deformation, double var_x, double var_y, double var_z, geometry_msgs::Vector3 selection, double x, double y, double collision_scaling);
+        array<double,3> getFirstSurfaceVelocity(array<double,7> attractor_point, array<double,7> starting_point,double dmp_u,double dmp_v, array<double,3> r_u, array<double,3> r_v );
+        array<double,3> map_deformation_input(int method, double dmp_fx,double dmp_fy,double dmp_fz,double dx,double dy, double dz);
+        void forceOnloading(int ii, geometry_msgs::Vector3 selection, vector<array<double,7>> starting_points, vector<array<double,7>> attractor_points, vector<vector<array<double,7>>> dmps, BSplineSurface curr_surface, ros::Publisher &selection_vector_pub, ros::Publisher &constraint_frame_pub, ros::Publisher pose_goal_pub, ros::Publisher wrench_goal_pub, ros::Publisher hybrid_pub);
+        void readDemo(vector<vector<array<double,7>>> &dmps,vector<array<double,3>> &selections,vector<array<double,7>> &starting_points,vector<array<double,7>> &attractor_points, vector<string> &surfaces, vector<vector<array<double,3>>> &variance_dmp);
+        void replay_demo(ros::Publisher pose_goal_pub, ros::NodeHandle n);
+        void actualPose(geometry_msgs::Pose pose);
+        void feedbackFD(geometry_msgs::Wrench wrench);
+        int run_deformation_controller(int argc, char **argv);
+};
+
+// Default Constructor
+// TODO: override with filename for learned behavior
+
+DeformationController::DeformationController(){
+    inputDevice_velocity = {0.0, 0.0, 0.0};
+    prev_var_x = 0.0; prev_var_y = 0.0; prev_var_z = 0.0;
+    var_x_changing = false; var_y_changing = false; var_z_changing = false;
+    trajectoryFile = "learneddmp.csv";
+}
+
+DeformationController::DeformationController(string file){
+    inputDevice_velocity = {0.0, 0.0, 0.0};
+    prev_var_x = 0.0; prev_var_y = 0.0; prev_var_z = 0.0;
+    var_x_changing = false; var_y_changing = false; var_z_changing = false;
+    trajectoryFile = file;
+}
 
 
 ////////////////////////////////
@@ -48,9 +108,9 @@ bool replay_active = false;
 ////////////////////////////////
 
 /**
- * Calculates the cross product between 2 3-D vectors
- */
-array<double,3> crossProduct(array<double,3> x, array<double,3> y){
+* Calculates the cross product between 2 3-D vectors
+*/
+array<double,3> DeformationController::crossProduct(array<double,3> x, array<double,3> y){
     array<double,3> return_vec;
     return_vec[0]=x[1]*y[2]-x[2]*y[1];
     return_vec[1]=x[2]*y[0]-x[0]*y[2];
@@ -59,9 +119,9 @@ array<double,3> crossProduct(array<double,3> x, array<double,3> y){
 }
 
 /**
- * Rotates a vector into a frame (represented as a quaternion)
- */
-array<double,3> vectorIntoConstraintFrame(double x, double y, double z, double qx, double qy, double qz, double qw){
+* Rotates a vector into a frame (represented as a quaternion)
+*/
+array<double,3> DeformationController::vectorIntoConstraintFrame(double x, double y, double z, double qx, double qy, double qz, double qw){
     // Make sure the quaternion is normalized (otherwise, there will be skew)
     double mag = sqrt(qx*qx+qy*qy+qz*qz+qw*qw);
     qx = qx/mag; qy = qy/mag; qz = qz/mag; qw = qw/mag;
@@ -86,9 +146,9 @@ array<double,3> vectorIntoConstraintFrame(double x, double y, double z, double q
 }
 
 /**
- * Rotates a vector OUT OF a frame (represented as a quaternion)
- */
-array<double,3> vectorOutOfConstraintFrame(double x, double y, double z, double qx, double qy, double qz, double qw){
+* Rotates a vector OUT OF a frame (represented as a quaternion)
+*/
+array<double,3> DeformationController::vectorOutOfConstraintFrame(double x, double y, double z, double qx, double qy, double qz, double qw){
     // Make sure the quaternion is normalized (otherwise, there will be skew)
     double mag = sqrt(qx*qx+qy*qy+qz*qz+qw*qw);
     qx = qx/mag; qy = qy/mag; qz = qz/mag; qw = qw/mag;
@@ -115,10 +175,10 @@ array<double,3> vectorOutOfConstraintFrame(double x, double y, double z, double 
 }
 
 /**
- * This function takes a rotation matrix expressed as 3 column vectors and creates
- * a quaternion of the form x,y,z,w
- */
-void rotationToQuaternion(array<double,3> x_hat, array<double,3> y_hat, array<double,3>z_hat, array<double,4> &q_out){
+* This function takes a rotation matrix expressed as 3 column vectors and creates
+* a quaternion of the form x,y,z,w
+*/
+void DeformationController::rotationToQuaternion(array<double,3> x_hat, array<double,3> y_hat, array<double,3>z_hat, array<double,4> &q_out){
     // Using simple (non-optimal) formulation found here: https://d3cw3dd2w32x2b.cloudfront.net/wp-content/uploads/2015/01/matrix-to-quat.pdf
     // page 2
 
@@ -154,27 +214,38 @@ void rotationToQuaternion(array<double,3> x_hat, array<double,3> y_hat, array<do
     q_out[0] = q_out[0]/mag; q_out[1] = q_out[1]/mag; q_out[2] = q_out[2]/mag; q_out[3] = q_out[3]/mag;
 }
 
-///////////////////////////////
-// FALCON-SPECIFIC FUNCTIONS //
-///////////////////////////////
-void forceDimensionVelocity() {
+/////////////////////////////////////
+// INPUT DEVICE-SPECIFIC FUNCTIONS //
+/////////////////////////////////////
+
+int DeformationController::init_inputDevice() {
+    cout <<"Setting up Force Dimension\n";
+    int deviceID = dhdOpen();
+    if (deviceID < 0) {
+        cout << "Unable to open device" << endl;
+        dhdSleep (1.0);
+        return -1;
+    }
+    cout << "Force Dimension Setup Complete" << endl;
+    return deviceID;
+}   
+
+void DeformationController::getInputDeviceVelocity() {
     double v_x,v_y,v_z;
     dhdGetLinearVelocity(&v_x,&v_y,&v_z);
-    forceDimension_velocity = {v_x, v_y, v_z};
+    inputDevice_velocity = {v_x, v_y, v_z};
 }
 
-bool haptic_cue_increased = false;
-bool haptic_cue_decreased = false;
-int haptic_cue_count = 0;
 
-void run_forceDimension_deformation_controller(){
+
+void DeformationController::run_zero_displacement_controller(){
     double viscous_replay = 60; // TODO: want to get to 2 sqrt(stiffness)
     double stiffness = 200; // for replay - everything is 2x of the falcon
     array<double, 3> forceDimensionPos = {0,0,0};
 
     long count = 0;   
 
-    forceDimensionVelocity();
+    getInputDeviceVelocity();
     
     while(1){
         dhdGetPosition (&forceDimensionPos[0],&forceDimensionPos[1],&forceDimensionPos[2]);
@@ -218,9 +289,9 @@ void run_forceDimension_deformation_controller(){
         // zero displacement mode
         // falcon has offset in z
         // TODO: fix these!!!!
-        dhdSetForceAndTorque(-stiffness*(forceDimensionPos[0]-x_d)-viscous_replay*forceDimension_velocity[0], 
-                -stiffness*(forceDimensionPos[1]-y_d)-viscous_replay*forceDimension_velocity[1], 
-                -stiffness*(forceDimensionPos[2]-z_d)-viscous_replay*forceDimension_velocity[2],0.0,0.0,0.0);
+        dhdSetForceAndTorque(-stiffness*(forceDimensionPos[0]-x_d)-viscous_replay*inputDevice_velocity[0], 
+                -stiffness*(forceDimensionPos[1]-y_d)-viscous_replay*inputDevice_velocity[1], 
+                -stiffness*(forceDimensionPos[2]-z_d)-viscous_replay*inputDevice_velocity[2],0.0,0.0,0.0);
 
         // Store forcing from falcon for deformations
         // Note: these should be unit-normalized (i.e., span from -1 to 1)
@@ -232,17 +303,14 @@ void run_forceDimension_deformation_controller(){
     }
 }
 
-
 ////////////////////////////
 // DEFORMATION FUNCTIONS  //
 ////////////////////////////
 
 /**
- * Checks whether a haptic cue should be issues based on a changing variance
- */
-double prev_var_x = 0.0; double prev_var_y = 0.0; double prev_var_z = 0.0;
-bool var_x_changing = false; bool var_y_changing = false; bool var_z_changing = false;
-void check_for_haptic_cue(double var_x, double var_y, double var_z){
+* Checks whether a haptic cue should be issues based on a changing variance
+*/
+void DeformationController::check_for_haptic_cue(double var_x, double var_y, double var_z){
     if(var_x != prev_var_x && !var_x_changing)
     {
         var_x_changing = true;
@@ -266,12 +334,7 @@ void check_for_haptic_cue(double var_x, double var_y, double var_z){
 }
 
 // Next 3 pieces are for surface optimization
-typedef struct {
-    double x, y, z;
-    BSplineSurface surface;
-} opt_data;
-
-double obj_closest_surface(const std::vector<double> &x, std::vector<double> &grad, void *data)
+double DeformationController::obj_closest_surface(const std::vector<double> &x, std::vector<double> &grad, void *data)
 {
     opt_data *d = (opt_data *) data;
     array<double,3> r = {0.0, 0.0, 0.0};
@@ -283,7 +346,7 @@ double obj_closest_surface(const std::vector<double> &x, std::vector<double> &gr
     return (r[0]-d->x)*(r[0]-d->x)+(r[1]-d->y)*(r[1]-d->y)+(r[2]-d->z)*(r[2]-d->z);
 }
 
-void getClosestParams(double x, double y, double z, double &u, double&v, BSplineSurface surface){
+void DeformationController::getClosestParams(double x, double y, double z, double &u, double&v, BSplineSurface surface){
     // Find the closest point on the surface using NL-opt
     nlopt::opt opt(nlopt::LN_COBYLA, 2);
     
@@ -319,9 +382,9 @@ void getClosestParams(double x, double y, double z, double &u, double&v, BSpline
 }
 
 /**
- * TODO: fill this out
- */
-void bidirectional_checker(array<double,3> &vec, array<double,3> &prev_vec){
+* TODO: fill this out
+*/
+void DeformationController::bidirectional_checker(array<double,3> &vec, array<double,3> &prev_vec){
     // Check if velocity should be flipped (tool goes both ways)
     // TODO: change to a function
     double sign = prev_vec[0]*vec[0] +  prev_vec[1]*vec[1] +  prev_vec[2]*vec[2];
@@ -332,13 +395,13 @@ void bidirectional_checker(array<double,3> &vec, array<double,3> &prev_vec){
 }
 
 /**
- * Determines whether a transition should occur to the next DMP based on residual "Error"
-  from the deformations
+* Determines whether a transition should occur to the next DMP based on residual "Error"
+from the deformations
 
-  transition_x,transition_y, transition_z are outputs representing the change to be applied
-  to the next starting point
- */
-void calculateDMPTransition(double ii, double &transition_x, double &transition_y, double &transition_z, double &transition_def_x, double &transition_def_y, double &transition_def_z, double x_imp, double y_imp, double z_imp, double x_def, double y_def, double z_def, vector<array<double,3>> selections,vector<array<double,7>> starting_points, vector<string> surfaces){
+transition_x,transition_y, transition_z are outputs representing the change to be applied
+to the next starting point
+*/
+void DeformationController::calculateDMPTransition(double ii, double &transition_x, double &transition_y, double &transition_z, double &transition_def_x, double &transition_def_y, double &transition_def_z, double x_imp, double y_imp, double z_imp, double x_def, double y_def, double z_def, vector<array<double,3>> selections,vector<array<double,7>> starting_points, vector<string> surfaces){
     if((ii+1)<selections.size()){
         // TWO TRANSITIONS -> need 6 transition variables, need the stiffness, need the deformation scaling
 
@@ -401,9 +464,9 @@ void calculateDMPTransition(double ii, double &transition_x, double &transition_
 }
 
 /**
- * TODO: Calculate whether there is a chance for collision or something...?
- */
-void calculateNearestContact(int ii,vector<array<double,3>> selections,vector<array<double,7>> starting_points,vector<array<double,7>> attractor_points,bool &dmp_x_limiting,bool &dmp_y_limiting,bool &dmp_z_limiting,double &dmp_x_collision, double &dmp_y_collision, double &dmp_z_collision){
+* TODO: Calculate whether there is a chance for collision or something...?
+*/
+void DeformationController::calculateNearestContact(int ii,vector<array<double,3>> selections,vector<array<double,7>> starting_points,vector<array<double,7>> attractor_points,bool &dmp_x_limiting,bool &dmp_y_limiting,bool &dmp_z_limiting,double &dmp_x_collision, double &dmp_y_collision, double &dmp_z_collision){
     
     // This is used to contact the "Nearest contact condition" to consider
     // minimizing the deformations
@@ -438,9 +501,9 @@ void calculateNearestContact(int ii,vector<array<double,3>> selections,vector<ar
 }
 
 /**
- * Calculate the final deformation based on adaptive gains, collisions, workspace limits, etc.
- */
-array<double,3> deformationScaling(array<double,3> &rotated_deformation, double var_x, double var_y, double var_z, geometry_msgs::Vector3 selection, double x, double y, double collision_scaling){
+* Calculate the final deformation based on adaptive gains, collisions, workspace limits, etc.
+*/
+array<double,3> DeformationController::deformationScaling(array<double,3> &rotated_deformation, double var_x, double var_y, double var_z, geometry_msgs::Vector3 selection, double x, double y, double collision_scaling){
     
     array<double,3> final_deformation;
 
@@ -482,10 +545,10 @@ array<double,3> deformationScaling(array<double,3> &rotated_deformation, double 
 }
 
 /**
- * This function takes in all of the relevant parameters for a particular DMP and will figure out the
- * starting velocity. This is used for setting the tool orientation as it approaches the surface.
- */
-array<double,3> getFirstSurfaceVelocity(array<double,7> attractor_point, array<double,7> starting_point,double dmp_u,double dmp_v, array<double,3> r_u, array<double,3> r_v ){
+* This function takes in all of the relevant parameters for a particular DMP and will figure out the
+* starting velocity. This is used for setting the tool orientation as it approaches the surface.
+*/
+array<double,3> DeformationController::getFirstSurfaceVelocity(array<double,7> attractor_point, array<double,7> starting_point,double dmp_u,double dmp_v, array<double,3> r_u, array<double,3> r_v ){
     
     // TODO: can this be zero?
     double k=50;
@@ -507,7 +570,7 @@ array<double,3> getFirstSurfaceVelocity(array<double,7> attractor_point, array<d
     return vel_hat;
 }
 
-array<double,3> map_deformation_input(int method, double dmp_fx,double dmp_fy,double dmp_fz,double dx,double dy, double dz){
+array<double,3> DeformationController::map_deformation_input(int method, double dmp_fx,double dmp_fy,double dmp_fz,double dx,double dy, double dz){
     // TODO: add the selection vector stuff
 
     // Methods:
@@ -561,9 +624,9 @@ array<double,3> map_deformation_input(int method, double dmp_fx,double dmp_fy,do
 }
 
 /**
- * TODO: fill this out
- */
-void forceOnloading(int ii, geometry_msgs::Vector3 selection, vector<array<double,7>> starting_points, vector<array<double,7>> attractor_points, vector<vector<array<double,7>>> dmps, BSplineSurface curr_surface, ros::Publisher &selection_vector_pub, ros::Publisher &constraint_frame_pub, ros::Publisher pose_goal_pub, ros::Publisher wrench_goal_pub, ros::Publisher hybrid_pub){
+* TODO: fill this out
+*/
+void DeformationController::forceOnloading(int ii, geometry_msgs::Vector3 selection, vector<array<double,7>> starting_points, vector<array<double,7>> attractor_points, vector<vector<array<double,7>>> dmps, BSplineSurface curr_surface, ros::Publisher &selection_vector_pub, ros::Publisher &constraint_frame_pub, ros::Publisher pose_goal_pub, ros::Publisher wrench_goal_pub, ros::Publisher hybrid_pub){
     // Do force onloading with the first sample
     cout << "Force Onloading Started..." << endl;
     geometry_msgs::Wrench ft;
@@ -642,9 +705,8 @@ void forceOnloading(int ii, geometry_msgs::Vector3 selection, vector<array<doubl
     cout << "Force Onloading Complete..." << endl;
 }
 
-
-void readDemo(vector<vector<array<double,7>>> &dmps,vector<array<double,3>> &selections,vector<array<double,7>> &starting_points,vector<array<double,7>> &attractor_points, vector<string> &surfaces, vector<vector<array<double,3>>> &variance_dmp){
-    std::ifstream dmpfile("learneddmp.csv");
+void DeformationController::readDemo(vector<vector<array<double,7>>> &dmps,vector<array<double,3>> &selections,vector<array<double,7>> &starting_points,vector<array<double,7>> &attractor_points, vector<string> &surfaces, vector<vector<array<double,3>>> &variance_dmp){
+    std::ifstream dmpfile(trajectoryFile);
     double junk;
     string temp;
     string surface;
@@ -768,7 +830,7 @@ void readDemo(vector<vector<array<double,7>>> &dmps,vector<array<double,3>> &sel
     dmpfile.close();
 }
 
-void replay_demo(ros::Publisher pose_goal_pub, ros::NodeHandle n){
+void DeformationController::replay_demo(ros::Publisher pose_goal_pub, ros::NodeHandle n){
 
     std_msgs::String replay_str;
     
@@ -1167,27 +1229,13 @@ void replay_demo(ros::Publisher pose_goal_pub, ros::NodeHandle n){
     }
 }
 
-void publishPose(ros::Publisher pose_goal_pub, std::array<double, 7> panda_pose) {
-    geometry_msgs::Pose pose_goal;
-    pose_goal.position.x = panda_pose[0];
-    pose_goal.position.y = panda_pose[1];
-    pose_goal.position.z = panda_pose[2];
-    pose_goal.orientation.x = panda_pose[3];
-    pose_goal.orientation.y = panda_pose[4];
-    pose_goal.orientation.z = panda_pose[5];
-    pose_goal.orientation.w = panda_pose[6];
-    pose_goal_pub.publish(pose_goal);
-}
-
-
-void actualPose(geometry_msgs::Pose pose) {
+void DeformationController::actualPose(geometry_msgs::Pose pose) {
     actual_pos[0] = pose.position.x;
     actual_pos[1] = pose.position.y;
     actual_pos[2] = pose.position.z;
 }
 
-
-void feedbackFD(geometry_msgs::Wrench wrench) {
+void DeformationController::feedbackFD(geometry_msgs::Wrench wrench) {
     double scale = 0.1; // force reflection
     double stiffness = 200; // for replay
     double viscous = 50; // friction
@@ -1212,84 +1260,18 @@ void feedbackFD(geometry_msgs::Wrench wrench) {
     fz = wrench.force.z;
 }
 
-void pollFD(ros::Publisher pose_goal_pub, ros::Publisher command_pub, double* scaling_factors, double* offsets, bool* clutch, bool* reset_center, bool* freeze) {
-    static bool lastCenterButton = false;
-    array<double, 3> fdPos = {0,0,0};
-    dhdGetPosition(&fdPos[0],&fdPos[1],&fdPos[2]);
-
-    std::array<double, 7> panda_pos = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
-    std::array<double, 3> normalized_falcon = {0.0, 0.0, 0.0};
     
-    // These convert the falcon to match the respective directions on the Kinova!
-    normalized_falcon[0] = fdPos[0];
-    normalized_falcon[1] = fdPos[1];
-    normalized_falcon[2] = fdPos[2];
-
-    // The first time the clutch is initiated, freeze the position of the falcon
-    if (*freeze)
-    {
-        frozen_position[0] = fdPos[0];
-        frozen_position[1] = fdPos[1];
-        frozen_position[2] = fdPos[2];
-        *freeze = false;
-    }
-
-    // If still clutching, keep the position consistent based on the frozen position
-    if(*clutch)
-    {
-        panda_pos[0] = scaling_factors[0] * frozen_position[0] + offsets[0];
-        panda_pos[1] = scaling_factors[1] * frozen_position[1] + offsets[1];
-        panda_pos[2] = scaling_factors[2] * frozen_position[2] + offsets[2];
-        panda_pos[6] = 1;
-    }
-
-    else{ // Not clutching
-
-        // If this is the first non-clutching sample, update the center of the workspace
-        // based on the movement during the clutching action
-        if(*reset_center)
-        {
-            offsets[0] = offsets[0]-scaling_factors[0]*(fdPos[0]-frozen_position[0]);
-            offsets[1] = offsets[1]-scaling_factors[1]*(fdPos[1]-frozen_position[1]);
-            offsets[2] = offsets[2]-scaling_factors[2]*(fdPos[2]-frozen_position[2]);
-            *reset_center = false;
-        }
-
-        // When not clutching, command based on the actual falcon position
-        panda_pos[0] = scaling_factors[0] * fdPos[0] + offsets[0];
-        panda_pos[1] = scaling_factors[1] * fdPos[1] + offsets[1];
-        panda_pos[2] = scaling_factors[2] * fdPos[2] + offsets[2];
-        panda_pos[6] = 1;
-
-        // For recording
-        x = panda_pos[0];
-        y = panda_pos[1];
-        z = panda_pos[2];
-    }
-    
-    publishPose(pose_goal_pub, panda_pos);
-}
-
-bool init_forcedimension() {
-    cout <<"Setting up Force Dimension\n";
-    if (dhdOpen () < 0) {
-        cout << "Unable to open device" << endl;
-        dhdSleep (2.0);
-        return false;
-    }
-    cout << "Force Dimension Setup Complete" << endl;
-}
-
-int main(int argc, char **argv) {    
-    ros::init(argc, argv, "Falcon");
+int DeformationController::run_deformation_controller(int argc, char **argv){
+    ros::init(argc, argv, "DeformationController");
     ros::NodeHandle n("~");  
     std::vector<double> scaling_factors = {-4.0, 4.0, 4.0}; //-6,6,6
     std::vector<double> offsets = {0.4, 0.0, 0.25};
     //n.getParam("offsets",offsets);
     //n.getParam("scaling_factors",scaling_factors);
 
-    if (!init_forcedimension()) {
-        cout << endl << "Failed to init force dimension" << endl;
+    int deviceID = init_inputDevice();
+    if (deviceID==-1) {
+        cout << endl << "Failed to initialize input device." << endl;
         return -1;
     }
 
@@ -1326,9 +1308,8 @@ int main(int argc, char **argv) {
 
     ros::Publisher command_pub = 
         n.advertise<std_msgs::String>("/panda/commands", 5);
-    
-    ros::Subscriber force_sub = n.subscribe("/panda/wrench", 10, feedbackFD);
-    ros::Subscriber actual_pose_sub = n.subscribe("/panda/pose_actual", 10, actualPose);
+    ros::Subscriber force_sub = n.subscribe("/panda/wrench", 10, &DeformationController::feedbackFD, this);
+    ros::Subscriber actual_pose_sub = n.subscribe("/panda/pose_actual", 10, &DeformationController::actualPose, this);
     
 
     ros::Publisher file_pub = 
@@ -1338,7 +1319,6 @@ int main(int argc, char **argv) {
 
     ros::Publisher gripper_toggle = 
         n.advertise<std_msgs::String>("/gripperToggle", 1);
-
 
     bool clutch = false;
     bool reset_center = true;
@@ -1353,77 +1333,13 @@ int main(int argc, char **argv) {
     chrono::time_point<chrono::steady_clock> start_timer;
     chrono::steady_clock sc;
 
-    while(ros::ok() && (!replay_mode)){      
-        pollFD(pose_goal_pub,command_pub,scaling_factors.data(),offsets.data(), &clutch, &reset_center, &freeze);
-        
-        // If button pressed and released in less than 0.3 seconds,
-        // it is a gripping action
-
-        // If held greater than 0.3 seconds, it is a velocity control action
-
-        if(!buttonPressed && dhdGetButton(0)==1) // button initially pressed
-        {
-            buttonPressed = true;
-            freeze = true;
-            clutch = true;
-            start = high_resolution_clock::now(); 
-        }
-
-        if(buttonPressed && dhdGetButton(0)==0) // button released
-        {
-            cout << "Button Unpressed" << endl;
-            buttonPressed=false;
-        
-            clutch=false;
-            reset_center=true;
-        }
-
-        if (dhdKbHit()) {
-            
-            char keypress = dhdKbGet();
-            if (keypress == 'r'){
-                if(recording==false){
-                    string filename = {"panda_demo_"+to_string(file_iter)+".csv"};
-                    remove( filename.c_str() );
-                    outputfile.open (filename.c_str());
-                    cout << "Starting Recording: " << filename.c_str() <<  endl;
-                    file_iter++;
-                    recording=true;
-                }
-                else{
-                    outputfile.close();
-                    cout << "Ending Recording" << endl;
-                    recording=false;
-                    // Let ROS know a file has been published to update the DMP
-                    file_pub.publish("panda_demo_"+to_string(file_iter-1)+".csv");
-                }
-            
-            }
-
-            if (keypress == 'x'){
-                std_msgs::String resetStr;
-                resetStr.data = "Reset";
-                reset_pub.publish(resetStr);
-                cout << "RESET DMP" << endl;
-                }
-
-            if (keypress == 'p'){
-                cout << "Initiating Replay " << endl;
-                replay_mode = true;
-            } 
-        }
-        
-    usleep(1000);
-    ros::spinOnce();   
-    }
-
     // Switch into replay mode
     // TODO: switch this to a loop and something that can go back and forth
     replay_active = true;
     bool quit_replay = false;
 
     // Thread a process for the zero-displacement falcon controller!
-    std::thread t1(run_forceDimension_deformation_controller);
+    std::thread t1(&DeformationController::run_zero_displacement_controller, this);
 
     while(ros::ok() && !quit_replay)
     {
@@ -1447,3 +1363,10 @@ int main(int argc, char **argv) {
     dhdClose();
     return 0;
 }
+
+// int main(int argc, char **argv) {    
+//     DeformationController controller;
+//     //cout << controller.init_forcedimension() << endl;
+//     int success = controller.run_deformation_controller(argc,argv);
+//     return 0;
+// }
