@@ -747,14 +747,14 @@ void DeformationController::readDemo(vector<vector<array<double,7>>> &dmps,vecto
 void DeformationController::replay_demo(ros::Publisher pose_goal_pub, ros::NodeHandle n){
 
     std_msgs::String replay_str;
+    panda_ros_msgs::HybridPose hybridPose;
+    geometry_msgs::Quaternion constraint_frame;
     
     // Publishers specifically used for replay
     ros::Publisher selection_vector_pub = 
         n.advertise<geometry_msgs::Vector3>("/panda/selection", 5);
     ros::Publisher wrench_goal_pub = 
         n.advertise<geometry_msgs::Wrench>("/panda/ee_wrench_goals", 5);
-    ros::Publisher pose_path_pub = 
-        n.advertise<geometry_msgs::Pose>("/panda/ee_path_goals", 5);    
     ros::Publisher constraint_frame_pub = 
         n.advertise<geometry_msgs::Quaternion>("/panda/constraintframe", 5);
     ros::Publisher point_goal_pub = // Used to project the future path for the user TODO: actually
@@ -803,20 +803,37 @@ void DeformationController::replay_demo(ros::Publisher pose_goal_pub, ros::NodeH
     dmp_replay_pub.publish(replay_str);
 
     // Tell the robot to go to the overall starting point
-    // Pose path pub will interpolate the path
-    pose.position.x = starting_points[0][0];
-    pose.position.y = starting_points[0][1];
-    pose.position.z = starting_points[0][2];
-    pose_path_pub.publish(pose);
-        
-    // Sleep for 2.5 seconds to allow path completion
-    for(int jj=0; jj<2500; jj++)
+    // Interpolate between the current position and desired position over 2 seconds!
+    // TODO: add orientation?
+    // TODO MAKE THE ABOVE CLOSED LOOP (waits until it gets to the starting point)!!!!!!!!!!
+
+
+    // current position
+    ros::spinOnce();
+    double xs = actual_pos[0];
+    double ys = actual_pos[1];
+    double zs = actual_pos[2];
+
+    // set up position control for interpolation
+    constraint_frame.x = 0.0; constraint_frame.y = 0.0; constraint_frame.z = 0.0; constraint_frame.w = 1.0;
+    hybridPose.pose.orientation.x = 0.0; hybridPose.pose.orientation.y = 0.0; hybridPose.pose.orientation.z = 0.0; hybridPose.pose.orientation.w = 1.0;
+    hybridPose.wrench.force.x = 0.0; hybridPose.wrench.force.y = 0.0; hybridPose.wrench.force.z = 0.0;
+    hybridPose.constraint_frame = constraint_frame;
+    hybridPose.sel_vector = {1, 1, 1, 1, 1, 1};
+
+    // Interpolate over the course of 2 seconds to starting position
+    for(int jj=0; jj<2000; jj++)
     {
         ros::spinOnce();
+        hybridPose.pose.position.x = xs+(starting_points[0][0]-xs)*((jj*1.0)/2000.0);
+        hybridPose.pose.position.y = ys+(starting_points[0][1]-ys)*((jj*1.0)/2000.0);
+        hybridPose.pose.position.z = zs+(starting_points[0][2]-zs)*((jj*1.0)/2000.0);
+        hybrid_pub.publish(hybridPose);
         usleep(1000);
     }
 
-    // TODO MAKE THE ABOVE CLOSED LOOP (waits until it gets to the starting point)!!!!!!!!!!
+    // TODO: check if there and wait!!!
+    
 
     // Action: Tell the robot the replay is starting
     cout << "Replay Starting..." << endl;
@@ -923,7 +940,7 @@ void DeformationController::replay_demo(ros::Publisher pose_goal_pub, ros::NodeH
 
             }
             
-            geometry_msgs::Quaternion constraint_frame;
+            
             constraint_frame.x=0.0; constraint_frame.y=0.0; constraint_frame.z=0.0; constraint_frame.w=1.0;
             double x_conv, y_conv, z_conv;
             
@@ -1111,7 +1128,7 @@ void DeformationController::replay_demo(ros::Publisher pose_goal_pub, ros::NodeH
 
 
             // PUBLISH THE ROBOT CONTROL PARAMETERS
-            panda_ros_msgs::HybridPose hybridPose;
+            
             hybridPose.pose.position.x = x_conv; hybridPose.pose.position.y = y_conv; hybridPose.pose.position.z = z_conv;
             hybridPose.pose.orientation.x = qx; hybridPose.pose.orientation.y = qy; hybridPose.pose.orientation.z = qz; hybridPose.pose.orientation.w = qw;
             hybridPose.wrench.force.x = x_conv; hybridPose.wrench.force.y = y_conv; hybridPose.wrench.force.z = z_conv;
