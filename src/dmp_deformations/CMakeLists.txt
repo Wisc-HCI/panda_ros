@@ -6,7 +6,7 @@ SET(CMAKE_SKIP_RPATH False)
 SET(CMAKE_INSTALL_RPATH ..)
 
 
-find_package(catkin REQUIRED COMPONENTS roscpp rospy tf2_ros geometry_msgs sensor_msgs std_msgs genmsg relaxed_ik panda_ros_msgs)
+find_package(catkin REQUIRED COMPONENTS roscpp rospy tf2_ros geometry_msgs sensor_msgs std_msgs genmsg relaxed_ik panda_ros_msgs inputs_ros)
 catkin_package()
 find_package(Eigen3 REQUIRED)
 find_library(DHDC libdhd.so.3.8.0 REQUIRED)
@@ -30,11 +30,15 @@ find_library(
 
 add_executable(fddeformationController src/ForceDimensionDeformationController.cpp)
 target_include_directories(fddeformationController PUBLIC ${catkin_INCLUDE_DIRS} ${EIGEN3_INCLUDE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/include ${CMAKE_CURRENT_SOURCE_DIR}/../../devel/include)
-target_link_libraries(fddeformationController ${catkin_LIBRARIES} ${DRDC} ${DHDC} ${BSpline} ${NLopt})
+target_link_libraries(fddeformationController ${catkin_LIBRARIES} ${DHDC} ${BSpline} ${NLopt})
 
 add_executable(falcondeformationController src/FalconDeformationController.cpp)
 target_include_directories(falcondeformationController PUBLIC ${catkin_INCLUDE_DIRS} ${EIGEN3_INCLUDE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/include ${CMAKE_CURRENT_SOURCE_DIR}/../../devel/include)
 target_link_libraries(falcondeformationController ${catkin_LIBRARIES} ${LIBNIFALCON} ${DHDC} ${BSpline} ${NLopt})
+
+add_executable(fdbilateral src/ForceDimension_Bilateral.cpp)
+target_include_directories(fdbilateral PUBLIC ${catkin_INCLUDE_DIRS} ${EIGEN3_INCLUDE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/include ${CMAKE_CURRENT_SOURCE_DIR}/../../devel/include)
+target_link_libraries(fdbilateral ${catkin_LIBRARIES} ${DHDC})
 
 install(TARGETS fddeformationController
   RUNTIME DESTINATION lib/fddeformations
@@ -42,4 +46,8 @@ install(TARGETS fddeformationController
 
 install(TARGETS falcondeformationController
   RUNTIME DESTINATION lib/falcondeformations
+)
+
+install(TARGETS fdbilateral
+  RUNTIME DESTINATION lib/fdbilateral
 )
