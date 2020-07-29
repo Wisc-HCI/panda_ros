@@ -120,7 +120,7 @@ void poll_forcedimension(ros::Publisher hybrid_pub, bool buttonPressed, bool res
 }
 
 void feedbackFD(geometry_msgs::Wrench wrench) {
-    double scale = 0.1; // force reflection
+    double scale = 0.4; // force reflection
     double stiffness = 200; // for replay
     double viscous = 50; // friction
 
@@ -129,7 +129,7 @@ void feedbackFD(geometry_msgs::Wrench wrench) {
     dhdGetLinearVelocity(&forceDimensionVel[0],&forceDimensionVel[1],&forceDimensionVel[2]);
     // Send force (bilateral + friction) to the falcon
     dhdSetForceAndTorque(-wrench.force.x * scale-viscous*forceDimensionVel[0], 
-            -wrench.force.y * scale-viscous*forceDimensionVel[1], 
+            wrench.force.y * scale-viscous*forceDimensionVel[1], 
             -wrench.force.z * scale-viscous*forceDimensionVel[2],0.0,0.0,0.0);
 }
 
