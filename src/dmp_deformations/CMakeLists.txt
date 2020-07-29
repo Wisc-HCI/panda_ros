@@ -6,7 +6,7 @@ SET(CMAKE_SKIP_RPATH False)
 SET(CMAKE_INSTALL_RPATH ..)
 
 
-find_package(catkin REQUIRED COMPONENTS roscpp rospy tf2_ros geometry_msgs sensor_msgs std_msgs genmsg relaxed_ik panda_ros_msgs inputs_ros)
+find_package(catkin REQUIRED COMPONENTS roscpp rospy tf2_ros geometry_msgs sensor_msgs std_msgs genmsg relaxed_ik panda_ros_msgs)
 catkin_package()
 find_package(Eigen3 REQUIRED)
 find_library(DHDC libdhd.so.3.8.0 REQUIRED)
