@@ -380,7 +380,7 @@ namespace PandaController {
     void initPandaController(bool simulate) {
         char * ip = getenv("PANDA_IP");
         cout << "Panda ip is " << ip << endl;
-        initGripper(ip);
+        //initGripper(ip);
         controller = thread(runController, ip, simulate);
         ft_listener = thread(forceTorqueListener);
     }
