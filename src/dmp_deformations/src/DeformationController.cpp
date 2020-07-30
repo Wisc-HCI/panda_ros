@@ -26,13 +26,17 @@
 // Force Dimension
 #include "dhdc.h"
 
+#include "tf2_ros/transform_listener.h"
+#include <geometry_msgs/TransformStamped.h>
+
 using namespace std;
 using namespace std::chrono;
 
 class DeformationController{
     private:
-        array<double, 3> actual_pos;       
-
+        array<double, 3> actual_pos;
+        tf2_ros::Buffer tfBuffer;
+      
         // For recording
         std::ofstream outputfile;
         double x, y, z, fx, fy, fz;
@@ -60,9 +64,9 @@ class DeformationController{
         array<double,3> deformationScaling(array<double,3> &rotated_deformation, double var_x, double var_y, double var_z, geometry_msgs::Vector3 selection, double x, double y, double collision_scaling);
         array<double,3> getFirstSurfaceVelocity(array<double,7> attractor_point, array<double,7> starting_point,double dmp_u,double dmp_v, array<double,3> r_u, array<double,3> r_v );
         array<double,3> map_deformation_input(int method, double dmp_fx,double dmp_fy,double dmp_fz,double dx,double dy, double dz);
-        void forceOnloading(int ii, geometry_msgs::Vector3 selection, vector<array<double,7>> starting_points, vector<array<double,7>> attractor_points, vector<vector<array<double,7>>> dmps, BSplineSurface curr_surface, ros::Publisher &selection_vector_pub, ros::Publisher &constraint_frame_pub, ros::Publisher pose_goal_pub, ros::Publisher wrench_goal_pub, ros::Publisher hybrid_pub);
+        void forceOnloading(int ii, geometry_msgs::Vector3 selection, vector<array<double,7>> starting_points, vector<array<double,7>> attractor_points, vector<vector<array<double,7>>> dmps, BSplineSurface curr_surface, ros::Publisher &selection_vector_pub, ros::Publisher &constraint_frame_pub, ros::Publisher wrench_goal_pub, ros::Publisher hybrid_pub);
         void readDemo(vector<vector<array<double,7>>> &dmps,vector<array<double,3>> &selections,vector<array<double,7>> &starting_points,vector<array<double,7>> &attractor_points, vector<string> &surfaces, vector<vector<array<double,3>>> &variance_dmp);
-        void replay_demo(ros::Publisher pose_goal_pub, ros::NodeHandle n);
+        void replay_demo(ros::NodeHandle n);
         void actualPose(geometry_msgs::Pose pose);
         void readPandaForces(geometry_msgs::Wrench wrench);
     
@@ -331,8 +335,6 @@ void DeformationController::calculateDMPTransition(double ii, double &transition
         if (selections[ii][2]==0.0 && selections[ii+1][2]==1.0){
             // On the manifold currently and coming off it!
             BSplineSurface surface;
-            cout << "PATHA:" << rospath+"/../../devel/lib/dmp_deformations/"+surfaces[ii]+".csv" << endl;
-            cout << surfaces[ii] << endl;
             surface.loadSurface(rospath+"/../../devel/lib/dmp_deformations/"+surfaces[ii]+".csv");
             array<double,3> r; array<double,3> n_hat; array<double,3> r_u; array<double,3> r_v;
 
@@ -350,12 +352,26 @@ void DeformationController::calculateDMPTransition(double ii, double &transition
             
             // Need the surface that is being approached
             BSplineSurface surface;
-            cout << "PATH:" << rospath+"/../../devel/lib/dmp_deformations/"+surfaces[ii+1]+".csv" << endl;
             surface.loadSurface(rospath+"/../../devel/lib/dmp_deformations/"+surfaces[ii+1]+".csv");
 
             // Approaching the manifold, find the nearest manifold point to transition
             double u = starting_points[ii+1][0];
             double v = starting_points[ii+1][1];
+
+            // get thing from the thing...
+
+            ros::spinOnce();
+            try{
+                geometry_msgs::TransformStamped transformStamped;
+                transformStamped = tfBuffer.lookupTransform("panda_link0", "end_effector",ros::Time(0));
+                actual_pos[0] = transformStamped.transform.translation.x;
+                actual_pos[1] = transformStamped.transform.translation.y;
+                actual_pos[2] = transformStamped.transform.translation.z;
+            }
+
+            catch(tf2::TransformException &ex){
+                cout << "Can't get TF2" << endl << ex.what() << endl;
+            }
             getClosestParams(actual_pos[0], actual_pos[1], actual_pos[2],u,v,surface);
 
             transition_x = u-starting_points[ii+1][0];
@@ -546,7 +562,7 @@ array<double,3> DeformationController::map_deformation_input(int method, double 
 /**
 * TODO: fill this out
 */
-void DeformationController::forceOnloading(int ii, geometry_msgs::Vector3 selection, vector<array<double,7>> starting_points, vector<array<double,7>> attractor_points, vector<vector<array<double,7>>> dmps, BSplineSurface curr_surface, ros::Publisher &selection_vector_pub, ros::Publisher &constraint_frame_pub, ros::Publisher pose_goal_pub, ros::Publisher wrench_goal_pub, ros::Publisher hybrid_pub){
+void DeformationController::forceOnloading(int ii, geometry_msgs::Vector3 selection, vector<array<double,7>> starting_points, vector<array<double,7>> attractor_points, vector<vector<array<double,7>>> dmps, BSplineSurface curr_surface, ros::Publisher &selection_vector_pub, ros::Publisher &constraint_frame_pub, ros::Publisher wrench_goal_pub, ros::Publisher hybrid_pub){
     // Do force onloading with the first sample
     cout << "Force Onloading Started..." << endl;
     geometry_msgs::Wrench ft;
@@ -750,7 +766,7 @@ void DeformationController::readDemo(vector<vector<array<double,7>>> &dmps,vecto
     dmpfile.close();
 }
 
-void DeformationController::replay_demo(ros::Publisher pose_goal_pub, ros::NodeHandle n){
+void DeformationController::replay_demo(ros::NodeHandle n){
 
     std_msgs::String replay_str;
     panda_ros_msgs::HybridPose hybridPose;
@@ -817,8 +833,21 @@ void DeformationController::replay_demo(ros::Publisher pose_goal_pub, ros::NodeH
     // TODO MAKE THE ABOVE CLOSED LOOP (waits until it gets to the starting point)!!!!!!!!!!
 
 
-    // current position
+    // current position from TF2
     ros::spinOnce();
+    try{
+        geometry_msgs::TransformStamped transformStamped;
+        transformStamped = tfBuffer.lookupTransform("panda_link0", "end_effector",ros::Time(0));
+        actual_pos[0] = transformStamped.transform.translation.x;
+        actual_pos[1] = transformStamped.transform.translation.y;
+        actual_pos[2] = transformStamped.transform.translation.z;
+    }
+
+    catch(tf2::TransformException &ex){
+        cout << "Can't get TF2" << endl << ex.what() << endl;
+    }
+
+
     double xs = actual_pos[0];
     double ys = actual_pos[1];
     double zs = actual_pos[2];
@@ -869,7 +898,6 @@ void DeformationController::replay_demo(ros::Publisher pose_goal_pub, ros::NodeH
         if(surfaces[ii]!="")
         {
             // Load the B-spline surface
-            cout << "PATH:" << rospath+"/../../devel/lib/dmp_deformations/"+surfaces[ii]+".csv" << endl;
             curr_surface.loadSurface(rospath+"/../../devel/lib/dmp_deformations/"+surfaces[ii]+".csv");
 
             // get the surface ~ scaling
@@ -891,7 +919,7 @@ void DeformationController::replay_demo(ros::Publisher pose_goal_pub, ros::NodeH
         if((selection.x==0 || selection.y==0 || selection.z==0)){
             if(previous_dmp_no_contact){
                 // If selection has force control and is transitioning from no-contact, need force onloading
-                forceOnloading(ii,selection,starting_points,attractor_points,dmps,curr_surface,selection_vector_pub,constraint_frame_pub,pose_goal_pub,wrench_goal_pub,hybrid_pub);
+                forceOnloading(ii,selection,starting_points,attractor_points,dmps,curr_surface,selection_vector_pub,constraint_frame_pub,wrench_goal_pub,hybrid_pub);
             }
             previous_dmp_no_contact = false;
         }
@@ -1170,11 +1198,6 @@ void DeformationController::replay_demo(ros::Publisher pose_goal_pub, ros::NodeH
     }
 }
 
-void DeformationController::actualPose(geometry_msgs::Pose pose) {
-    actual_pos[0] = pose.position.x;
-    actual_pos[1] = pose.position.y;
-    actual_pos[2] = pose.position.z;
-}
 
 void DeformationController::readPandaForces(geometry_msgs::Wrench wrench) {
     // Mainly used for force onloading during replay
@@ -1195,14 +1218,11 @@ int DeformationController::run_deformation_controller(int argc, char **argv){
     
     cout << "Press 'r' to run replay" << endl << "Press 'q' to quit" << endl << endl;
 
-    ros::Publisher pose_goal_pub = 
-        n.advertise<geometry_msgs::Pose>("/panda/ee_pose_goals", 5);
-
     ros::Publisher command_pub = 
         n.advertise<std_msgs::String>("/panda/commands", 5);
     ros::Subscriber force_sub = n.subscribe("/panda/wrench", 10, &DeformationController::readPandaForces, this);
-    ros::Subscriber actual_pose_sub = n.subscribe("/panda/pose_actual", 10, &DeformationController::actualPose, this);
     
+    tf2_ros::TransformListener tfListener(tfBuffer); 
 
     ros::Publisher file_pub = 
         n.advertise<std_msgs::String>("/dmp/filepub", 5);
@@ -1240,7 +1260,7 @@ int DeformationController::run_deformation_controller(int argc, char **argv){
             char keypress = dhdKbGet();
             if (keypress == 'r'){
                 cout << endl << "Running the replay." << endl;
-                replay_demo(pose_goal_pub, n);
+                replay_demo(n);
                 cout << endl << endl << "Press 'r' to run replay" << endl << "Press 'q' to quit" << endl << endl;
             }
 
