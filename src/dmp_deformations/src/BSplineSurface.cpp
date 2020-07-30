@@ -161,7 +161,7 @@ double BSplineSurface::getN(int i, int p, double x, vector<double> t){
 
 void BSplineSurface::loadSurface(string filename){
     // Load a CSV file
-    std::ifstream surfacefile("/home/mike/Documents/MikePanda/devel/lib/dmp_deformations/"+filename+".csv");
+    std::ifstream surfacefile(filename);
     double k_temp;
     double m_temp;
     double n_temp;

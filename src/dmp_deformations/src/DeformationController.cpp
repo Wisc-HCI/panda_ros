@@ -326,10 +326,14 @@ void DeformationController::calculateDMPTransition(double ii, double &transition
         // position to manifold
         // manifold to position
 
+        std::string rospath = ros::package::getPath("dmp_deformations");
+
         if (selections[ii][2]==0.0 && selections[ii+1][2]==1.0){
             // On the manifold currently and coming off it!
             BSplineSurface surface;
-            surface.loadSurface(surfaces[ii]);
+            cout << "PATHA:" << rospath+"/../../devel/lib/dmp_deformations/"+surfaces[ii]+".csv" << endl;
+            cout << surfaces[ii] << endl;
+            surface.loadSurface(rospath+"/../../devel/lib/dmp_deformations/"+surfaces[ii]+".csv");
             array<double,3> r; array<double,3> n_hat; array<double,3> r_u; array<double,3> r_v;
 
             // transition point based on current surface value (state + deformation)
@@ -346,7 +350,8 @@ void DeformationController::calculateDMPTransition(double ii, double &transition
             
             // Need the surface that is being approached
             BSplineSurface surface;
-            surface.loadSurface(surfaces[ii+1]);
+            cout << "PATH:" << rospath+"/../../devel/lib/dmp_deformations/"+surfaces[ii+1]+".csv" << endl;
+            surface.loadSurface(rospath+"/../../devel/lib/dmp_deformations/"+surfaces[ii+1]+".csv");
 
             // Approaching the manifold, find the nearest manifold point to transition
             double u = starting_points[ii+1][0];
@@ -750,6 +755,9 @@ void DeformationController::replay_demo(ros::Publisher pose_goal_pub, ros::NodeH
     std_msgs::String replay_str;
     panda_ros_msgs::HybridPose hybridPose;
     geometry_msgs::Quaternion constraint_frame;
+
+    // ROS path
+    std::string rospath = ros::package::getPath("dmp_deformations");
     
     // Publishers specifically used for replay
     ros::Publisher selection_vector_pub = 
@@ -860,13 +868,9 @@ void DeformationController::replay_demo(ros::Publisher pose_goal_pub, ros::NodeH
     {
         if(surfaces[ii]!="")
         {
-            // TEST ROS PATH STUFF!!!!
-            std::string path = ros::package::getPath("dmp_deformations");
-            cout << "ROSPATH:" << path << endl;
-
-
             // Load the B-spline surface
-            curr_surface.loadSurface(surfaces[ii]);
+            cout << "PATH:" << rospath+"/../../devel/lib/dmp_deformations/"+surfaces[ii]+".csv" << endl;
+            curr_surface.loadSurface(rospath+"/../../devel/lib/dmp_deformations/"+surfaces[ii]+".csv");
 
             // get the surface ~ scaling
             surface_scaling_y = 0.5;
