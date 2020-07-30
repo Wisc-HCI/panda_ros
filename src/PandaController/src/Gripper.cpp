@@ -34,12 +34,17 @@ namespace PandaController {
 
     void initGripper(const char * ip) {
         isGripperMoving = true;
-        p_gripper = new franka::Gripper(ip);
-        franka::GripperState state = p_gripper->readOnce();
-        maxGripperWidth = state.max_width;
-        p_gripper->move(maxGripperWidth, 0.2);
-        PandaController::writeGripperState();
-        isGripperMoving = false;
+        try {
+            p_gripper = new franka::Gripper(ip);
+            franka::GripperState state = p_gripper->readOnce();
+            maxGripperWidth = state.max_width;
+            p_gripper->move(maxGripperWidth, 0.2);
+            PandaController::writeGripperState();
+            isGripperMoving = false;
+        } catch (franka::CommandException const& e) {
+            cout << "Failed to initialize gripper" << endl;
+        }
+        
     }
 
     void graspObj(function<void ()> onGrasp) {
