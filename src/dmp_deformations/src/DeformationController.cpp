@@ -9,6 +9,7 @@
 #include <chrono>
 
 #include <ros/ros.h>
+#include <ros/package.h>
 #include <relaxed_ik/EEPoseGoals.h>
 #include "geometry_msgs/Pose.h"
 #include "geometry_msgs/Wrench.h"
@@ -859,6 +860,11 @@ void DeformationController::replay_demo(ros::Publisher pose_goal_pub, ros::NodeH
     {
         if(surfaces[ii]!="")
         {
+            // TEST ROS PATH STUFF!!!!
+            std::string path = ros::package::getPath("dmp_deformations");
+            cout << "ROSPATH:" << path << endl;
+
+
             // Load the B-spline surface
             curr_surface.loadSurface(surfaces[ii]);
 
@@ -1036,7 +1042,7 @@ void DeformationController::replay_demo(ros::Publisher pose_goal_pub, ros::NodeH
                 array<double,3> x_hat;
                 curr_surface.calculateSurfacePoint(x,y,r,n_hat,x_hat,y_hat);
 
-                cout << "R: " << r[0] << " " << r[1] << " " << r[2] << endl;
+                //cout << "R: " << r[0] << " " << r[1] << " " << r[2] << endl;
                 
                 // Using the velocity of x and y (u and v), calculate the time
                 // derivative of the surface (i.e., vector-valued function)
@@ -1048,7 +1054,7 @@ void DeformationController::replay_demo(ros::Publisher pose_goal_pub, ros::NodeH
 
                 double v_mag = sqrt(v_hat[0]*v_hat[0] + v_hat[1]*v_hat[1] + v_hat[2]*v_hat[2]);
 
-                cout << "VHAT: " << v_hat[0] << " " << v_hat[1] << " " << v_hat[2] << endl;
+                //cout << "VHAT: " << v_hat[0] << " " << v_hat[1] << " " << v_hat[2] << endl;
                 
                 // If the velocity direction is non-zero, re-align the constraint frame
                 // If it is zero, it will keep its previous value

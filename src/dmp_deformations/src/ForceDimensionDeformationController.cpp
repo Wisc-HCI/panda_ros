@@ -98,23 +98,21 @@ void ForceDimensionDeformationController::run_zero_displacement_controller(){
             }
         }
 
+
+        // center the device around the center of motion (to scale to -1 to) 
         double x_d = 0.0125;
         double y_d = 0.0;
         double z_d = 0.025;
         
-        //cout << "FP:" << falconPos[0] << " " << falconPos[1] << " " << falconPos[2] << endl;
-        // zero displacement mode
-        // falcon has offset in z
-        // TODO: fix these!!!!
         dhdSetForceAndTorque(-stiffness*(forceDimensionPos[0]-x_d)-viscous_replay*inputDevice_velocity[0], 
                 -stiffness*(forceDimensionPos[1]-y_d)-viscous_replay*inputDevice_velocity[1], 
                 -stiffness*(forceDimensionPos[2]-z_d)-viscous_replay*inputDevice_velocity[2],0.0,0.0,0.0);
 
-        // Store forcing from falcon for deformations
+        // Store forcing from device for deformations
         // Note: these should be unit-normalized (i.e., span from -1 to 1)
-        // TODO: fix these
-        dmp_fx = (forceDimensionPos[0]-x_d)/(0.0625);
-        dmp_fy = (forceDimensionPos[1]-y_d)/(0.12);
+        // the coordinate frame is to correspond with teleop of the panda from behind
+        dmp_fx = -(forceDimensionPos[0]-x_d)/(0.0625);
+        dmp_fy = -(forceDimensionPos[1]-y_d)/(0.12);
         dmp_fz = (forceDimensionPos[2]-z_d)/(0.105);
         usleep(1000);
     }

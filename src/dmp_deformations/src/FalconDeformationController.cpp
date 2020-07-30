@@ -214,10 +214,11 @@ void FalconDeformationController::run_zero_displacement_controller(){
                 -stiffness*falconPos[1]-viscous_replay*inputDevice_velocity[1], 
                 -stiffness*(falconPos[2]-0.125)-viscous_replay*inputDevice_velocity[2]});
 
-        // Store forcing from falcon for deformations
+        // Store forcing from device for deformations
         // Note: these should be unit-normalized (i.e., span from -1 to 1)
-        dmp_fx = -(falconPos[0])/(0.06);
-        dmp_fy = (falconPos[2]-0.125)/(0.05);
+        // the coordinate frame is to correspond with teleop of the panda from behind
+        dmp_fx = -(falconPos[2]-0.125)/(0.05);
+        dmp_fy = -(falconPos[0])/(0.06);
         dmp_fz = falconPos[1]/(0.055);
         usleep(1000);
     }
