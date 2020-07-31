@@ -26,11 +26,13 @@ from scipy.ndimage import interpolation
 from dtw import dtw
 import PyBSpline
 from deformation_static_scaling import getStaticScaling
+import rospkg
 
 demonstrations = []
 
 def loadPresegmentedCore(file):
-    directory = '/home/mike/Documents/MikePanda/devel/lib/dmp_deformations'
+    rospack = rospkg.RosPack()
+    directory = rospack.get_path('dmp_deformations') + "/../../devel/lib/dmp_deformations"
     demonstration_data = []
 
     # Skip over lines for surfaces, segmentation samples, interaction, and variance
