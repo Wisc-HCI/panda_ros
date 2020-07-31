@@ -1,5 +1,5 @@
 # Deformation Shared Control
-## (Name Pending)
+### (Name Pending)
 This package contains code supporting the ability to do real time deformations
 to a nominal autonomous trajectory. This includes things such as BSplineSurfaces,
 Dynamic Movement Primitives (DMPs), etc.
