@@ -64,10 +64,6 @@ def main():
     # Turn STL into a point cloud of the desired surface using even sampling
     points, something = sample.sample_surface_even(mesh,200)
 
-
-
-
-
     # convert properly for mm to m issue
     points = points/1000
 

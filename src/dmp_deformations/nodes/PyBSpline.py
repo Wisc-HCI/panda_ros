@@ -14,6 +14,7 @@ from matplotlib import cm
 import math
 import csv
 from scipy.optimize import minimize, Bounds
+import rospkg
 
 
 def exp_map_np(w):
@@ -122,7 +123,9 @@ class BSplineSurface:
         return res.x[0], res.x[1]
 
     def writeSurface(self,filename):
-        with open('/home/mike/Documents/MikePanda/devel/lib/dmp_deformations/'+filename+'.csv', 'w') as csvfile:
+        rospack = rospkg.RosPack()
+        path_devel = rospack.get_path('dmp_deformations') + "/../../devel/lib/dmp_deformations/"
+        with open(path_devel+filename+'.csv', 'w') as csvfile:
             # Only parameters needed are degree and control points
             csvfile.write(str(self.k) + ',' + str(self.m) + ',' + str(self.n))
             csvfile.write('\n')
@@ -135,7 +138,9 @@ class BSplineSurface:
                 csvfile.write('\n')
 
     def loadSurface(self, filename):
-        with open('/home/mike/Documents/MikePanda/devel/lib/dmp_deformations/' + filename + '.csv') as csvfile:
+        rospack = rospkg.RosPack()
+        path_devel = rospack.get_path('dmp_deformations') + "/../../devel/lib/dmp_deformations/"
+        with open(path_devel + filename + '.csv') as csvfile:
             surfacereader = csv.reader(csvfile,delimiter=',')
 
             # Load the parameters and control points
