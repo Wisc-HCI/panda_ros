@@ -24,6 +24,7 @@ namespace PandaController {
     namespace {
         thread ft_listener;
         thread controller;
+        thread gripper;
         bool running = false;
         
     } 
@@ -351,13 +352,6 @@ namespace PandaController {
             writeRobotState(robot.readOnce());
             auto control = simulate ? simulateControl : robotControl;
             control(robot);
-            // switch(mode){
-            //     // Case not implemented yet
-            //     // case ControlMode::HybridControl:
-            //     //     commandPositionFromState(readRobotState());
-            //     //     control(robot, hybridControlLoop);
-            //     //     break;
-            // }
         } catch(const exception& e) {
             cout << e.what() << endl;
         }
@@ -380,7 +374,9 @@ namespace PandaController {
     void initPandaController(bool simulate) {
         char * ip = getenv("PANDA_IP");
         cout << "Panda ip is " << ip << endl;
-        //initGripper(ip);
+        // Gripper thread will hang forever on a blocking tcp call
+        // if the gripper is not attached. 
+        gripper = thread(initGripper, ip); 
         controller = thread(runController, ip, simulate);
         ft_listener = thread(forceTorqueListener);
     }

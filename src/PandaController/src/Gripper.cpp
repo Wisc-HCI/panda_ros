@@ -14,7 +14,7 @@ namespace PandaController {
     namespace {
         boost::mutex mutex;
 
-        franka::Gripper *p_gripper;
+        franka::Gripper *p_gripper = NULL;
         franka::GripperState gripper_state;
         double maxGripperWidth;
         bool isGripperMoving = false;
@@ -32,13 +32,19 @@ namespace PandaController {
         gripper_state = state;
     }
 
-
     void initGripper(const char * ip) {
-        p_gripper = new franka::Gripper(ip);
-        franka::GripperState state = p_gripper->readOnce();
-        maxGripperWidth = state.max_width;
-        p_gripper->move(maxGripperWidth, 0.2);
-        PandaController::writeGripperState();
+        isGripperMoving = true;
+        try {
+            p_gripper = new franka::Gripper(ip);
+            franka::GripperState state = p_gripper->readOnce();
+            maxGripperWidth = state.max_width;
+            p_gripper->move(maxGripperWidth, 0.2);
+            PandaController::writeGripperState();
+            isGripperMoving = false;
+        } catch (franka::CommandException const& e) {
+            cout << "Failed to initialize gripper" << endl;
+        }
+        
     }
 
     void graspObj(function<void ()> onGrasp) {
