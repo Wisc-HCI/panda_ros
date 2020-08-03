@@ -1,7 +1,9 @@
 #!/usr/bin/env python
 
 """ Calculates DMP using LWR
- Created: 02/19/2020
+ from a presegmented demonstration
+ e.g., generate_path_helper, LFD_Hybrid
+ Created: 06/08/2020
 """
 
 __author__ = "Mike Hagenow"
@@ -19,174 +21,18 @@ from nav_msgs.msg import Path
 from geometry_msgs.msg import PoseStamped
 from visualization_msgs.msg import MarkerArray, Marker
 import csv
+from scipy.interpolate import interp1d
+from scipy.ndimage import interpolation
 from dtw import dtw
 import PyBSpline
-
+from deformation_static_scaling import getStaticScaling
+import rospkg
 
 demonstrations = []
 
-pathDMP = None
-forceDMP = None
-path0 = None
-path1 = None
-path2 = None
-path3 = None
-path4 = None
-
-def getSegmentation(demo):
-    # Go through demonstration and look for contact, un-contact events
-    # The data has been downsampled to 50 Hz
-    number_samples_contact = 10
-    number_samples_not_contact = 10
-    force_threshold = 5.0
-
-    states = []
-
-    in_contact = False
-    states.append((0,np.array([1, 1, 1])))
-
-    # print "LENGTH"
-    # print np.shape(demo)
-
-    # 2nd order filter
-    b, a = signal.butter(2, 1.0,fs=50)
-    y = signal.filtfilt(b, a, np.linalg.norm(demo[:,3:],axis=1), padlen=0)
-    y = y-np.min(y)
-    # import matplotlib.pyplot as plt
-    # plt.plot(np.linalg.norm(demo[:,3:],axis=1))
-    # plt.plot(y)
-    # plt.show()
-
-    for ii in range(1,len(demo)):
-        # Add the position control event
-        if not in_contact and np.all(y[ii:ii+number_samples_contact]>force_threshold):
-            states.append((ii,np.array([1, 1, 0])))
-            in_contact = True
-        # Add the force start control event
-        if in_contact and np.all(y[ii:ii+number_samples_not_contact]<force_threshold): # and norm whatever
-            states.append((ii,np.array([1, 1, 1])))
-            # add constraint frame eventually
-            in_contact = False
-
-    return states
-
-
-def plot_paths_rviz(demonstration_data_trimmed,trajectories):
-    global path0, path1, path2, path3, path4, pathDMP, forceDMP
-    # Clear all existing in RVIZ
-    emptyPath = Path()
-    emptyPath.header.frame_id = 'base_link'
-    emptyPath.header.stamp = rospy.Time.now()
-    pathDMP.publish(emptyPath)
-    path0.publish(emptyPath)
-    path1.publish(emptyPath)
-    path2.publish(emptyPath)
-    path3.publish(emptyPath)
-    path4.publish(emptyPath)
-    emptyForces = MarkerArray()
-    forceDMP.publish(emptyForces)
-
-    for ii in range(0,len(demonstration_data_trimmed)):
-        demo = demonstration_data_trimmed[ii]
-        tempPath = Path()
-        tempPath.header.frame_id = 'base_link'
-        tempPath.header.stamp = rospy.Time.now()
-        for jj in range(0,np.shape(demo)[0]):
-            tempPose = PoseStamped()
-            tempPose.header.stamp = rospy.Time.now()
-            tempPose.pose.position.x = demo[jj,0]
-            tempPose.pose.position.y = demo[jj,1]
-            tempPose.pose.position.z = demo[jj,2]
-            tempPose.pose.orientation.x = 0.0
-            tempPose.pose.orientation.y = 0.0
-            tempPose.pose.orientation.z = 0.0
-            tempPose.pose.orientation.w = 1.0
-            tempPath.poses.append(tempPose)
-    
-        # Publish the original paths
-        if ii==0:
-            path0.publish(tempPath)
-        elif ii==1:
-            path1.publish(tempPath)
-        elif ii==2:
-            path2.publish(tempPath)
-        elif ii==3:
-            path3.publish(tempPath)
-        else:
-            # If more than 5 paths, just update last
-            path4.publish(tempPath)
-
-        # Publish the DMP
-        tempPath = Path()
-        tempPath.header.frame_id = 'base_link'
-        tempPath.header.stamp = rospy.Time.now()
-
-        tempForces = MarkerArray()
-        for jj in range(0,len(trajectories[0])):
-            tempPose = PoseStamped()
-            tempPose.header.stamp = rospy.Time.now()
-            tempPose.pose.position.x = trajectories[0][jj]
-            tempPose.pose.position.y = trajectories[1][jj]
-            tempPose.pose.position.z = trajectories[2][jj]
-            tempPose.pose.orientation.x = 0.0
-            tempPose.pose.orientation.y = 0.0
-            tempPose.pose.orientation.z = 0.0
-            tempPose.pose.orientation.w = 1.0
-            tempPath.poses.append(tempPose)
-
-            tempForce = Marker()
-            tempForce.color.a = 1.0
-            tempForce.color.r = 1.0
-            tempForce.color.b = 0.0
-            tempForce.color.g = 0.0
-            
-            if jj % 10 == 0:
-                # TODO STILL ONLY WORKS FOR FORCES IN THE Z-DIRECTION
-                tempForce.pose.position.x = trajectories[0][jj]
-                tempForce.pose.position.y = trajectories[1][jj]
-                tempForce.pose.position.z = trajectories[2][jj]
-                tempForce.pose.orientation.x = 0.0
-                tempForce.pose.orientation.y = 0.7068
-                tempForce.pose.orientation.z = 0.0
-                tempForce.pose.orientation.w = 0.7074
-                tempForce.header.frame_id = "base_link"
-                tempForce.header.stamp = rospy.Time.now()
-                tempForce.id = jj
-                tempForce.type = Marker.ARROW
-                tempForce.action = Marker.ADD
-                tempForce.scale.x = -trajectories[5][jj]/300
-                tempForce.scale.y = 0.003
-                tempForce.scale.z = 0.003
-                tempForces.markers.append(tempForce)
-
-
-        forceDMP.publish(tempForces)
-        pathDMP.publish(tempPath)
-        # print "Pushing Data to RVIZ" 
-
-
-def resetDMP(data):
-    global demonstrations
-    demonstrations = []
-    global path0, path1, path2, path3, path4, pathDMP, forceDMP
-    # Clear all existing in RVIZ
-    emptyPath = Path()
-    emptyPath.header.frame_id = 'base_link'
-    emptyPath.header.stamp = rospy.Time.now()
-    pathDMP.publish(emptyPath)
-    path0.publish(emptyPath)
-    path1.publish(emptyPath)
-    path2.publish(emptyPath)
-    path3.publish(emptyPath)
-    path4.publish(emptyPath)
-    emptyForces = MarkerArray()
-    emptyMarker = Marker()
-    emptyMarker.action = Marker.DELETEALL
-    emptyForces.markers.append(emptyMarker)
-    forceDMP.publish(emptyForces)
-
 def loadPresegmentedCore(file):
-    directory = '/home/mike/Documents/MikePanda/devel/lib/dmp_deformations'
+    rospack = rospkg.RosPack()
+    directory = rospack.get_path('dmp_deformations') + "/../../devel/lib/dmp_deformations"
     demonstration_data = []
 
     # Skip over lines for surfaces, segmentation samples, interaction, and variance
@@ -215,53 +61,6 @@ def loadPresegmentedCore(file):
         else:
             segmentation.append((point, np.array([1, 1, 0, 1, 1, 1, 1]),surface_model))
 
-    calculateDMP(demonstration_data, segmentation)
-    print "..."
-    print "..."
-    print "LOAD AND CALCULATIONS COMPLETE"
-
-
-def loadPresegmented(data):
-    loadPresegmentedCore(data.data)
-
-
-def loadData(data):
-    global demonstrations
-    # File structure is a list of arrays (one per demonstration)
-    # Each array is an n-samples by 6 array for the 3 positions and 3 forces
-    print ""
-    print ""
-    print ""
-    print("Loading Data from CSV")
-
-    #TODO: Get directory from ros path
-    directory = '/home/mike/Documents/MikePanda/devel/lib/dmp_deformations'
-    
-    demonstrations.append(data.data)
-    demonstration_data = []
-
-    for filename in os.listdir(directory):
-        if filename.endswith(".csv") and filename in demonstrations:
-            print("Loading File: " + filename)
-            demonstration_data.append(np.loadtxt(open(directory + '/' + filename, "rb"), delimiter=",", skiprows=0)[0:-1:20])
-
-    # Segmentation is calculated from the first demonstration
-    # Done here so that calculateDMP can also be called
-    # with a predetermined segmentation
-    # This will figure out how many DMPs are needed to encode
-    # the motion
-    segmentation = getSegmentation(demonstration_data[0])
-
-    print "SEGMENTATION:",len(segmentation)
-    print segmentation
-    # print "Number of Contacts: ",(len(segmentation)-1)/2
-    calculateDMP(demonstration_data, segmentation)
-    print "LOAD AND CALCULATIONS COMPLETE"
-
-
-def calculateDMP(demonstration_data, segmentation):
-    print "Building DMPs"
-    dmps = []
 
     # Use Dynamic Time Warping to figure out the equivalent
     # index scaling for each of the additional demonstrations
@@ -287,6 +86,19 @@ def calculateDMP(demonstration_data, segmentation):
         d, cost_matrix, acc_cost_matrix, path = dtw(x, y, dist=manhattan_distance)
         alignment_curves.append((path[0],path[1]))
 
+    calculateDMP(demonstration_data, segmentation, alignment_curves)
+    print "..."
+    print "..."
+    print "LOAD AND CALCULATIONS COMPLETE"
+
+# Used to remove the struct from the input for troubleshooting
+def loadPresegmented(data):
+    loadPresegmentedCore(data.data)
+
+def calculateDMP(demonstration_data, segmentation, alignment_curves):
+    print "Building DMPs"
+    dmps = []
+    variance_per_segment=[]
 
     # Write a CSV with the final trajectory which can be read and executed
     with open('/home/mike/Documents/MikePanda/devel/lib/dmp_deformations/learneddmp.csv', 'w') as csvfile:
@@ -309,6 +121,11 @@ def calculateDMP(demonstration_data, segmentation):
             surface=segment[3]
 
             demonstration_per_dmp = []
+
+            # 3 Deformation Directions need calculations of variances
+            var_x_temp = np.zeros((200, len(demonstration_data)))
+            var_y_temp = np.zeros((200, len(demonstration_data)))
+            var_z_temp = np.zeros((200, len(demonstration_data)))
             
             # Get the DMP sections for each of the demonstrations
             for yy in range(0,len(demonstration_data)):
@@ -339,6 +156,14 @@ def calculateDMP(demonstration_data, segmentation):
                 temp[:, 5] = demo[start_index:end_index,5].reshape((end_index - start_index,))
                 temp[:, 6] = demo[start_index:end_index,6].reshape((end_index - start_index,))
 
+
+                # ADD TO VARIANCE CALCULATION
+                # TODO: does this work whatsoever?
+                var_x_temp[:,yy] = interpolation.zoom(demo[start_index:end_index,0 + 7 * (1 - sel_vec[0])],200.0/(end_index-start_index))
+                var_y_temp[:,yy] = interpolation.zoom(demo[start_index:end_index,1 + 7 * (1 - sel_vec[1])],200.0/(end_index-start_index))
+                var_z_temp[:,yy] = interpolation.zoom(demo[start_index:end_index,2 + 7 * (1 - sel_vec[2])],200.0/(end_index-start_index))
+
+
                 # Positions for plotting
                 temp_pos = np.zeros((end_index-start_index,3))
 
@@ -348,19 +173,24 @@ def calculateDMP(demonstration_data, segmentation):
                 
                 demonstration_per_dmp.append(temp)
 
-                # # Just for plotting
-                # if len(demonstration_data_trimmed)<(yy+1):
-                #     demonstration_data_trimmed.append(temp_pos)
-                # else:
-                #     demonstration_data_trimmed[yy] = np.append(demonstration_data_trimmed[yy],temp_pos,axis=0)
+
+            # Calculate the variances and store for later
+            std_dev_x = np.sqrt(np.var(var_x_temp,axis=1))
+            std_dev_y = np.sqrt(np.var(var_y_temp,axis=1))
+            std_dev_z = np.sqrt(np.var(var_z_temp,axis=1))
+
+            # Apply the scaling algorithm
+            # std_dev_x = getStaticScaling(np.linspace(0, 1, len(std_dev_x)), std_dev_x)
+            # std_dev_y = getStaticScaling(np.linspace(0, 1, len(std_dev_y)), std_dev_y)
+            # std_dev_z = getStaticScaling(np.linspace(0, 1, len(std_dev_z)), std_dev_z)
+
+            variance_per_segment.append((std_dev_x,std_dev_y,std_dev_z))
 
             dmps[xx].inputData(demonstration_data=demonstration_per_dmp)
             dmps[xx].computeDMP()
 
-            
             trajectories = dmps[xx].getTrajectory()
             zero_length = len(trajectories[0])
-            print "ZERO LENGTH: ",zero_length
 
 
             # Figure out how long the demonstration should be based on max difference (velocity)
@@ -371,7 +201,7 @@ def calculateDMP(demonstration_data, segmentation):
             #########################################################################
 
             max_vel = 0.15 # m/s
-            panda_delta_T = 0.01 # 1 ms # TODO: MOVE TO CONFIG!
+            panda_delta_T = 0.01 # 1 ms
             # TODO: this really should probably be switched back to maximum velocity
 
             if sel_vec[2]==1: # Position control
@@ -427,8 +257,6 @@ def calculateDMP(demonstration_data, segmentation):
             csvfile.write(str(attractor_points[0])+','+str(attractor_points[1])+','+str(attractor_points[2])+','+str(attractor_points[3])+','+str(attractor_points[4])+','+str(attractor_points[5])+','+str(attractor_points[6]))
             csvfile.write('\n')
 
-
-            # TODO: This should be switched to SLERP for Orientation
             # Write all of the trajectory stuff
             for ii in range(0,len(return_forces[0])-1):
                 # print trajectories[0][ii][0]
@@ -436,39 +264,43 @@ def calculateDMP(demonstration_data, segmentation):
                     interp_x = return_forces[0][ii]+(float(jj)/float(num_interp_pts))*(return_forces[0][ii+1]-return_forces[0][ii])
                     interp_y = return_forces[1][ii]+(float(jj)/float(num_interp_pts))*(return_forces[1][ii+1]-return_forces[1][ii])
                     interp_z = return_forces[2][ii]+(float(jj)/float(num_interp_pts))*(return_forces[2][ii+1]-return_forces[2][ii])
+
+                    # TODO: This should be switched to SLERP for Orientation
                     interp_qx = return_forces[3][ii]+(float(jj)/float(num_interp_pts))*(return_forces[3][ii + 1] - return_forces[3][ii])
                     interp_qy = return_forces[4][ii]+(float(jj)/float(num_interp_pts))*(return_forces[4][ii + 1] - return_forces[4][ii])
                     interp_qz = return_forces[5][ii]+(float(jj)/float(num_interp_pts))*(return_forces[5][ii + 1] - return_forces[5][ii])
                     interp_qw = return_forces[6][ii]+(float(jj)/float(num_interp_pts))*(return_forces[6][ii + 1] - return_forces[6][ii])
                     csvfile.write(str(interp_x)+','+str(interp_y)+','+str(interp_z)+','+str(interp_qx)+','+str(interp_qy)+','+str(interp_qz)+','+str(interp_qw))
                     csvfile.write('\n')
+
+            # Write the variance
             csvfile.write('variance' + ',' + '' + ',' + '')
             csvfile.write('\n')
             for ii in range(0,len(return_forces[0])-1):
                 # print trajectories[0][ii][0]
                 for jj in range(0,num_interp_pts):
-                    csvfile.write(str(variances[0])+','+str(variances[1])+','+str(variances[2]))
-                    csvfile.write('\n')
 
-        # print np.shape(trajectories_plotting[2])
-        # print demonstration_data_trimmed[0][:,2]
-        # plot_paths_rviz(demonstration_data_trimmed,trajectories_plotting)
+                    if(variances is not ""):
+                        # Presegmented comes with set level of variances. Otherwise, use based on the data
+                        csvfile.write(str(variances[0])+','+str(variances[1])+','+str(variances[2]))
+                        csvfile.write('\n')
+
+                    else:
+                        # LFD gets variance based on the data
+                        var_x = variance_per_segment[xx][0][ii] + (float(jj) / float(num_interp_pts)) * (
+                                    variance_per_segment[0][0][ii] - variance_per_segment[0][0][ii])
+                        var_y = variance_per_segment[xx][1][ii] + (float(jj) / float(num_interp_pts)) * (
+                                    variance_per_segment[0][1][ii] - variance_per_segment[0][1][ii])
+                        var_z = variance_per_segment[xx][2][ii] + (float(jj) / float(num_interp_pts)) * (
+                                    variance_per_segment[0][2][ii] - variance_per_segment[0][2][ii])
+                        csvfile.write(str(var_x) + ',' + str(var_y) + ',' + str(var_z))
+                        csvfile.write('\n')
 
 
 def main():
     global path0, path1, path2, path3, path4, pathDMP, forceDMP
     rospy.init_node('dmppathlistener', anonymous=True)
-    pathDMP = rospy.Publisher('/dmp/pathdmp', Path, queue_size=1)
-    forceDMP = rospy.Publisher('/dmp/forcedmp', MarkerArray, queue_size=1)
-    path0 = rospy.Publisher('/dmp/path0', Path, queue_size=1)
-    path1 = rospy.Publisher('/dmp/path1', Path, queue_size=1)
-    path2 = rospy.Publisher('/dmp/path2', Path, queue_size=1)
-    path3 = rospy.Publisher('/dmp/path3', Path, queue_size=1)
-    path4 = rospy.Publisher('/dmp/path4', Path, queue_size=1)
-    rospy.Subscriber("/dmp/filepub", String, loadData)
     rospy.Subscriber("/dmp/filepubsegmented", String, loadPresegmented)
-    rospy.Subscriber("/dmp/reset", String, resetDMP)
-    
     rospy.spin()
 
 if __name__ == "__main__":

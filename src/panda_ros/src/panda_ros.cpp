@@ -6,10 +6,12 @@
 #include <nav_msgs/Path.h>
 #include <signal.h>
 #include "PandaController.h"
+#include "Trajectory.h"
 #include "std_msgs/String.h"
 #include "std_msgs/Bool.h"
 #include "geometry_msgs/Pose.h"
 #include "geometry_msgs/Twist.h"
+#include "geometry_msgs/TwistStamped.h"
 #include "geometry_msgs/Wrench.h"
 #include <relaxed_ik/JointAngles.h>
 #include <eigen3/Eigen/Core>
@@ -17,144 +19,279 @@
 #include <csignal>
 #include <deque>
 #include <boost/algorithm/string.hpp>
+#include "panda_ros_msgs/VelocityBoundPath.h"
+#include "panda_ros_msgs/HybridPose.h"
+#include "panda_ros_msgs/JointPose.h"
 
 using namespace std;
 
-void signalHandler(int sig)
-{
-    std::cout << "Interrupt " << sig << " recieved in panda_ros.cpp\n";
-    PandaController::stopControl();
-    ros::NodeHandle n("~");
-    ros::Publisher wrenchPub = n.advertise<geometry_msgs::Wrench>("/panda/wrench", 10);
-    geometry_msgs::Wrench wrench;
-    wrench.force.x = 0;
-    wrench.force.y = 0;
-    wrench.force.z = 0;
-    wrench.torque.x = 0;
-    wrench.torque.y = 0;
-    wrench.torque.z = 0;
-
-    wrenchPub.publish(wrench);   
-    ros::shutdown();
-
-    std::array<double, 6> data = {0.0,0.0,0.0,0.0,0.0,0.0};
-    PandaController::writeCommandedVelocity(data);
-    exit(sig);
+namespace {
+    PandaController::KinematicChain kinematicChain;
+    PandaController::EELink eeLink;
 }
 
-void updateCallbackCartPos(const geometry_msgs::Pose::ConstPtr& msg){
+ros::Publisher g_eventPub {};
+ros::Publisher g_wrenchPub {};
+ros::Publisher g_jointPub {};
+
+void setKinematicChain(const std_msgs::String& msg) {
+    if (msg.data == "pandaFlange") {
+        kinematicChain = PandaController::KinematicChain::PandaFlange;
+    }
+}
+
+void setEELink(const std_msgs::String& msg) {
+    if (msg.data == "pandaGripper") {
+        eeLink = PandaController::EELink::PandaGripper;
+    }
+}
+
+void setCartPos(const geometry_msgs::Pose::ConstPtr& msg){
     if (PandaController::isRunning()){
-        std::array<double, 6> position;
-        position[0] = msg->position.x;
-        position[1] = msg->position.y;
-        position[2] = msg->position.z;
-        //TODO update with quat
-        position[3] = 0;
-        position[4] = 0;
-        position[5] = 0;
-        
+        PandaController::setKinematicChain(kinematicChain, eeLink);
+        PandaController::EulerAngles angles = 
+            PandaController::quaternionToEuler(Eigen::Quaternion<double>(
+                msg->orientation.w,
+                msg->orientation.x,
+                msg->orientation.y,
+                msg->orientation.z
+            ));
+        Eigen::VectorXd position(6);
+        position << 
+            msg->position.x,
+            msg->position.y,
+            msg->position.z,
+            angles.roll,
+            angles.pitch,
+            angles.yaw;
         PandaController::writeCommandedPosition(position);
     }
 }
 
-void updateCallbackPath(const nav_msgs::Path::ConstPtr& msg) {
+void setStampedTrajectory(vector<Eigen::VectorXd> path, vector<double> timestamps) {
+    PandaController::setKinematicChain(kinematicChain, eeLink);
+    PandaController::setTrajectory(PandaController::Trajectory(
+        PandaController::TrajectoryType::Cartesian, 
+        [path, timestamps]() {
+            double now_ms = std::chrono::system_clock::now().time_since_epoch() / std::chrono::milliseconds(1);
+            int goal_index = path.size();
+            for(int i = 0; i < path.size(); i++) {
+                if (timestamps[i] > now_ms) {
+                    goal_index = i;
+                    break;
+                }
+            }
+
+            Eigen::VectorXd goal(6);
+            Eigen::Quaterniond goal_q;
+
+            if (goal_index == 0) {
+                goal.topLeftCorner(3, 1) = path[0].topLeftCorner(3,1);
+                goal_q = Eigen::Quaterniond(path[0].bottomRightCorner(4,1).data());
+            } else if (goal_index == path.size()) {
+                goal.topLeftCorner(3, 1) = path[goal_index-1].topLeftCorner(3,1);
+                goal_q = Eigen::Quaterniond(path[goal_index-1].bottomRightCorner(4,1).data());
+            } else {
+                double t = (now_ms - timestamps[goal_index-1]) / (timestamps[goal_index] - timestamps[goal_index-1]);
+                goal.topLeftCorner(3, 1) = path[goal_index-1].topLeftCorner(3,1) + t * (path[goal_index].topLeftCorner(3,1) - path[goal_index-1].topLeftCorner(3,1));
+                goal_q = Eigen::Quaterniond(path[goal_index-1].bottomRightCorner(4,1).data()).slerp(t, Eigen::Quaterniond(path[goal_index].bottomRightCorner(4,1).data()));
+            }
+            auto goal_angles = PandaController::quaternionToEuler(goal_q.normalized());
+            goal[3] = goal_angles.roll;
+            goal[4] = goal_angles.pitch;
+            goal[5] = goal_angles.yaw;
+            return goal;
+        }
+    ));
+}
+
+void setStampedPath(const nav_msgs::Path::ConstPtr& msg) {
     if (PandaController::isRunning()){
-        std::array<double, 7> commandedPath[msg->poses.size()]; 
+        Eigen::VectorXd current_position(7);
+        current_position.topLeftCorner(3, 1) = PandaController::getEEPos();
+        current_position.bottomRightCorner(4, 1) = PandaController::getEEOrientation().coeffs();
+        vector<Eigen::VectorXd> path{current_position};//{PandaController::getEEVector()};
+        double now = std::chrono::system_clock::now().time_since_epoch() / std::chrono::milliseconds(1);
+        vector<double> timestamps{now};
         for (size_t i = 0; i < msg->poses.size(); i++) {
             auto poseStamped = msg->poses[i];
             long secs = poseStamped.header.stamp.sec;
             long nsecs = poseStamped.header.stamp.nsec;
-
-            std::array<double, 7> command;
-            command[0] = secs * 1000 + nsecs / 1000000;
-            
-            command[1] = poseStamped.pose.position.x;
-            command[2] = poseStamped.pose.position.y;
-            command[3] = poseStamped.pose.position.z;
-            PandaController::EulerAngles angles = 
-                PandaController::quaternionToEuler(Eigen::Quaternion<double>(
-                    poseStamped.pose.orientation.w,
+            timestamps.push_back(secs * 1000 + nsecs / 1000000);
+            path.push_back(
+                (Eigen::VectorXd(7) << 
+                    poseStamped.pose.position.x,
+                    poseStamped.pose.position.y,
+                    poseStamped.pose.position.z,
                     poseStamped.pose.orientation.x,
                     poseStamped.pose.orientation.y,
-                    poseStamped.pose.orientation.z
-                ));
-            command[4] = angles.roll;
-            command[5] = angles.pitch;
-            command[6] = angles.yaw;
-            commandedPath[i] = command;
+                    poseStamped.pose.orientation.z,
+                    poseStamped.pose.orientation.w).finished()
+            );
         }
-        
-        PandaController::writeCommandedPath(commandedPath, msg->poses.size());
+        setStampedTrajectory(path, timestamps);
     }
 }
 
-void updateCallbackControlCamera(const std_msgs::Bool::ConstPtr & msg) {
-    PandaController::setControlCamera(msg->data);
-}
+void setVelocityBoundPath(const panda_ros_msgs::VelocityBoundPath::ConstPtr& msg) {
+    if (PandaController::isRunning()) {
+        Eigen::VectorXd current_position(7);
+        current_position.topLeftCorner(3, 1) = PandaController::getEEPos();
+        current_position.bottomRightCorner(4, 1) = PandaController::getEEOrientation().coeffs();
+        double maxV = msg->maxV;
 
-void updateCallbackJointPos(const relaxed_ik::JointAngles::ConstPtr& msg){
-    if (PandaController::isRunning()){
-        std::array<double, 7> position;
-        position[0] = msg->angles.data[0];
-        position[1] = msg->angles.data[1];
-        position[2] = msg->angles.data[2];
-        position[3] = msg->angles.data[3];
-        position[4] = msg->angles.data[4];
-        position[5] = msg->angles.data[5];
-        position[6] = msg->angles.data[6];
-        PandaController::writeJointAngles(position);
+        double now = std::chrono::system_clock::now().time_since_epoch() / std::chrono::milliseconds(1);
+        vector<Eigen::VectorXd> path{current_position};
+        vector<double> timestamps{now};
+        for (size_t i = 0; i < msg->poses.size(); i++) {
+            auto pose = msg->poses[i];
+            Eigen::VectorXd command(7);
+            command << 
+                pose.position.x,
+                pose.position.y,
+                pose.position.z,
+                pose.orientation.x,
+                pose.orientation.y,
+                pose.orientation.z,
+                pose.orientation.w;
+
+            double distance = sqrt(
+                (command[0] - current_position[0]) * (command[0] - current_position[0]) + 
+                (command[1] - current_position[1]) * (command[1] - current_position[1]) + 
+                (command[2] - current_position[2]) * (command[2] - current_position[2])
+            );
+            double timestamp = now + distance / (maxV / 1000);
+            timestamps.push_back(timestamp);
+            path.push_back(command);
+            current_position = command;
+            now = timestamp;
+        }
+
+        setStampedTrajectory(path, timestamps);
     }
 }
 
-void updateCallbackJointVel(const relaxed_ik::JointAngles::ConstPtr& msg){
-    //TODO
-    return;
-}
+void setVelocity(const geometry_msgs::TwistStamped::ConstPtr& msg) {
+    if (PandaController::isRunning()) {
+        PandaController::setKinematicChain(kinematicChain, eeLink);
+        auto twist = msg->twist;
 
-void updateCallbackCartVel(const geometry_msgs::Twist::ConstPtr& msg){
-    if (PandaController::isRunning()){
-        std::array<double, 6> velocity;
-        velocity[0] = msg->linear.x;
-        velocity[1] = msg->linear.y;
-        velocity[2] = msg->linear.z;
-        velocity[3] = msg->angular.x;
-        velocity[4] = msg->angular.y;
-        velocity[5] = msg->angular.z;
-        PandaController::writeCommandedVelocity(velocity);
+        Eigen::VectorXd velocity;
+        velocity << 
+            twist.linear.x,
+            twist.linear.y,
+            twist.linear.z,
+            twist.angular.x,
+            twist.angular.y,
+            twist.angular.z;
+        double end_time = msg->header.stamp.toSec();
+
+        PandaController::setTrajectory(PandaController::Trajectory(
+            PandaController::TrajectoryType::Velocity, 
+            [velocity, end_time]() {
+                if (ros::Time::now().toSec() > end_time){
+                    Eigen::VectorXd velocity(6);
+                    velocity.setZero();
+                    return velocity;
+                }
+                else
+                    return velocity;
+            }
+        ));
     }
 }
 
-void updateCallbackSelectionVector(const geometry_msgs::Vector3::ConstPtr& msg){
-    if (PandaController::isRunning()){
-        std::array<double, 3> vec;
-        vec[0] = msg->x;
-        vec[1] = msg->y;
-        vec[2] = msg->z;
-        PandaController::writeSelectionVector(vec);
+void setJointPose(const panda_ros_msgs::JointPose::ConstPtr& msg) {
+    if (PandaController::isRunning()) {
+        PandaController::setKinematicChain(kinematicChain, eeLink);
+        double start_time = ros::Time::now().toSec();
+        double end_time = msg->header.stamp.toSec();
+        Eigen::VectorXd goal(7);
+        goal <<
+            msg->joint_pose[0],
+            msg->joint_pose[1],
+            msg->joint_pose[2],
+            msg->joint_pose[3],
+            msg->joint_pose[4],
+            msg->joint_pose[5],
+            msg->joint_pose[6];
+
+        PandaController::setTrajectory(PandaController::Trajectory(
+            PandaController::TrajectoryType::Joint, 
+            [goal, start_time, end_time]() {
+                double progress = (ros::Time::now().toSec() - start_time) / (end_time - start_time);
+                franka::RobotState robot_state = PandaController::readRobotState();
+                Eigen::VectorXd q_v = Eigen::Map<Eigen::VectorXd>(robot_state.q.data(), 7);
+                if (progress > 1){
+                    return q_v;
+                }
+                else
+                    return (q_v + (goal - q_v) * progress).eval();
+            }
+        ));
+    }
+}
+
+void setHybrid(const panda_ros_msgs::HybridPose::ConstPtr& msg){
+    if (PandaController::isRunning()){    
+        PandaController::setKinematicChain(kinematicChain, eeLink);
+        Eigen::VectorXd command(23);
+        command << 
+            //Position
+            msg->pose.position.x,
+            msg->pose.position.y,
+            msg->pose.position.z,
+            msg->pose.orientation.w,
+            msg->pose.orientation.x,
+            msg->pose.orientation.y,
+            msg->pose.orientation.z,
+            //Selection vector
+            double(msg->sel_vector[0]),
+            double(msg->sel_vector[1]),
+            double(msg->sel_vector[2]),
+            double(msg->sel_vector[3]),
+            double(msg->sel_vector[4]),
+            double(msg->sel_vector[5]),
+            //Wrench
+            msg->wrench.force.x,
+            msg->wrench.force.y,
+            msg->wrench.force.z,
+            msg->wrench.torque.x,
+            msg->wrench.torque.y,
+            msg->wrench.torque.z,
+            //Constraint frame
+            msg->constraint_frame.x,
+            msg->constraint_frame.y,
+            msg->constraint_frame.z,
+            msg->constraint_frame.w;
+        PandaController::writeHybridCommand(command);
     }
 }
 
 void callbackCommands(const std_msgs::String& msg){
     std::vector<std::string> command;
     boost::split(command, msg.data, [](char c){return c == ';';});
+    std_msgs::String result;
     if(msg.data == "grasp"){
         cout<<"Grasping"<<endl;
-        PandaController::graspObject();
+        result.data = "grasp_finished";
+        PandaController::graspObject([result](){g_eventPub.publish(result);});
     }
     if(msg.data == "release"){
-        PandaController::releaseObject();
+        result.data = "release_finished";
+        PandaController::releaseObject([result](){g_eventPub.publish(result);});
     }
     if(msg.data == "toggleGrip") {
         PandaController::toggleGrip();
     }
     if(command[0] == "setMaxForce") {
         cout<<"Setting max force to "<<command[1]<<endl;
-        PandaController::writeCommandedFT({0,0,-stod(command[1]),0,0,0});
-    }
-    
+        PandaController::writeMaxForce(stod(command[1]));
+        //PandaController::writeCommandedFT({0,0,-stod(command[1]),0,0,0});
+    }   
 }
 
-void publishJointState(franka::RobotState robot_state, ros::Publisher jointPub){
+void publishJointState(franka::RobotState robot_state){
     const vector<string> joint_names{"panda_joint1", "panda_joint2","panda_joint3","panda_joint4","panda_joint5","panda_joint6","panda_joint7","panda_finger_joint1","panda_finger_joint2"};
     franka::GripperState gripperState = PandaController::readGripperState();
 
@@ -175,7 +312,7 @@ void publishJointState(franka::RobotState robot_state, ros::Publisher jointPub){
     states.position[joint_names.size()-2] = gripperState.width/2.;
     states.position[joint_names.size()-1] = gripperState.width/2.;
     
-    jointPub.publish(states);
+    g_jointPub.publish(states);
 }
 
 void publishTf(franka::RobotState robot_state){
@@ -204,7 +341,7 @@ void publishTf(franka::RobotState robot_state){
     br.sendTransform(transformStamped);
 }
 
-void publishWrench(franka::RobotState robot_state, ros::Publisher wrenchPub){
+void publishWrench(franka::RobotState robot_state){
     std::array<double, 6> forces;
     //forces = robot_state.O_F_ext_hat_K;
     forces = PandaController::readFTForces();
@@ -217,81 +354,47 @@ void publishWrench(franka::RobotState robot_state, ros::Publisher wrenchPub){
     wrench.torque.y = forces[4];
     wrench.torque.z = forces[5];
 
-    wrenchPub.publish(wrench);
+    g_wrenchPub.publish(wrench);
 }
 
-void publishState(ros::Publisher wrenchPub, ros::Publisher jointPub){
+void publishState(){
     franka::RobotState robot_state = PandaController::readRobotState();
-    publishJointState(robot_state, jointPub);
+    publishJointState(robot_state);
     publishTf(robot_state);
-    publishWrench(robot_state, wrenchPub);
+    publishWrench(robot_state);
+}
+
+void signalHandler(int sig)
+{
+    PandaController::stopControl();
+    ros::shutdown();
+    exit(sig);
 }
 
 int main(int argc, char **argv) {
     ros::init(argc, argv, "PandaListener");
     ros::NodeHandle n("~");
-    std::string mode_str;
-    //Always specify parameter, it uses cached parameter instead of default value.
-    n.param<std::string>("control_mode", mode_str, "none");
-    PandaController::ControlMode mode;
-
-    if(mode_str == "cartesian_velocity")
-        mode = PandaController::ControlMode::CartesianVelocity;
-    if(mode_str == "joint_velocity")
-        mode = PandaController::ControlMode::JointVelocity;
-    if(mode_str == "cartesian_position")
-        mode = PandaController::ControlMode::CartesianPosition;
-    if(mode_str == "joint_position")
-        mode = PandaController::ControlMode::JointPosition;
-    if(mode_str == "hybrid")
-        mode = PandaController::ControlMode::HybridControl;
-    if(mode_str == "none")
-        mode = PandaController::ControlMode::None;
-        
+    
     //Setup the signal handler for exiting, must be called after ros is intialized
     signal(SIGINT, signalHandler); 
 
-    PandaController::initPandaController(mode);
+    PandaController::initPandaController();
     
     ros::Subscriber sub_commands = n.subscribe("/panda/commands", 10, callbackCommands);
-    ros::Subscriber sub_position;
-    ros::Subscriber sub_trajectory;
-    ros::Subscriber sub_controlCamera;
-    ros::Subscriber sub_selectionVector;
-    switch(mode){
-        case PandaController::ControlMode::CartesianVelocity:
-            sub_position = n.subscribe("/panda/cart_vel", 10, updateCallbackCartVel);
-            break;
-        case PandaController::ControlMode::JointVelocity:
-            //TODO: we don't actually have anything that uses this, not set up correctly in PandaController
-            sub_position = n.subscribe("/relaxed_ik/joint_angle_solutions", 10, updateCallbackJointVel);
-            break;
-        case PandaController::ControlMode::CartesianPosition:
-            sub_position = n.subscribe("/panda/cart_pose", 10, updateCallbackCartPos);
-            sub_trajectory = n.subscribe("/panda/path", 10, updateCallbackPath);
-            sub_controlCamera = n.subscribe("/panda/controlCamera", 10, updateCallbackControlCamera);
-            
-            break;
-        case PandaController::ControlMode::HybridControl:
-            sub_position = n.subscribe("/panda/cart_pose", 10, updateCallbackCartPos);
-            sub_trajectory = n.subscribe("/panda/path", 10, updateCallbackPath);
-            sub_controlCamera = n.subscribe("/panda/controlCamera", 10, updateCallbackControlCamera);
-            sub_selectionVector = n.subscribe("/panda/selection_vector", 10, updateCallbackSelectionVector);
-            PandaController::writeCommandedFT({0,0,-4,0,0,0});
-            PandaController::writeSelectionVector({1,1,1});
-            
-            break;
-        case PandaController::ControlMode::JointPosition:
-            sub_position = n.subscribe("/panda/joint_angles", 10, updateCallbackJointPos);
-            break;
-        case PandaController::ControlMode::None:
-            break;     
-    }
-    ros::Publisher wrenchPub = n.advertise<geometry_msgs::Wrench>("/panda/wrench", 10);
-    ros::Publisher jointPub = n.advertise<sensor_msgs::JointState>("/panda/joint_states", 1);
+    ros::Subscriber sub_position = n.subscribe("/panda/cart_pose", 10, setCartPos);
+    ros::Subscriber sub_trajectory = n.subscribe("/panda/path", 10, setStampedPath);
+    ros::Subscriber sub_vel_trajectory = n.subscribe("/panda/velocity_bound_path", 10, setVelocityBoundPath);
+    ros::Subscriber sub_kinematicChain = n.subscribe("/panda/set_kinematic_chain", 10, setKinematicChain);
+    ros::Subscriber sub_velocity = n.subscribe("/panda/cart_velocity", 10, setVelocity);
+    ros::Subscriber sub_joint_pose = n.subscribe("/panda/joint_pose", 10, setJointPose);
+    ros::Subscriber sub_hybrid = n.subscribe("/panda/hybrid_pose", 10, setHybrid);
+
+    g_wrenchPub = n.advertise<geometry_msgs::Wrench>("/panda/wrench", 10);
+    g_jointPub = n.advertise<sensor_msgs::JointState>("/panda/joint_states", 1);
+    g_eventPub = n.advertise<std_msgs::String>("/panda/events", 1);
     ros::Rate loopRate(1000);
     while (ros::ok() && PandaController::isRunning()) {
-        publishState(wrenchPub,jointPub);
+        publishState();
         ros::spinOnce();
         loopRate.sleep();
     }

@@ -3,11 +3,11 @@ cd src/PandaController
 mkdir build
 cd build
 cmake ..
-make -j12
 make install
 cd ../../..
-catkin_make --only-pkg-with-deps relaxed_ik -j12
-catkin_make --only-pkg-with-deps panda_ros -j12
-catkin_make --only-pkg-with-deps dmp_deformations -j12
-catkin_make --only-pkg-with-deps inputs_ros -j12
-catkin_make --only-pkg-with-deps controller -j12
+catkin build relaxed_ik
+catkin build panda_ros_msgs
+catkin build panda_ros
+catkin build dmp_deformations
+catkin build inputs_ros
+catkin build controller

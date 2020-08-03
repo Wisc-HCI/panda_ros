@@ -6,7 +6,7 @@ SET(CMAKE_SKIP_RPATH False)
 SET(CMAKE_INSTALL_RPATH ..)
 
 
-find_package(catkin REQUIRED COMPONENTS roscpp rospy tf2_ros geometry_msgs sensor_msgs std_msgs genmsg relaxed_ik)
+find_package(catkin REQUIRED COMPONENTS roscpp rospy roslib tf2_ros geometry_msgs sensor_msgs std_msgs genmsg relaxed_ik panda_ros_msgs)
 catkin_package()
 find_package(Eigen3 REQUIRED)
 find_library(DHDC libdhd.so.3.8.0 REQUIRED)
@@ -18,7 +18,8 @@ find_library(
     NAMES PandaController
     PATHS ${CMAKE_CURRENT_SOURCE_DIR}/../../devel/lib
 )
-
+find_library(BSpline libBSpline.so REQUIRED)
+find_library(NLopt libnlopt.so REQUIRED)
 
 message(STATUS ${pandaController})
 find_library(
@@ -26,36 +27,27 @@ find_library(
     NAMES common 
     PATHS ${CMAKE_CURRENT_SOURCE_DIR}/../../devel/lib
 )
-message(STATUS ${pandaCommon})
 
-add_executable(forcedimensionDMP src/ForceDimension_DMP_ros.cpp)
-target_include_directories(forcedimensionDMP PUBLIC ${catkin_INCLUDE_DIRS} ${EIGEN3_INCLUDE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/include ${CMAKE_CURRENT_SOURCE_DIR}/../../devel/include)
-target_link_libraries(forcedimensionDMP ${catkin_LIBRARIES} ${pandaController} ${pandaCommon} franka ${DRDC} ${DHDC})
+add_executable(fddeformationController src/ForceDimensionDeformationController.cpp)
+target_include_directories(fddeformationController PUBLIC ${catkin_INCLUDE_DIRS} ${EIGEN3_INCLUDE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/include ${CMAKE_CURRENT_SOURCE_DIR}/../../devel/include)
+target_link_libraries(fddeformationController ${catkin_LIBRARIES} ${DHDC} ${BSpline} ${NLopt})
 
-add_executable(falconDMP src/Falcon_DMP_ros.cpp)
-target_include_directories(falconDMP PUBLIC ${catkin_INCLUDE_DIRS} ${EIGEN3_INCLUDE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/include ${CMAKE_CURRENT_SOURCE_DIR}/../../devel/include)
-target_link_libraries(falconDMP ${catkin_LIBRARIES} ${LIBNIFALCON} ${pandaController} ${pandaCommon} franka ${DRDC} ${DHDC})
+add_executable(falcondeformationController src/FalconDeformationController.cpp)
+target_include_directories(falcondeformationController PUBLIC ${catkin_INCLUDE_DIRS} ${EIGEN3_INCLUDE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/include ${CMAKE_CURRENT_SOURCE_DIR}/../../devel/include)
+target_link_libraries(falcondeformationController ${catkin_LIBRARIES} ${LIBNIFALCON} ${DHDC} ${BSpline} ${NLopt})
 
-add_executable(falconVREPDMP src/Falcon_DMP_VREP_ros.cpp)
-target_include_directories(falconVREPDMP PUBLIC ${catkin_INCLUDE_DIRS} ${EIGEN3_INCLUDE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/include ${CMAKE_CURRENT_SOURCE_DIR}/../../devel/include)
-target_link_libraries(falconVREPDMP ${catkin_LIBRARIES} ${LIBNIFALCON} ${pandaController} ${pandaCommon} franka ${DRDC} ${DHDC})
+add_executable(fdbilateral src/ForceDimension_Bilateral.cpp)
+target_include_directories(fdbilateral PUBLIC ${catkin_INCLUDE_DIRS} ${EIGEN3_INCLUDE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/include ${CMAKE_CURRENT_SOURCE_DIR}/../../devel/include)
+target_link_libraries(fdbilateral ${catkin_LIBRARIES} ${DHDC})
 
-add_executable(FDdeformations src/ForceDimension_Deformation_Emmanuel.cpp)
-target_include_directories(FDdeformations PUBLIC ${catkin_INCLUDE_DIRS} ${EIGEN3_INCLUDE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/include ${CMAKE_CURRENT_SOURCE_DIR}/../../devel/include)
-target_link_libraries(FDdeformations ${catkin_LIBRARIES} ${DRDC} ${DHDC})
-
-install(TARGETS FDdeformations
-  RUNTIME DESTINATION lib/FDdeformations
+install(TARGETS fddeformationController
+  RUNTIME DESTINATION lib/fddeformations
 )
 
-install(TARGETS falconDMP
-  RUNTIME DESTINATION lib/falconDMP
+install(TARGETS falcondeformationController
+  RUNTIME DESTINATION lib/falcondeformations
 )
 
-install(TARGETS forcedimensionDMP
-  RUNTIME DESTINATION lib/forcedimensionDMP
-)
-
-install(TARGETS falconVREPDMP
-  RUNTIME DESTINATION lib/falconVREPDMP
+install(TARGETS fdbilateral
+  RUNTIME DESTINATION lib/fdbilateral
 )

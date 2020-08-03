@@ -12,6 +12,19 @@ import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 from matplotlib import cm
 import math
+import csv
+from scipy.optimize import minimize, Bounds
+import rospkg
+
+
+def exp_map_np(w):
+    w = np.array(w)
+    w = w.reshape(3, 1)
+    theta = (w[0] ** 2 + w[1] ** 2 + w[2] ** 2) ** 0.5 + 1e-30
+    w = w / theta
+    w_hat = np.array([[0, -w[2], w[1]], [w[2], 0, -w[0]], [-w[1], w[0], 0]])
+    return np.eye(3) + w_hat * np.sin(theta) + np.dot(w_hat, w_hat) * (1 - np.cos(theta))
+
 
 class BSplineSurface:
 
@@ -74,7 +87,7 @@ class BSplineSurface:
         n_hat = np.cross(r_u_norm,r_v_norm)
 
         # return the calculated point
-        return r, n_hat
+        return r, n_hat, r_u_norm, r_v_norm
 
     def getN(self,i,p,x,t):
         # Recursive function that calculates the basis
@@ -98,8 +111,64 @@ class BSplineSurface:
                 part_b = (t[i+p+1]-x)/(t[i+p+1]-t[i+1])*self.getN(i+1,p-1,x,t)
             return part_a + part_b
 
+    def obj_closest_surface(self, x, surface, xf, yf, zf):
+        r, n_hat, r_u_norm, r_v_norm = surface.calculate_surface_point(x[0], x[1])
+        return (r[0] - xf) * (r[0] - xf) + (r[1] - yf) * (r[1] - yf) + (r[2] - zf) * (r[2] - zf)
 
-    #### Allow for calculation of an entire path perhaps?
+    def getClosestParams(self, x, y, z, u, v):
+        x0 = np.array([u, v])
+        bounds = Bounds([0.0, 0.0], [1.0, 1.0])
+        res = minimize(self.obj_closest_surface, x0, method='L-BFGS-B',
+                       options={'disp': False}, bounds=bounds, args=(self, x, y, z))
+        return res.x[0], res.x[1]
+
+    def writeSurface(self,filename):
+        rospack = rospkg.RosPack()
+        path_devel = rospack.get_path('dmp_deformations') + "/../../devel/lib/dmp_deformations/"
+        with open(path_devel+filename+'.csv', 'w') as csvfile:
+            # Only parameters needed are degree and control points
+            csvfile.write(str(self.k) + ',' + str(self.m) + ',' + str(self.n))
+            csvfile.write('\n')
+
+            # Load all of the control points
+            for ii in range(0, self.m + 1):
+                for jj in range(0, self.n + 1):
+                    csvfile.write(str(self.controls_pts[ii,jj,0])+' '+str(self.controls_pts[ii,jj,1])+' '+
+                                  str(self.controls_pts[ii,jj,2])+',')
+                csvfile.write('\n')
+
+    def loadSurface(self, filename):
+        rospack = rospkg.RosPack()
+        path_devel = rospack.get_path('dmp_deformations') + "/../../devel/lib/dmp_deformations/"
+        with open(path_devel + filename + '.csv') as csvfile:
+            surfacereader = csv.reader(csvfile,delimiter=',')
+
+            # Load the parameters and control points
+            row = 0
+            for row_temp in surfacereader:
+                if row==0:
+                    k = int(row_temp[0])
+                    num_control_u = int(row_temp[1])
+                    num_control_v = int(row_temp[2])
+                    control_pts = np.zeros((num_control_u+1,num_control_v+1,3))
+                else:
+                    col=0
+                    for ii in range(0,num_control_v+1):
+                        point = row_temp[ii]
+                        values = point.split(' ')
+                        # one extra row for parameters
+                        control_pts[row-1,col,0]=float(values[0])
+                        control_pts[row-1,col,1]=float(values[1])
+                        control_pts[row-1,col,2]=float(values[2])
+                        col+=1
+                row+=1
+
+            # initialize the B-Spline
+            self.initialize(k=k,control_pts=control_pts)
+
+    def learnSurfaceFromPC(self):
+        print("LOLZ. NOT YET")
+
 
     #### TODO: work with Emmanuel to come up with the requirements
 
@@ -107,8 +176,186 @@ class BSplineSurface:
 
     #### ADD SURFACE ICP FITTING BASED ON KNOWN MODEL AND POINT CLOUD?
 
-    #### NEED TO ADD CLOSEST SURFACE PROJECTION FOR ANOTHER ARBITRARY 3D POINT
 
+
+
+def createCurved():
+    x = np.linspace(0.15, -0.35, 25)
+    y = np.linspace(0.05, -0.25, 25)
+    xv, yv = np.meshgrid(x, y)
+    z = 0.865+0.05*np.sin(15*(0.15-xv))+0.06*np.sin((np.pi/0.3)*(0.05-yv)-np.pi/2)
+
+    control_pts = np.transpose([xv, yv, z])
+    # control_pts = np.ones((5,5,3))
+    print("Control Points:")
+    print(np.shape(control_pts))
+    print(control_pts[0,24,:])
+
+    # Create a B-Spline instance
+    test_curve = BSplineSurface()
+    test_curve.initialize(k=3, control_pts=control_pts)
+
+    a,b,c,d = test_curve.calculate_surface_point(0.2, 0.8)
+    print("PT:",a)
+
+    # Evaluate a new point
+    # eval_pt, n_hat = test_curve.calculate_surface_point(0.5, 0.25)
+    # print "NHAT: ", n_hat
+
+    # 3D plotting code
+    ax = plt.gca(projection='3d')
+    ax.scatter(xv.flatten(), yv.flatten(), z.flatten(), color='blue')
+    ax.scatter(a[0],a[1],a[2],color='red')
+    # ax.scatter(eval_pt[0], eval_pt[1], eval_pt[2], color='red', s=50)
+    # ax.quiver(eval_pt[0], eval_pt[1], eval_pt[2], n_hat[0], n_hat[1], n_hat[2], length=0.1, normalize=True)
+    # ax.set_xlim3d(0, 1)
+    # ax.set_ylim3d(0, 1)
+    # ax.set_zlim3d(0, 1)
+
+    # # 2D plotting code
+    # ax = plt.gca()
+    # ax.scatter(xv.flatten(), z.flatten(), color='blue')
+    # ax.scatter(eval_pt[0], eval_pt[2], color='red', s=50)
+    # ax.quiver(eval_pt[0], eval_pt[2],n_hat[0], n_hat[2])
+
+    plt.show()
+
+    test_curve.writeSurface('curved')
+
+def createAngledPlane():
+    a = np.linspace(-0.4, 0.4, 25)
+    b = np.linspace(-0.4, 0.4, 25)
+    control_pts = np.zeros((25,25,3))
+    for aa in range(len(a)):
+        for bb in range(len(b)):
+            control_pts[aa,bb,:]=np.matmul(exp_map_np([1.37542454, 0.37261167, 0.0]),np.array([a[aa],b[bb],-0.2968528]))
+
+    # control_pts = np.ones((5,5,3))
+    print("Control Points:")
+    print(np.shape(control_pts))
+    print(control_pts[0, 24, :])
+
+    # Create a B-Spline instance
+    test_curve = BSplineSurface()
+    test_curve.initialize(k=3, control_pts=control_pts)
+
+    a, b, c, d = test_curve.calculate_surface_point(0.3, 0.6)
+    print("PT:", a)
+
+    # Evaluate a new point
+    # eval_pt, n_hat = test_curve.calculate_surface_point(0.5, 0.25)
+    # print "NHAT: ", n_hat
+
+    # 3D plotting code
+    ax = plt.gca(projection='3d')
+    ax.scatter(control_pts[:,:,0], control_pts[:,:,1], control_pts[:,:,2], color='blue')
+    ax.scatter(.0080, .34688, .215, color='red')
+
+    ut,vt = test_curve.getClosestParams(.0080, .34688, .215,0.5,0.5)
+    print("UV:",ut," ",vt)
+
+    # ax.scatter(eval_pt[0], eval_pt[1], eval_pt[2], color='red', s=50)
+    # ax.quiver(eval_pt[0], eval_pt[1], eval_pt[2], n_hat[0], n_hat[1], n_hat[2], length=0.1, normalize=True)
+    # ax.set_xlim3d(0, 1)
+    # ax.set_ylim3d(0, 1)
+    # ax.set_zlim3d(0, 1)
+
+    # # 2D plotting code
+    # ax = plt.gca()
+    # ax.scatter(xv.flatten(), z.flatten(), color='blue')
+    # ax.scatter(eval_pt[0], eval_pt[2], color='red', s=50)
+    # ax.quiver(eval_pt[0], eval_pt[2],n_hat[0], n_hat[2])
+
+    plt.show()
+
+    test_curve.writeSurface('plane')
+
+def createTable():
+    x = np.linspace(0.32, -0.68, 25)
+    y = np.linspace(0.18, -0.32, 25)
+    xv, yv = np.meshgrid(x, y)
+    z = 0.795+0.0*xv+0.0*yv
+
+    control_pts = np.transpose([xv, yv, z])
+    # control_pts = np.ones((5,5,3))
+    print("Control Points:")
+    print(np.shape(control_pts))
+    print(control_pts[0,24,:])
+
+    # Create a B-Spline instance
+    test_curve = BSplineSurface()
+    test_curve.initialize(k=3, control_pts=control_pts)
+
+    a,b,c,d = test_curve.calculate_surface_point(0.3, 0.6)
+    print("PT:",a)
+
+    # Evaluate a new point
+    # eval_pt, n_hat = test_curve.calculate_surface_point(0.5, 0.25)
+    # print "NHAT: ", n_hat
+
+    # 3D plotting code
+    ax = plt.gca(projection='3d')
+    ax.scatter(xv.flatten(), yv.flatten(), z.flatten(), color='blue')
+    ax.scatter(a[0],a[1],a[2],color='red')
+    # ax.scatter(eval_pt[0], eval_pt[1], eval_pt[2], color='red', s=50)
+    # ax.quiver(eval_pt[0], eval_pt[1], eval_pt[2], n_hat[0], n_hat[1], n_hat[2], length=0.1, normalize=True)
+    # ax.set_xlim3d(0, 1)
+    # ax.set_ylim3d(0, 1)
+    # ax.set_zlim3d(0, 1)
+
+    # # 2D plotting code
+    # ax = plt.gca()
+    # ax.scatter(xv.flatten(), z.flatten(), color='blue')
+    # ax.scatter(eval_pt[0], eval_pt[2], color='red', s=50)
+    # ax.quiver(eval_pt[0], eval_pt[2],n_hat[0], n_hat[2])
+
+    plt.show()
+
+    test_curve.writeSurface('table')
+
+def createBoeing():
+    x = np.linspace(0.0, 0.2032, 30)
+    y = np.linspace(0.0, 0.2032, 30)
+    xv, yv = np.meshgrid(x, y)
+    z = 0.0762+0.0*xv+0.0*yv
+    z[14:,14:]=0.0762/2
+
+    control_pts = np.transpose([xv, yv, z])
+    # control_pts = np.ones((5,5,3))
+    print("Control Points:")
+    print(np.shape(control_pts))
+    print(control_pts[0,24,:])
+
+    # Create a B-Spline instance
+    test_curve = BSplineSurface()
+    test_curve.initialize(k=3, control_pts=control_pts)
+
+    a,b,c,d = test_curve.calculate_surface_point(0.3, 0.6)
+    print("PT:",a)
+
+    # Evaluate a new point
+    # eval_pt, n_hat = test_curve.calculate_surface_point(0.5, 0.25)
+    # print "NHAT: ", n_hat
+
+    # 3D plotting code
+    ax = plt.gca(projection='3d')
+    ax.scatter(xv.flatten(), yv.flatten(), z.flatten(), color='blue')
+    ax.scatter(a[0],a[1],a[2],color='red')
+    # ax.scatter(eval_pt[0], eval_pt[1], eval_pt[2], color='red', s=50)
+    # ax.quiver(eval_pt[0], eval_pt[1], eval_pt[2], n_hat[0], n_hat[1], n_hat[2], length=0.1, normalize=True)
+    # ax.set_xlim3d(0, 1)
+    # ax.set_ylim3d(0, 1)
+    # ax.set_zlim3d(0, 1)
+
+    # # 2D plotting code
+    # ax = plt.gca()
+    # ax.scatter(xv.flatten(), z.flatten(), color='blue')
+    # ax.scatter(eval_pt[0], eval_pt[2], color='red', s=50)
+    # ax.quiver(eval_pt[0], eval_pt[2],n_hat[0], n_hat[2])
+
+    plt.show()
+
+    test_curve.writeSurface('boeinglayup')
 
 def testing():
     # Create surface test data
@@ -147,9 +394,16 @@ def testing():
 
     plt.show()
 
+    test_curve.writeSurface('test')
+
 def unit_testing():
     test_curve = BSplineSurface()
-    test_curve.getN(4,1,0.0,np.array([0.0, 0.0, 0.0, 1/3, 2/3, 1.0, 1.0, 1.0]))
+    print(test_curve.getN(0,2,0.25,np.array([0.0, 0.0, 0.0, float(1.0/3), float(2.0/3), 1.0, 1.0, 1.0])))
+
+def curvedLoad():
+    test = BSplineSurface()
+    test.loadSurface("curved")
+    print(test.calculate_surface_point(0.1,0.1))
 
 if __name__ == "__main__":
     testing()

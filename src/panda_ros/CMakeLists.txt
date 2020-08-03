@@ -6,8 +6,9 @@ SET(CMAKE_SKIP_RPATH False)
 SET(CMAKE_INSTALL_RPATH ..)
 
 
-find_package(catkin REQUIRED COMPONENTS roscpp tf2_ros geometry_msgs sensor_msgs std_msgs genmsg)
+find_package(catkin REQUIRED COMPONENTS roscpp tf2_ros geometry_msgs sensor_msgs std_msgs)
 catkin_package()
+
 find_package(Eigen3 REQUIRED)
 find_library(franka libfranka.so.0.7.1 REQUIRED)
 find_library(
@@ -15,7 +16,6 @@ find_library(
     NAMES PandaController
     PATHS ${CMAKE_CURRENT_SOURCE_DIR}/../../devel/lib
 )
-
 
 message(STATUS ${pandaController})
 find_library(
@@ -32,3 +32,8 @@ target_link_libraries(pandaRosWrapper ${catkin_LIBRARIES} ${pandaController} ${p
 install(TARGETS pandaRosWrapper
   RUNTIME DESTINATION lib/panda_ros
 )
+
+catkin_install_python(PROGRAMS
+    test/velocity_control_test
+    test/path_control_test
+    DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION})
