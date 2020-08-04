@@ -143,13 +143,23 @@ namespace PandaController {
             resp.FTData[i] = ntohl(*(int32*)&response[12 + i * 4]);
         }
 
-        array<double, 6> ft_sensor = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
-        ft_sensor[0]=resp.FTData[0]/cpf-ft_bias[0];
-        ft_sensor[1]=resp.FTData[1]/cpf-ft_bias[1];
-        ft_sensor[2]=resp.FTData[2]/cpf-ft_bias[2];
-        ft_sensor[3]=resp.FTData[3]/cpf-ft_bias[3];
-        ft_sensor[4]=resp.FTData[4]/cpf-ft_bias[4];
-        ft_sensor[5]=resp.FTData[5]/cpf-ft_bias[5];
+        array<double, 3> force_sensor = {0.0, 0.0, 0.0};
+        array<double, 3> torque_sensor = {0.0, 0.0, 0.0};
+        force_sensor[0]=resp.FTData[0]/cpf-ft_bias[0];
+        force_sensor[1]=resp.FTData[1]/cpf-ft_bias[1];
+        force_sensor[2]=resp.FTData[2]/cpf-ft_bias[2];
+        torque_sensor[0]=resp.FTData[3]/cpf-ft_bias[3];
+        torque_sensor[1]=resp.FTData[4]/cpf-ft_bias[4];
+        torque_sensor[2]=resp.FTData[5]/cpf-ft_bias[5];
+
+        Eigen::VectorXd f = Eigen::Map<Eigen::VectorXd>(force_sensor.data(),3);
+        Eigen::VectorXd t = Eigen::Map<Eigen::VectorXd>(torque_sensor.data(),3);
+
+        Eigen::Matrix3d m;
+        m = Eigen::AngleAxisd(-M_PI/6, Eigen::Vector3d::UnitZ());
+        f = m * f;
+        t = m * t;
+        array<double, 6> ft_sensor ={-f[0], f[1], f[2], -t[0], t[1], t[2]};
         return ft_sensor;
     }
 
