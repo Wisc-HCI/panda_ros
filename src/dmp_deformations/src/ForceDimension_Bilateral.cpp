@@ -151,8 +151,8 @@ void feedbackInput(geometry_msgs::Wrench wrench) {
     dhdGetLinearVelocity(&forceDimensionVel[0],&forceDimensionVel[1],&forceDimensionVel[2]);
     // Send force (bilateral + friction) to the falcon
     dhdSetForceAndTorque(-wrench.force.x * scale-viscous*forceDimensionVel[0], 
-            wrench.force.y * scale-viscous*forceDimensionVel[1], 
-            -wrench.force.z * scale-viscous*forceDimensionVel[2],0.0,0.0,0.0);
+            -wrench.force.y * scale-viscous*forceDimensionVel[1], 
+            wrench.force.z * scale-viscous*forceDimensionVel[2],0.0,0.0,0.0);
 }
 
 int main(int argc, char **argv) {

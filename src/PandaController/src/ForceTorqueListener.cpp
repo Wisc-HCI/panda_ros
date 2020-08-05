@@ -155,11 +155,12 @@ namespace PandaController {
         Eigen::VectorXd f = Eigen::Map<Eigen::VectorXd>(force_sensor.data(),3);
         Eigen::VectorXd t = Eigen::Map<Eigen::VectorXd>(torque_sensor.data(),3);
 
+        // Force torque sensor axes do not align with panda base frame. Rotate into that frame.
         Eigen::Matrix3d m;
         m = Eigen::AngleAxisd(-M_PI/6, Eigen::Vector3d::UnitZ());
         f = m * f;
         t = m * t;
-        array<double, 6> ft_sensor ={-f[0], f[1], f[2], -t[0], t[1], t[2]};
+        array<double, 6> ft_sensor ={f[0], -f[1], -f[2], t[0], -t[1], -t[2]};
         return ft_sensor;
     }
 
