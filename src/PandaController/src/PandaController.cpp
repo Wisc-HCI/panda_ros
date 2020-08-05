@@ -223,9 +223,9 @@ namespace PandaController {
 
         // Force Control Law - P controller w/ very low gain
         double Kfp = 0.0008;
-        double v_x_f = Kfp*(commandedWrench[0]-currentWrench[0]);
-        double v_y_f = Kfp*(commandedWrench[1]-currentWrench[1]);
-        double v_z_f = Kfp*(commandedWrench[2]-currentWrench[2]);
+        double v_x_f = Kfp*(commandedWrench[0]+currentWrench[0]);
+        double v_y_f = Kfp*(commandedWrench[1]+currentWrench[1]);
+        double v_z_f = Kfp*(commandedWrench[2]+currentWrench[2]);
         
 
         Eigen::VectorXd v_position(3);
