@@ -41,6 +41,14 @@ namespace PandaController {
                       0,       0,  0,       1
         ).finished();
 
+        Eigen::Matrix4d pandaRollerEELink = (
+            Eigen::Matrix4d() << 
+                 0.7071, -0.7071,  0,       0, 
+                -0.7071, -0.7071,  0,       0, 
+                      0,       0, -1, 0.16874, 
+                      0,       0,  0,       1
+        ).finished();
+
         vector<DHA> ee_chain = PandaFlangeDHA;
         Eigen::Matrix4d ee_link = pandaGripperEELink;
     }
@@ -57,6 +65,9 @@ namespace PandaController {
         switch (link) {
             case EELink::PandaGripper:
                 ee_link = pandaGripperEELink;
+                break;
+            case EELink::PandaRoller:
+                ee_link = pandaRollerEELink;
                 break;
             default:
                 ee_link = pandaGripperEELink;
