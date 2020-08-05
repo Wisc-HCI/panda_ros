@@ -88,11 +88,13 @@ def main():
         starting_y = np.cross(normal_start, starting_vel)
         qx_s, qy_s, qz_s, qw_s = calculateQuaternion(normal_start, starting_vel, starting_y)
 
+        above_surf = surface_start + 0.005*normal_start
+
 
         printPathSection(csvfile, np.array(
             [0.50, 0.0, 0.25, 0, 0, 0, 1, 0.0, 0.0, -5.0, 0.0, 0.0, 0.0]),
                          np.array(
-                             [surface_start[0], surface_start[1], surface_start[2], qx_s, qy_s, qz_s, qw_s, 0.0, 0.0, -5.0,
+                             [above_surf[0], above_surf[1], above_surf[2], qx_s, qy_s, qz_s, qw_s, 0.0, 0.0, -5.0,
                               0.0, 0.0, 0.0]), num_pts)
 
         # Format for path section is [ru,rv,null, qx, qy, qz, qw, fx, fy, fz, tx, ty, tz]
@@ -116,11 +118,12 @@ def main():
         starting_y = np.cross(normal_start, starting_vel)
         qx_s, qy_s, qz_s, qw_s = calculateQuaternion(normal_start, starting_vel, starting_y)
 
+        above_surf = surface_start + 0.005 * normal_start
 
         printPathSection(csvfile, np.array(
             [0.50, 0.0, 0.25, 0, 0, 0, 1, 0.0, 0.0, -5.0, 0.0, 0.0, 0.0]),
                          np.array(
-                             [surface_start[0], surface_start[1], surface_start[2], qx_s, qy_s, qz_s, qw_s, 0.0, 0.0, -5.0,
+                             [above_surf[0], above_surf[1], above_surf[2], qx_s, qy_s, qz_s, qw_s, 0.0, 0.0, -5.0,
                               0.0, 0.0, 0.0]), num_pts)
 
         # Format for path section is [ru,rv,null, qx, qy, qz, qw, fx, fy, fz, tx, ty, tz]
