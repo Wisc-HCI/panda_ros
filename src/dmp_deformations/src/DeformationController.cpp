@@ -145,11 +145,13 @@ array<double,3> DeformationController::vectorIntoConstraintFrame(double x, doubl
     double r32=2*qy*qz+2*qx*qw;
     double r33=1.0-2*qx*qx-2*qy*qy;
 
-    // Rotate the vector via the rotation matrix
+    // Rotate the vector out of the frame
+    // by multiplying by the transpose of
+    // the rotation matrix
     array<double,3> rotated_vector;
-    rotated_vector[0] = r11*x+r12*y+r13*z;
-    rotated_vector[1] = r21*x+r22*y+r23*z;
-    rotated_vector[2] = r31*x+r32*y+r33*z;
+    rotated_vector[0] = r11*x+r21*y+r31*z;
+    rotated_vector[1] = r12*x+r22*y+r32*z;
+    rotated_vector[2] = r13*x+r23*y+r33*z;
     return rotated_vector;
 }
 
@@ -172,13 +174,11 @@ array<double,3> DeformationController::vectorOutOfConstraintFrame(double x, doub
     double r32=2*qy*qz+2*qx*qw;
     double r33=1.0-2*qx*qx-2*qy*qy;
 
-    // Rotate the vector out of the frame
-    // by multiplying by the transpose of
-    // the rotation matrix
+    // Rotate the vector via the rotation matrix
     array<double,3> rotated_vector;
-    rotated_vector[0] = r11*x+r21*y+r31*z;
-    rotated_vector[1] = r12*x+r22*y+r32*z;
-    rotated_vector[2] = r13*x+r23*y+r33*z;
+    rotated_vector[0] = r11*x+r12*y+r13*z;
+    rotated_vector[1] = r21*x+r22*y+r23*z;
+    rotated_vector[2] = r31*x+r32*y+r33*z;
     return rotated_vector;
 }
 
