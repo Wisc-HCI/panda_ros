@@ -203,12 +203,9 @@ namespace PandaController {
         //cout << "Current Z Force: " << currentWrench[2] << endl;
         
         Eigen::Quaterniond desired_q = Eigen::Quaterniond(command[3], command[4], command[5], command[6]);
+        Eigen::Quaterniond constraint_frame = Eigen::Quaterniond(command[19], command[20], command[21], command[22]);
         
         Eigen::Quaterniond difference((desired_q*orientation.inverse()).normalized());
-        
-        // Not working for all configuration 
-        //https://stackoverflow.com/questions/31589901/euler-to-quaternion-quaternion-to-euler-using-eigen
-        //auto euler = difference.toRotationMatrix().eulerAngles(0, 1, 2);
 
         EulerAngles difference_a = quaternionToEuler(difference);
 
