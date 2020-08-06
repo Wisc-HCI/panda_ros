@@ -202,12 +202,11 @@ namespace PandaController {
         array<double, 6> currentWrench = readFTForces();
 
         // Rotate current command (positions and forces [todo: generalwrenches]) into the constraint frame to compute control law
-        Eigen::Vector3d currentPosition;
-        currentPosition << position[0],position[1],position[2];
-        Eigen::Vector3d currentPositionCF = constraint_frame * commandedPosition;
+        // note: force is first brought back to the global frame via the orientation
+        Eigen::Vector3d currentPositionCF = constraint_frame.inverse() * position;
         Eigen::Vector3d currentForce;
         currentForce << currentWrench[0], currentWrench[1], currentWrench[2];
-        Eigen::Vector3d currentForceCF = constraint_frame * currentForce;
+        Eigen::Vector3d currentForceCF = constraint_frame.inverse() * orientation * currentForce;
 
         // Compute Position/Force Hybrid Control Law
         double scaling_factor = 5;
@@ -217,10 +216,10 @@ namespace PandaController {
         double v_z_CF = selection_vector[2]*(commandedPosition[2] - currentPositionCF[2]) * scaling_factor + (1-selection_vector[2])*Kfp*(commandedForce[2]+currentForceCF[2]);
         
         // Rotate the desired orientation and cartesian velocity (difference) out of the constraint frame
-        Eigen::Quaterniond desired_q = constraint_frame.inverse() * desired_qCF;     
+        Eigen::Quaterniond desired_q = constraint_frame * desired_qCF;     
         Eigen::Vector3d v_CF;
         v_CF << v_x_CF, v_y_CF, v_z_CF;
-        Eigen::Vector3d v_global = constraint_frame.inverse() * v_CF;
+        Eigen::Vector3d v_global = constraint_frame * v_CF;
         
         // Orientation control law
         Eigen::Quaterniond difference((desired_q*orientation.inverse()).normalized());
