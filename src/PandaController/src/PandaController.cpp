@@ -183,60 +183,56 @@ namespace PandaController {
         // Panda hybrid controller using an admittance type architecture -> ultimately commanded as a P-law on
         // joint velocities
 
-
         // User command
-        vector<double> commandedPosition(command.data(), command.data() + 3);
-        vector<double> commandedWrench(command.data() + 13, command.data() + 18);
-        Eigen::Quaterniond desired_q = Eigen::Quaterniond(command[3], command[4], command[5], command[6]);
+        Eigen::Vector3d commandedPosition;
+        commandedPosition << command[0], command[1], command[2];
+        Eigen::Vector3d commandedForce;
+        commandedForce << command[13], command[14], command[15];
+        Eigen::Vector3d commandedTorque;
+        commandedTorque << command[16], command[17], command[18];
+
+        Eigen::Quaterniond desired_qCF = Eigen::Quaterniond(command[3], command[4], command[5], command[6]);
         Eigen::Quaterniond constraint_frame = Eigen::Quaterniond(command[19], command[20], command[21], command[22]);
         Eigen::VectorXd selection_vector(3);
-        selection_vector << command[7], command[8], command[9]; // Currently just cartesian directions and assumed no rotation
+        selection_vector << command[7], command[8], command[9]; // Currently just forces are used in hybrid
         
         // Current robot state
         auto position = getEEPos();
         auto orientation = getEEOrientation();
         array<double, 6> currentWrench = readFTForces();
 
-        // Convert selection vector to selection matrix
-        Eigen::Matrix< double, 3, 3> position_selection_matrix = selection_vector.array().matrix().asDiagonal();
-        Eigen::Matrix< double, 3, 3> force_selection_matrix;
-        Eigen::MatrixXd eye3 = Eigen::MatrixXd::Identity(3, 3);
-        force_selection_matrix =  eye3 - position_selection_matrix;
-        
-        
-        
-        Eigen::Quaterniond difference((desired_q*orientation.inverse()).normalized());
+        // Rotate current command (positions and forces [todo: generalwrenches]) into the constraint frame to compute control law
+        Eigen::Vector3d currentPosition;
+        currentPosition << position[0],position[1],position[2];
+        Eigen::Vector3d currentPositionCF = constraint_frame * commandedPosition;
+        Eigen::Vector3d currentForce;
+        currentForce << currentWrench[0], currentWrench[1], currentWrench[2];
+        Eigen::Vector3d currentForceCF = constraint_frame * currentForce;
 
-        EulerAngles difference_a = quaternionToEuler(difference);
-
+        // Compute Position/Force Hybrid Control Law
         double scaling_factor = 5;
-        double v_x = (commandedPosition[0] - position[0]) * scaling_factor;
-        double v_y = (commandedPosition[1] - position[1]) * scaling_factor;
-        double v_z = (commandedPosition[2] - position[2]) * scaling_factor;
+        double Kfp = 0.0008;
+        double v_x_CF = selection_vector[0]*(commandedPosition[0] - currentPositionCF[0]) * scaling_factor + (1-selection_vector[0])*Kfp*(commandedForce[0]+currentForceCF[0]);
+        double v_y_CF = selection_vector[1]*(commandedPosition[1] - currentPositionCF[1]) * scaling_factor + (1-selection_vector[1])*Kfp*(commandedForce[1]+currentForceCF[1]);
+        double v_z_CF = selection_vector[2]*(commandedPosition[2] - currentPositionCF[2]) * scaling_factor + (1-selection_vector[2])*Kfp*(commandedForce[2]+currentForceCF[2]);
+        
+        // Rotate the desired orientation and cartesian velocity (difference) out of the constraint frame
+        Eigen::Quaterniond desired_q = constraint_frame.inverse() * desired_qCF;     
+        Eigen::Vector3d v_CF;
+        v_CF << v_x_CF, v_y_CF, v_z_CF;
+        Eigen::Vector3d v_global = constraint_frame.inverse() * v_CF;
+        
+        // Orientation control law
+        Eigen::Quaterniond difference((desired_q*orientation.inverse()).normalized());
+        EulerAngles difference_a = quaternionToEuler(difference);
+        
         double v_roll = difference_a.roll * scaling_factor;
         double v_pitch = difference_a.pitch * scaling_factor;
         double v_yaw = difference_a.yaw * scaling_factor;
 
 
-        // Force Control Law - P controller w/ very low gain
-        double Kfp = 0.0008;
-        double v_x_f = Kfp*(commandedWrench[0]+currentWrench[0]);
-        double v_y_f = Kfp*(commandedWrench[1]+currentWrench[1]);
-        double v_z_f = Kfp*(commandedWrench[2]+currentWrench[2]);
-        
-
-        Eigen::VectorXd v_position(3);
-        v_position << v_x, v_y, v_z;
-        Eigen::VectorXd v_force(3);
-        v_force << v_x_f, v_y_f, v_z_f;
-
-        Eigen::VectorXd v_hybrid(3);
-        v_hybrid = position_selection_matrix * v_position + force_selection_matrix * v_force;
-
-        //cout << "HYBRID V: " << v_hybrid << endl;
-
         Eigen::VectorXd v_hybrid_expanded(6);
-        v_hybrid_expanded << v_hybrid[0], v_hybrid[1], v_hybrid[2], v_roll, v_pitch, v_yaw;
+        v_hybrid_expanded << v_global[0], v_global[1], v_global[2], v_roll, v_pitch, v_yaw;
 
 
         constrainForces(v_hybrid_expanded, robot_state);

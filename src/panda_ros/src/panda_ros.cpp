@@ -263,10 +263,10 @@ void setHybrid(const panda_ros_msgs::HybridPose::ConstPtr& msg){
             msg->wrench.torque.y,
             msg->wrench.torque.z,
             //Constraint frame
+            msg->constraint_frame.w,
             msg->constraint_frame.x,
             msg->constraint_frame.y,
-            msg->constraint_frame.z,
-            msg->constraint_frame.w;
+            msg->constraint_frame.z;
         PandaController::writeHybridCommand(command);
     }
 }
