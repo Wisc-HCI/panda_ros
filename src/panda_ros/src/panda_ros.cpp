@@ -344,6 +344,33 @@ void publishWrench(franka::RobotState robot_state){
     std::array<double, 6> forces;
     //forces = robot_state.O_F_ext_hat_K;
     forces = PandaController::readFTForces();
+    
+    // convert back into the global frame
+    Eigen::Vector3d forces_local;
+    forces_local << forces[0], forces[1], forces[2];
+    Eigen::Vector3d torques_local;
+    torques_local << forces[3], forces[4], forces[5];
+
+    Eigen::Quaterniond orientation = PandaController::getEEOrientation();
+
+    Eigen::Vector3d forces_global = orientation * forces_local;
+    Eigen::Vector3d torques_global = orientation * torques_local;
+
+    geometry_msgs::Wrench wrench;
+    wrench.force.x = forces_global[0];
+    wrench.force.y = forces_global[1];
+    wrench.force.z = forces_global[2];
+    wrench.torque.x = torques_global[0];
+    wrench.torque.y = torques_global[1];
+    wrench.torque.z = torques_global[2];
+
+    g_wrenchPub.publish(wrench);
+}
+
+void publishWrenchLocal(franka::RobotState robot_state){
+    std::array<double, 6> forces;
+    //forces = robot_state.O_F_ext_hat_K;
+    forces = PandaController::readFTForces();
 
     geometry_msgs::Wrench wrench;
     wrench.force.x = forces[0];
@@ -353,14 +380,14 @@ void publishWrench(franka::RobotState robot_state){
     wrench.torque.y = forces[4];
     wrench.torque.z = forces[5];
 
-    g_wrenchPub.publish(wrench);
-}
+    g_wrenchLocalPub.publish(wrench);
 
 void publishState(){
     franka::RobotState robot_state = PandaController::readRobotState();
     publishJointState(robot_state);
     publishTf(robot_state);
     publishWrench(robot_state);
+    publishWrenchLocal(robot_state);
 }
 
 void signalHandler(int sig)
@@ -390,6 +417,7 @@ int main(int argc, char **argv) {
     ros::Subscriber sub_hybrid = n.subscribe("/panda/hybrid_pose", 10, setHybrid);
 
     g_wrenchPub = n.advertise<geometry_msgs::Wrench>("/panda/wrench", 10);
+    g_wrenchLocalPub = n.advertise<geometry_msgs::Wrench>("/panda/wrenchlocal", 10);
     g_jointPub = n.advertise<sensor_msgs::JointState>("/panda/joint_states", 1);
     g_eventPub = n.advertise<std_msgs::String>("/panda/events", 1);
     ros::Rate loopRate(1000);
