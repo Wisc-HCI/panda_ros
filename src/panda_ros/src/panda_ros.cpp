@@ -320,13 +320,9 @@ void publishJointState(franka::RobotState robot_state){
 
 void publishTf(franka::RobotState robot_state){
     static tf2_ros::TransformBroadcaster br;
-    
-    Eigen::Affine3d transform(Eigen::Matrix4d::Map(robot_state.O_T_EE.data()));
-    Eigen::Vector3d position(transform.translation());
-    Eigen::Quaterniond orientation(transform.linear());
-    // Align the orientation of the end-effector with panda_link0
-    Eigen::Quaterniond rot(Eigen::AngleAxisd(M_PI,Eigen::Vector3d::UnitX()));
-    orientation *= rot;
+    Eigen::Vector3d position = PandaController::getEEPos();
+    Eigen::Quaterniond orientation = PandaController::getEEOrientation();
+
     geometry_msgs::TransformStamped transformStamped;
     
     transformStamped.header.stamp = ros::Time::now();
