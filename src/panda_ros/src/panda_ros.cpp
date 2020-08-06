@@ -44,6 +44,9 @@ void setEELink(const std_msgs::String& msg) {
     if (msg.data == "pandaGripper") {
         eeLink = PandaController::EELink::PandaGripper;
     }
+    if (msg.data == "pandaRoller") {
+        eeLink = PandaController::EELink::PandaRoller;
+    }
 }
 
 void setCartPos(const geometry_msgs::Pose::ConstPtr& msg){
@@ -385,6 +388,7 @@ int main(int argc, char **argv) {
     ros::Subscriber sub_trajectory = n.subscribe("/panda/path", 10, setStampedPath);
     ros::Subscriber sub_vel_trajectory = n.subscribe("/panda/velocity_bound_path", 10, setVelocityBoundPath);
     ros::Subscriber sub_kinematicChain = n.subscribe("/panda/set_kinematic_chain", 10, setKinematicChain);
+    ros::Subscriber sub_eeLink = n.subscribe("/panda/set_ee_link",10,setEELink);
     ros::Subscriber sub_velocity = n.subscribe("/panda/cart_velocity", 10, setVelocity);
     ros::Subscriber sub_joint_pose = n.subscribe("/panda/joint_pose", 10, setJointPose);
     ros::Subscriber sub_hybrid = n.subscribe("/panda/hybrid_pose", 10, setHybrid);

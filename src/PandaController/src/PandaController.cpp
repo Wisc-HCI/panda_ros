@@ -180,30 +180,30 @@ namespace PandaController {
     }
 
     franka::JointVelocities hybridControlLoop(const franka::RobotState& robot_state, Eigen::VectorXd command) {
-        // Selection vector represents directions for position (admittance) control
+        // Panda hybrid controller using an admittance type architecture -> ultimately commanded as a P-law on
+        // joint velocities
+
+
+        // User command
+        vector<double> commandedPosition(command.data(), command.data() + 3);
+        vector<double> commandedWrench(command.data() + 13, command.data() + 18);
+        Eigen::Quaterniond desired_q = Eigen::Quaterniond(command[3], command[4], command[5], command[6]);
+        Eigen::Quaterniond constraint_frame = Eigen::Quaterniond(command[19], command[20], command[21], command[22]);
         Eigen::VectorXd selection_vector(3);
         selection_vector << command[7], command[8], command[9]; // Currently just cartesian directions and assumed no rotation
-        Eigen::Matrix< double, 3, 3> position_selection_matrix = selection_vector.array().matrix().asDiagonal();
         
+        // Current robot state
+        auto position = getEEPos();
+        auto orientation = getEEOrientation();
+        array<double, 6> currentWrench = readFTForces();
+
+        // Convert selection vector to selection matrix
+        Eigen::Matrix< double, 3, 3> position_selection_matrix = selection_vector.array().matrix().asDiagonal();
         Eigen::Matrix< double, 3, 3> force_selection_matrix;
         Eigen::MatrixXd eye3 = Eigen::MatrixXd::Identity(3, 3);
         force_selection_matrix =  eye3 - position_selection_matrix;
         
-        vector<double> commandedPosition(command.data(), command.data() + 3);
-        vector<double> commandedWrench(command.data() + 13, command.data() + 18);
         
-        // TEMP FORCE THE COMMANDED POSITION TO BE THE SAME!!!
-        //commandedPosition = {0.42, 0.1, 0.25, 0.0, 0.0, 0.0};
-
-
-        auto position = getEEPos();
-        auto orientation = getEEOrientation();
-
-        array<double, 6> currentWrench = readFTForces();
-        //cout << "Current Z Force: " << currentWrench[2] << endl;
-        
-        Eigen::Quaterniond desired_q = Eigen::Quaterniond(command[3], command[4], command[5], command[6]);
-        Eigen::Quaterniond constraint_frame = Eigen::Quaterniond(command[19], command[20], command[21], command[22]);
         
         Eigen::Quaterniond difference((desired_q*orientation.inverse()).normalized());
 
