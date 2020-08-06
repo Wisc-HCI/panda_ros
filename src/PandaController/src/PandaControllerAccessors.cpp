@@ -41,11 +41,13 @@ namespace PandaController {
                       0,       0,  0,       1
         ).finished();
 
+        // 1 in roller installed + 0.1 mm for tape
+        // center hole to mating surface is 0.08938m
         Eigen::Matrix4d pandaRollerEELink = (
             Eigen::Matrix4d() << 
                  0.7071, -0.7071,  0,       0, 
                 -0.7071, -0.7071,  0,       0, 
-                      0,       0, -1, 0.16874, 
+                      0,       0, -1, 0.10308, 
                       0,       0,  0,       1
         ).finished();
 
