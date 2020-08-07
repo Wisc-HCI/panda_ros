@@ -16,7 +16,7 @@ from scipy.interpolate import interp1d
 from scipy.spatial.transform import Rotation as R
 
 def main():
-    bagfile='/home/mike/Desktop/reg_bag_2.bag'
+    bagfile='/home/hcilab/Documents/MikePanda/calib3.bag'
     calculate(bagfile)
 
 
@@ -43,11 +43,11 @@ def calculate(bagfile):
             if transform.child_frame_id=='end_effector':
                 panda_frame.append([transform.transform.translation.x, transform.transform.translation.y, transform.transform.translation.z])
                 panda_frame_ts.append(ts)
-            elif transform.child_frame_id=='fake_calibration':
+            elif transform.child_frame_id=='optical_breadboard':
                 optical_breadboard.append([transform.transform.translation.x, transform.transform.translation.y,
                                     transform.transform.translation.z])
                 optical_breadboard_q.append([transform.transform.rotation.x, transform.transform.rotation.y, transform.transform.rotation.z, transform.transform.rotation.w])
-            elif transform.child_frame_id=='fake_panda':
+            elif transform.child_frame_id=='panda_mocap':
                 panda_mocap.append([transform.transform.translation.x, transform.transform.translation.y,
                                     transform.transform.translation.z])
                 panda_mocap_ts.append(ts)
@@ -78,8 +78,17 @@ def calculate(bagfile):
     A_breadboard_mocap[:3, 3] = t_breadboard_mocap
 
     # Calculate the transition between the breadboard and the panda_frame
-    A_breadboard_panda = np.matmul(A_breadboard_mocap,A_mocap_panda)
+    A_breadboard_panda = np.matmul(A_mocap_panda,A_breadboard_mocap)
 
+
+    print("A mocap panda", A_mocap_panda)
+    print("--")
+    print("--")
+    print("--")
+    print("A breadboard_panda", A_breadboard_mocap)
+    print("--")
+    print("--")
+    print("--")
     print("A_breadboard_panda",A_breadboard_panda)
 
 
