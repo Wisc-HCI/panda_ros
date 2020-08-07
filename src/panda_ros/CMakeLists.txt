@@ -36,4 +36,5 @@ install(TARGETS pandaRosWrapper
 catkin_install_python(PROGRAMS
     test/velocity_control_test
     test/path_control_test
+    test/mocap_calib
     DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION})
