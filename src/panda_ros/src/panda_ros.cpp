@@ -32,6 +32,7 @@ namespace {
 
 ros::Publisher g_eventPub {};
 ros::Publisher g_wrenchPub {};
+ros::Publisher g_wrenchLocalPub {};
 ros::Publisher g_jointPub {};
 
 void setKinematicChain(const std_msgs::String& msg) {
@@ -46,6 +47,9 @@ void setEELink(const std_msgs::String& msg) {
     }
     if (msg.data == "pandaRoller") {
         eeLink = PandaController::EELink::PandaRoller;
+    }
+    if (msg.data == "pandaMocap") {
+        eeLink = PandaController::EELink::PandaMocap;
     }
 }
 
@@ -381,6 +385,7 @@ void publishWrenchLocal(franka::RobotState robot_state){
     wrench.torque.z = forces[5];
 
     g_wrenchLocalPub.publish(wrench);
+}
 
 void publishState(){
     franka::RobotState robot_state = PandaController::readRobotState();

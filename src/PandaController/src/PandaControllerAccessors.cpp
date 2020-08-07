@@ -41,6 +41,19 @@ namespace PandaController {
                       0,       0,  0,       1
         ).finished();
 
+        // Mocap calibration
+        // .0925 m to hole
+        // 10 mm screw installed
+        // force torque adds 0.06534
+        // use same rotation as gripper (doesn't matter)
+        Eigen::Matrix4d pandaMocapEELink = (
+            Eigen::Matrix4d() << 
+                 0.7071, -0.7071,  0,       0, 
+                -0.7071, -0.7071,  0,       0, 
+                      0,       0, -1, 0.16784, 
+                      0,       0,  0,       1
+        ).finished();
+
         // 1 in roller installed + 0.1 mm for tape
         // center hole to mating surface is 0.08938m
         // force torque sensor is 0.06534 m
@@ -72,6 +85,8 @@ namespace PandaController {
             case EELink::PandaRoller:
                 ee_link = pandaRollerEELink;
                 break;
+            case EELink::PandaMocap:
+                ee_link = pandaMocapEELink;
             default:
                 ee_link = pandaGripperEELink;
                 break;
