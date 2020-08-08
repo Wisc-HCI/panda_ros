@@ -390,7 +390,15 @@ void publishWrenchLocal(franka::RobotState robot_state){
     wrench.torque.y = forces[4];
     wrench.torque.z = forces[5];
 
-    g_wrenchLocalPub.publish(wrench);
+    g_wrenchPub.publish(wrench);
+    wrench.force.x = -forces[0];
+    wrench.force.y = -forces[1];
+    wrench.force.z = -forces[2];
+    wrench.torque.x = -forces[3];
+    wrench.torque.y = -forces[4];
+    wrench.torque.z = -forces[5];
+
+    g_controlWrenchPub.publish(wrench);
 }
 
 void publishState(){
@@ -428,7 +436,7 @@ int main(int argc, char **argv) {
     ros::Subscriber sub_hybrid = n.subscribe("/panda/hybrid_pose", 10, setHybrid);
 
     g_wrenchPub = n.advertise<geometry_msgs::Wrench>("/panda/wrench", 10);
-    g_wrenchLocalPub = n.advertise<geometry_msgs::Wrench>("/panda/wrenchlocal", 10);
+    g_controlWrenchPub = n.advertise<geometry_msgs::Wrench>("/panda/control_wrench", 10);
     g_jointPub = n.advertise<sensor_msgs::JointState>("/panda/joint_states", 1);
     g_eventPub = n.advertise<std_msgs::String>("/panda/events", 1);
     ros::Rate loopRate(1000);
