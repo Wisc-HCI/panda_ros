@@ -32,18 +32,24 @@ namespace {
 
 ros::Publisher g_eventPub {};
 ros::Publisher g_wrenchPub {};
-ros::Publisher g_wrenchLocalPub {};
+ros::Publisher g_controlWrenchPub {};
 ros::Publisher g_jointPub {};
 
 void setKinematicChain(const std_msgs::String& msg) {
     if (msg.data == "pandaFlange") {
         kinematicChain = PandaController::KinematicChain::PandaFlange;
     }
+    if (msg.data == "pandaCamera") {
+        kinematicChain = PandaController::KinematicChain::PandaCamera;
+    }
 }
 
 void setEELink(const std_msgs::String& msg) {
     if (msg.data == "pandaGripper") {
         eeLink = PandaController::EELink::PandaGripper;
+    }
+    if (msg.data == "cameraLink") {
+        eeLink = PandaController::EELink::CameraLink;
     }
     if (msg.data == "pandaRoller") {
         eeLink = PandaController::EELink::PandaRoller;

@@ -33,6 +33,17 @@ namespace PandaController {
             DHA(  0.0879,       0,  M_PI/2,  6),
             DHA(       0,  0.1069,       0, -1),
         };
+        
+        vector<DHA> PandaCameraDHA{
+            DHA(       0,   0.333,       0,  0),
+            DHA(       0,       0, -M_PI/2,  1),
+            DHA(       0, 0.31599,  M_PI/2,  2),
+            DHA( 0.08249,       0,  M_PI/2,  3),
+            DHA(-0.08249,   0.384, -M_PI/2,  4),
+            DHA(       0,       0,  M_PI/2,  5),
+            DHA(  0.0879,       0,       0, -1),
+        };
+
         Eigen::Matrix4d pandaGripperEELink = (
             Eigen::Matrix4d() << 
                  0.7071, -0.7071,  0,       0, 
@@ -54,6 +65,7 @@ namespace PandaController {
                       0,       0,  0,       1
         ).finished();
 
+
         // 1 in roller installed + 0.1 mm for tape
         // center hole to mating surface is 0.08938m
         // force torque sensor is 0.06534 m
@@ -67,12 +79,24 @@ namespace PandaController {
 
         vector<DHA> ee_chain = PandaFlangeDHA;
         Eigen::Matrix4d ee_link = pandaGripperEELink;
+       
+        Eigen::Matrix4d cameraLink = (
+            Eigen::Matrix4d() << 
+                  1.0,    .0,    0,      .065, 
+                    0,    .0,    1,     -.038, 
+                    0,    -1,   .0,      .037, 
+                    0,     0,    0,         1
+        ).finished();
+
     }
 
     void setKinematicChain(KinematicChain chain, EELink link) {
         switch (chain){
             case KinematicChain::PandaFlange:
                 ee_chain = PandaFlangeDHA;
+                break;
+            case KinematicChain::PandaCamera:
+                ee_chain = PandaCameraDHA;
                 break;
             default:
                 ee_chain = PandaFlangeDHA;
@@ -87,6 +111,10 @@ namespace PandaController {
                 break;
             case EELink::PandaMocap:
                 ee_link = pandaMocapEELink;
+                break;
+            case EELink::CameraLink:
+                ee_link = cameraLink;
+                break;
             default:
                 ee_link = pandaGripperEELink;
                 break;

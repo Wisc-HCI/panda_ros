@@ -12,8 +12,8 @@
 
 
 namespace PandaController {
-    enum KinematicChain {PandaFlange};
-    enum EELink {PandaGripper,PandaRoller,PandaMocap};
+    enum KinematicChain {PandaFlange,PandaCamera};
+    enum EELink {PandaGripper,PandaRoller,PandaMocap,CameraLink};
     struct EulerAngles {
         double roll, pitch, yaw;
     };
