@@ -236,7 +236,7 @@ void setJointPose(const panda_ros_msgs::JointPose::ConstPtr& msg) {
                 franka::RobotState robot_state = PandaController::readRobotState();
                 Eigen::VectorXd q_v = Eigen::Map<Eigen::VectorXd>(robot_state.q.data(), 7);
                 if (progress > 1){
-                    return q_v;
+                    return goal;
                 }
                 else
                     return (q_v + (goal - q_v) * progress).eval();
