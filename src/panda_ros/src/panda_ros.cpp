@@ -234,17 +234,19 @@ void setJointPose(const panda_ros_msgs::JointPose::ConstPtr& msg) {
             msg->joint_pose[5],
             msg->joint_pose[6];
 
+        franka::RobotState robot_state = PandaController::readRobotState();
+        Eigen::VectorXd q_v = Eigen::Map<Eigen::VectorXd>(robot_state.q.data(), 7);
+
         PandaController::setTrajectory(PandaController::Trajectory(
             PandaController::TrajectoryType::Joint, 
-            [goal, start_time, end_time]() {
+            [q_v, goal, start_time, end_time]() {
                 double progress = (ros::Time::now().toSec() - start_time) / (end_time - start_time);
-                franka::RobotState robot_state = PandaController::readRobotState();
-                Eigen::VectorXd q_v = Eigen::Map<Eigen::VectorXd>(robot_state.q.data(), 7);
                 if (progress > 1){
-                    return goal;
+                    return goal.eval();
                 }
-                else
+                else{
                     return (q_v + (goal - q_v) * progress).eval();
+                }
             }
         ));
     }

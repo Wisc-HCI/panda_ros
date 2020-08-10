@@ -265,9 +265,9 @@ namespace PandaController {
         // Take the desired joint velocities. Convert to cartesian space.
         // Attempt to shift the target cartesian velocity to avoid a collision.
         // Go back to joint space using a simplified IK via the Jacobian. <-- This part might be a little bit sketchy.
-        Eigen::VectorXd v = Eigen::Map<Eigen::MatrixXd>(readJacobian().data(), 6, 7) * joint_velocity;
-        constrainForces(v, robot_state);
-        joint_velocity = Eigen::Map<Eigen::MatrixXd>(readJacobian().data(), 6, 7).completeOrthogonalDecomposition().solve(v);
+        //Eigen::VectorXd v = Eigen::Map<Eigen::MatrixXd>(readJacobian().data(), 6, 7) * joint_velocity;
+        //constrainForces(v, robot_state);
+        //joint_velocity = Eigen::Map<Eigen::MatrixXd>(readJacobian().data(), 6, 7).completeOrthogonalDecomposition().solve(v);
         franka::JointVelocities velocities = {
             joint_velocity[0],
             joint_velocity[1],
