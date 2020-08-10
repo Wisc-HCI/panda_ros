@@ -188,8 +188,7 @@ void setVelocity(const geometry_msgs::TwistStamped::ConstPtr& msg) {
     if (PandaController::isRunning()) {
         PandaController::setKinematicChain(kinematicChain, eeLink);
         auto twist = msg->twist;
-
-        Eigen::VectorXd velocity;
+        Eigen::VectorXd velocity(6);
         velocity << 
             twist.linear.x,
             twist.linear.y,
@@ -204,7 +203,13 @@ void setVelocity(const geometry_msgs::TwistStamped::ConstPtr& msg) {
             [velocity, end_time]() {
                 if (ros::Time::now().toSec() > end_time){
                     Eigen::VectorXd velocity(6);
-                    velocity.setZero();
+                    velocity << 
+                    ((double) rand() / (RAND_MAX))/100000.,
+                    ((double) rand() / (RAND_MAX))/100000.,
+                    ((double) rand() / (RAND_MAX))/100000.,
+                    ((double) rand() / (RAND_MAX))/100000.,
+                    ((double) rand() / (RAND_MAX))/100000.,
+                    ((double) rand() / (RAND_MAX))/100000.;
                     return velocity;
                 }
                 else
