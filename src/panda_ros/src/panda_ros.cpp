@@ -333,16 +333,15 @@ void publishJointState(franka::RobotState robot_state){
     g_jointPub.publish(states);
 }
 
-void publishTf(franka::RobotState robot_state){
+void publishFrame(string name, PandaController::KinematicChain chain, PandaController::EELink link){
     static tf2_ros::TransformBroadcaster br;
-    Eigen::Vector3d position = PandaController::getEEPos();
-    Eigen::Quaterniond orientation = PandaController::getEEOrientation();
-
+    Eigen::Vector3d position = PandaController::getEEPos(chain, link);
+    Eigen::Quaterniond orientation = PandaController::getEEOrientation(chain, link);
     geometry_msgs::TransformStamped transformStamped;
     
     transformStamped.header.stamp = ros::Time::now();
     transformStamped.header.frame_id = "panda_link0";
-    transformStamped.child_frame_id = "end_effector";
+    transformStamped.child_frame_id = name;
     transformStamped.transform.translation.x = position[0];
     transformStamped.transform.translation.y = position[1];
     transformStamped.transform.translation.z = position[2];
@@ -353,6 +352,11 @@ void publishTf(franka::RobotState robot_state){
     transformStamped.transform.rotation.w = orientation.coeffs()[3];
 
     br.sendTransform(transformStamped);
+}
+void publishTf(franka::RobotState robot_state){
+    publishFrame("panda_ee", kinematicChain, eeLink);
+    publishFrame("panda_camera", PandaController::KinematicChain::PandaCamera, PandaController::EELink::CameraLink);
+    publishFrame("panda_gripper", PandaController::KinematicChain::PandaFlange, PandaController::EELink::PandaGripper);
 }
 
 void publishWrench(franka::RobotState robot_state){

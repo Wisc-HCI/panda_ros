@@ -25,6 +25,8 @@ namespace PandaController {
     Eigen::Matrix4d getEETransform();
     Eigen::VectorXd getEEPos();
     Eigen::Quaterniond getEEOrientation();
+    Eigen::VectorXd getEEPos(PandaController::KinematicChain chain, PandaController::EELink link);
+    Eigen::Quaterniond getEEOrientation(PandaController::KinematicChain chain, PandaController::EELink link);
 
     void setTrajectory(Trajectory);
     void writeCommandedPosition(Eigen::VectorXd data);
