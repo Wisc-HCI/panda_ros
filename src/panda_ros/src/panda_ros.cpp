@@ -241,7 +241,7 @@ void setJointPose(const panda_ros_msgs::JointPose::ConstPtr& msg) {
             PandaController::TrajectoryType::Joint, 
             [q_v, goal, start_time, end_time]() {
                 double progress = (ros::Time::now().toSec() - start_time) / (end_time - start_time);
-                if (progress > 1){
+                if (progress > 1 || end_time < start_time){
                     return goal.eval();
                 }
                 else{
