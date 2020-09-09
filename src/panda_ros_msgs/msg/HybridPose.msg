@@ -1,4 +1,4 @@
-# PoseStamped
+# Pose
 geometry_msgs/Pose pose
 
 # Selection vector [6 (drop rotation for now)]
@@ -9,3 +9,6 @@ geometry_msgs/Wrench wrench
 
 # Constraint Frame (might drop)
 geometry_msgs/Quaternion constraint_frame
+
+# Header
+Header header
