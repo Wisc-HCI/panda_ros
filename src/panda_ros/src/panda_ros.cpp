@@ -357,7 +357,7 @@ void publishFrame(string name, PandaController::KinematicChain chain, PandaContr
 }
 void publishTf(franka::RobotState robot_state){
     publishFrame("panda_ee", kinematicChain, eeLink);
-    publishFrame("panda_camera", PandaController::KinematicChain::PandaCamera, PandaController::EELink::CameraLink);
+    publishFrame("panda_camera", PandaController::KinematicChain::PandaFlange, PandaController::EELink::CameraLink);
     publishFrame("panda_gripper", PandaController::KinematicChain::PandaFlange, PandaController::EELink::PandaGripper);
 }
 
