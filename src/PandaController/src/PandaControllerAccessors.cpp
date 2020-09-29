@@ -303,41 +303,41 @@ namespace PandaController {
         maxForce = val;
     }
 
-    void getChainAndLink(vector<DHA> & chain, Eigen::Matrix4d & link) {
-        boost::lock_guard<boost::mutex> guard(mutex);
-        chain = ee_chain;
-        link = ee_link;
-    }
-
-    Eigen::VectorXd getNextJointAngles(const franka::RobotState & state, Eigen::Vector3d ee_pos, Eigen::VectorXd ee_angles) {
-        vector<DHA> chain;
-        Eigen::Matrix4d link;
-        getChainAndLink(chain, link);
-
-        return PandaController::getJointAngles(target_velocity.q, ee_chain, ee_link, ee_pos, ee_angles);
-    }
-
-
-    franka::JointPositions getTargetJointVelocity() {
-        boost::lock_guard<boost::mutex> guard(mutex);
-        // if (chrono::duration_cast<chrono::milliseconds>(chrono::system_clock::now() - velocity_ts).count() >= 10){
-        //     return {
-        //         current_state.q_d[0],
-        //         current_state.q_d[1],
-        //         current_state.q_d[2],
-        //         current_state.q_d[3],
-        //         current_state.q_d[4],
-        //         current_state.q_d[5],
-        //         current_state.q_d[6]
-        //     };
-        // }
-        
-        return target_velocity;
-    }
-
-    void setTargetJointVelocity(franka::JointPositions v) {
-        boost::lock_guard<boost::mutex> guard(mutex);
-        target_velocity = v;
-        velocity_ts = chrono::system_clock::now();
-    }
+//    void getChainAndLink(vector<DHA> & chain, Eigen::Matrix4d & link) {
+//        boost::lock_guard<boost::mutex> guard(mutex);
+//        chain = ee_chain;
+//        link = ee_link;
+//    }
+//
+//    Eigen::VectorXd getNextJointAngles(const franka::RobotState & state, Eigen::Vector3d ee_pos, Eigen::VectorXd ee_angles) {
+//        vector<DHA> chain;
+//        Eigen::Matrix4d link;
+//        getChainAndLink(chain, link);
+//
+//        return PandaController::getJointAngles(target_velocity.q, chain, link, ee_pos, ee_angles);
+//    }
+//
+//
+//    franka::JointPositions getTargetJointVelocity() {
+//        boost::lock_guard<boost::mutex> guard(mutex);
+//        // if (chrono::duration_cast<chrono::milliseconds>(chrono::system_clock::now() - velocity_ts).count() >= 10){
+//        //     return {
+//        //         current_state.q_d[0],
+//        //         current_state.q_d[1],
+//        //         current_state.q_d[2],
+//        //         current_state.q_d[3],
+//        //         current_state.q_d[4],
+//        //         current_state.q_d[5],
+//        //         current_state.q_d[6]
+//        //     };
+//        // }
+//        
+//        return target_velocity;
+//    }
+//
+//    void setTargetJointVelocity(franka::JointPositions v) {
+//        boost::lock_guard<boost::mutex> guard(mutex);
+//        target_velocity = v;
+//        velocity_ts = chrono::system_clock::now();
+//    }
 }
