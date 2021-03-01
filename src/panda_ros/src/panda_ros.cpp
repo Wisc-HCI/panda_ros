@@ -309,6 +309,12 @@ void callbackCommands(const std_msgs::String& msg){
         PandaController::writeMaxForce(stod(command[1]));
         //PandaController::writeCommandedFT({0,0,-stod(command[1]),0,0,0});
     }   
+    if(command[0] == "moveGripper") {
+        cout<<"Move gripper "<<command[1]<<endl;
+        result.data = "gripping_finished";
+        PandaController::moveGripper(stof(command[1]),[result](){g_eventPub.publish(result);});
+        //PandaController::writeCommandedFT({0,0,-stod(command[1]),0,0,0});
+    }   
 }
 
 void publishJointState(franka::RobotState robot_state){

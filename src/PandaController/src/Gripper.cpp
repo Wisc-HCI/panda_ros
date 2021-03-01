@@ -88,6 +88,26 @@ namespace PandaController {
         }
         thread(releaseObj, onRelease).detach();
     }
+    void moveGrip(float distance, function<void ()> onMove) {
+        try {
+            p_gripper->stop();
+            isGripperMoving = true;
+            p_gripper->move(distance,0.2);
+            isGripperMoving = false;
+            grasped = false;
+            PandaController::writeGripperState();
+            if (onMove != NULL) onMove();
+        } catch (franka::Exception const& e) {
+            cout << e.what() << endl;
+        }
+    }
+
+    void moveGripper(float distance,function<void ()> onMove) {
+        if(isGripperMoving) {
+            return;
+        }
+        thread(moveGrip, distance, onMove).detach();
+    }
 
     void toggleGrip(function<void ()> onToggle) {
         if (isGripperMoving){
