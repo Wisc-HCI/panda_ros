@@ -336,7 +336,7 @@ namespace PandaController {
         setDefaultBehavior(robot);
     }
 
-    void runController(char * ip, bool simulate) {
+    void runController(char * ip, bool simulate, function<void ()> onStopped) {
         running = true;
         try {
             franka::Robot robot(ip, franka::RealtimeConfig::kIgnore);
@@ -347,6 +347,7 @@ namespace PandaController {
         } catch(const exception& e) {
             cout << e.what() << endl;
         }
+        onStopped();
         stopControl();
     }
 
@@ -363,13 +364,13 @@ namespace PandaController {
         return running;
     }
 
-    void initPandaController(bool simulate) {
+    void initPandaController(function<void ()> onStopped, bool simulate) {
         char * ip = getenv("PANDA_IP");
         cout << "Panda ip is " << ip << endl;
         // Gripper thread will hang forever on a blocking tcp call
         // if the gripper is not attached. 
         gripper = thread(initGripper, ip); 
-        controller = thread(runController, ip, simulate);
+        controller = thread(runController, ip, simulate, onStopped);
         ft_listener = thread(forceTorqueListener);
     }
 }

@@ -19,7 +19,7 @@ namespace PandaController {
     };
 
     void stopControl();
-    void initPandaController(bool = false);
+    void initPandaController(std::function<void ()> onStopped,bool = false);
 
     Eigen::VectorXd getNextCommand(TrajectoryType & t);
     Eigen::Matrix4d getEETransform();

@@ -434,7 +434,9 @@ int main(int argc, char **argv) {
     //Setup the signal handler for exiting, must be called after ros is intialized
     signal(SIGINT, signalHandler); 
 
-    PandaController::initPandaController();
+    std_msgs::String result;
+    result.data = "panda_stopped";
+    PandaController::initPandaController([result](){g_eventPub.publish(result);});
     
     ros::Subscriber sub_commands = n.subscribe("/panda/commands", 10, callbackCommands);
     ros::Subscriber sub_position = n.subscribe("/panda/cart_pose", 10, setCartPos);
