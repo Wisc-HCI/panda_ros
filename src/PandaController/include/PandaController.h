@@ -19,7 +19,7 @@ namespace PandaController {
     };
 
     void stopControl();
-    void initPandaController(bool = false);
+    void initPandaController(std::function<void ()> onStopped,bool = false);
 
     Eigen::VectorXd getNextCommand(TrajectoryType & t);
     Eigen::Matrix4d getEETransform();
@@ -60,6 +60,7 @@ namespace PandaController {
     void toggleGrip(std::function<void ()> onToggle = NULL);
     void graspObject(std::function<void ()> onGrasp = NULL);
     void releaseObject(std::function<void ()> onRelease = NULL);
+    void moveGripper(float distance, std::function<void ()> onRelease = NULL);
 
     void forceTorqueListener();
     void setKinematicChain(KinematicChain chain = KinematicChain::PandaFlange, EELink link = EELink::PandaGripper);

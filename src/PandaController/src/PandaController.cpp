@@ -210,7 +210,7 @@ namespace PandaController {
 
         // Compute Position/Force Hybrid Control Law
         double scaling_factor = 5;
-        double Kfp = 0.0008;
+        double Kfp = 0.0012;
         double v_x_CF = selection_vector[0]*(commandedPosition[0] - currentPositionCF[0]) * scaling_factor + (1-selection_vector[0])*Kfp*(commandedForce[0]+currentForceCF[0]);
         double v_y_CF = selection_vector[1]*(commandedPosition[1] - currentPositionCF[1]) * scaling_factor + (1-selection_vector[1])*Kfp*(commandedForce[1]+currentForceCF[1]);
         double v_z_CF = selection_vector[2]*(commandedPosition[2] - currentPositionCF[2]) * scaling_factor + (1-selection_vector[2])*Kfp*(commandedForce[2]+currentForceCF[2]);
@@ -265,9 +265,9 @@ namespace PandaController {
         // Take the desired joint velocities. Convert to cartesian space.
         // Attempt to shift the target cartesian velocity to avoid a collision.
         // Go back to joint space using a simplified IK via the Jacobian. <-- This part might be a little bit sketchy.
-        Eigen::VectorXd v = Eigen::Map<Eigen::MatrixXd>(readJacobian().data(), 6, 7) * joint_velocity;
-        constrainForces(v, robot_state);
-        joint_velocity = Eigen::Map<Eigen::MatrixXd>(readJacobian().data(), 6, 7).completeOrthogonalDecomposition().solve(v);
+        //Eigen::VectorXd v = Eigen::Map<Eigen::MatrixXd>(readJacobian().data(), 6, 7) * joint_velocity;
+        //constrainForces(v, robot_state);
+        //joint_velocity = Eigen::Map<Eigen::MatrixXd>(readJacobian().data(), 6, 7).completeOrthogonalDecomposition().solve(v);
         franka::JointVelocities velocities = {
             joint_velocity[0],
             joint_velocity[1],
@@ -336,7 +336,7 @@ namespace PandaController {
         setDefaultBehavior(robot);
     }
 
-    void runController(char * ip, bool simulate) {
+    void runController(char * ip, bool simulate, function<void ()> onStopped) {
         running = true;
         try {
             franka::Robot robot(ip, franka::RealtimeConfig::kIgnore);
@@ -347,6 +347,7 @@ namespace PandaController {
         } catch(const exception& e) {
             cout << e.what() << endl;
         }
+        onStopped();
         stopControl();
     }
 
@@ -363,13 +364,13 @@ namespace PandaController {
         return running;
     }
 
-    void initPandaController(bool simulate) {
+    void initPandaController(function<void ()> onStopped, bool simulate) {
         char * ip = getenv("PANDA_IP");
         cout << "Panda ip is " << ip << endl;
         // Gripper thread will hang forever on a blocking tcp call
         // if the gripper is not attached. 
         gripper = thread(initGripper, ip); 
-        controller = thread(runController, ip, simulate);
+        controller = thread(runController, ip, simulate, onStopped);
         ft_listener = thread(forceTorqueListener);
     }
 }

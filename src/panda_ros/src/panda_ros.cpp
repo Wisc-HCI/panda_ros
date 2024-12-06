@@ -234,17 +234,19 @@ void setJointPose(const panda_ros_msgs::JointPose::ConstPtr& msg) {
             msg->joint_pose[5],
             msg->joint_pose[6];
 
+        franka::RobotState robot_state = PandaController::readRobotState();
+        Eigen::VectorXd q_v = Eigen::Map<Eigen::VectorXd>(robot_state.q.data(), 7);
+
         PandaController::setTrajectory(PandaController::Trajectory(
             PandaController::TrajectoryType::Joint, 
-            [goal, start_time, end_time]() {
+            [q_v, goal, start_time, end_time]() {
                 double progress = (ros::Time::now().toSec() - start_time) / (end_time - start_time);
-                franka::RobotState robot_state = PandaController::readRobotState();
-                Eigen::VectorXd q_v = Eigen::Map<Eigen::VectorXd>(robot_state.q.data(), 7);
-                if (progress > 1){
-                    return goal;
+                if (progress > 1 || end_time < start_time){
+                    return goal.eval();
                 }
-                else
+                else{
                     return (q_v + (goal - q_v) * progress).eval();
+                }
             }
         ));
     }
@@ -307,6 +309,12 @@ void callbackCommands(const std_msgs::String& msg){
         PandaController::writeMaxForce(stod(command[1]));
         //PandaController::writeCommandedFT({0,0,-stod(command[1]),0,0,0});
     }   
+    if(command[0] == "moveGripper") {
+        cout<<"Move gripper "<<command[1]<<endl;
+        result.data = "gripping_finished";
+        PandaController::moveGripper(stof(command[1]),[result](){g_eventPub.publish(result);});
+        //PandaController::writeCommandedFT({0,0,-stod(command[1]),0,0,0});
+    }   
 }
 
 void publishJointState(franka::RobotState robot_state){
@@ -355,7 +363,7 @@ void publishFrame(string name, PandaController::KinematicChain chain, PandaContr
 }
 void publishTf(franka::RobotState robot_state){
     publishFrame("panda_ee", kinematicChain, eeLink);
-    publishFrame("panda_camera", PandaController::KinematicChain::PandaCamera, PandaController::EELink::CameraLink);
+    publishFrame("panda_camera", PandaController::KinematicChain::PandaFlange, PandaController::EELink::CameraLink);
     publishFrame("panda_gripper", PandaController::KinematicChain::PandaFlange, PandaController::EELink::PandaGripper);
 }
 
@@ -432,7 +440,9 @@ int main(int argc, char **argv) {
     //Setup the signal handler for exiting, must be called after ros is intialized
     signal(SIGINT, signalHandler); 
 
-    PandaController::initPandaController();
+    std_msgs::String result;
+    result.data = "panda_stopped";
+    PandaController::initPandaController([result](){g_eventPub.publish(result);});
     
     ros::Subscriber sub_commands = n.subscribe("/panda/commands", 10, callbackCommands);
     ros::Subscriber sub_position = n.subscribe("/panda/cart_pose", 10, setCartPos);
