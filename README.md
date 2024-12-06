@@ -18,7 +18,7 @@ Compile individually each ros packages:
         - `make install`
         
 ## Running with ROS
-1. Run `source devel/setup.sh` inside the PandaFCI directory
+1. Run `source devel/setup.bash` inside the PandaFCI directory
 2. Start the launch files related to the application:
     * Falcon:
 		- Terminal 1: `roslaunch relaxed_ik relaxed_ik_julia.launch`

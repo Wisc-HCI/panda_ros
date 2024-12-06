@@ -10,7 +10,11 @@ find_package(catkin REQUIRED COMPONENTS roscpp tf2_ros geometry_msgs sensor_msgs
 catkin_package()
 
 find_package(Eigen3 REQUIRED)
-find_library(franka libfranka.so.0.7.1 REQUIRED)
+# find_library(franka libfranka.so.0.7.1 REQUIRED)
+find_library(FRANKA_LIBRARY NAMES franka REQUIRED PATHS /opt/ros/noetic/lib)
+include_directories(/opt/ros/noetic/include)
+
+
 find_library(
     pandaController
     NAMES PandaController
@@ -27,7 +31,7 @@ message(STATUS ${pandaCommon})
 
 add_executable(pandaRosWrapper src/panda_ros.cpp)
 target_include_directories(pandaRosWrapper PUBLIC ${catkin_INCLUDE_DIRS} ${EIGEN3_INCLUDE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/../../devel/include)
-target_link_libraries(pandaRosWrapper ${catkin_LIBRARIES} ${pandaController} ${pandaCommon} franka)
+target_link_libraries(pandaRosWrapper ${catkin_LIBRARIES} ${pandaController} ${pandaCommon} ${FRANKA_LIBRARY})
 
 install(TARGETS pandaRosWrapper
   RUNTIME DESTINATION lib/panda_ros
