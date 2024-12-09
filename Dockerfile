@@ -9,18 +9,19 @@ RUN apt-get update && \
     apt-get install -y --fix-missing \
     curl wget\
     nano\
-    python3-pip\
     build-essential\ 
     cmake\
     libeigen3-dev\
     python3-catkin-tools\
+    python2.7 \
+    python2.7-dev \
     ros-noetic-libfranka
 
 # Install Julia for RelaxedIK
-RUN wget https://julialang-s3.julialang.org/bin/linux/x64/1.8/julia-1.8.1-linux-x86_64.tar.gz
-RUN tar zxvf julia-1.8.1-linux-x86_64.tar.gz
-RUN echo 'export PATH="$PATH:/julia-1.8.1/bin"' >> ~/.bashrc
-RUN source ~/.bashrc
+RUN wget https://julialang-s3.julialang.org/bin/linux/x64/1.8/julia-1.8.1-linux-x86_64.tar.gz \
+    && tar zxvf julia-1.8.1-linux-x86_64.tar.gz
+ENV PATH="/julia-1.8.1/bin:${PATH}"
+# TODO: Perhaps move julia into another location besides root
 
 # Install Julia dependencies
 RUN julia -e 'import Pkg; Pkg.add(Pkg.PackageSpec(name="Rotations", version="0.13.0"))'
@@ -28,10 +29,6 @@ RUN julia -e 'import Pkg; Pkg.add(["YAML", "BenchmarkTools", "ForwardDiff", "Cal
 ENV PYTHON=/usr/bin/python2.7
 RUN julia -e 'import Pkg; Pkg.add("PyCall"); Pkg.build("PyCall")'
 
-
-# Install python packages
-RUN pip install websockets\
-    scipy
 
 
 COPY . /workspace
