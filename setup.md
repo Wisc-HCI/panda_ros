@@ -15,7 +15,7 @@ Here is what you need to start with:
 
 
 Here is what we are going to install:
-* Libfranka (ros-noetic-libfranka) version 0.9.2
+* Libfranka (ros-melodic-libfranka) version 0.9.0
 
 2. Setting Up Your Container
 <span style="color:red"> **The previous steps, you only have to do one time. The following steps, you need to do everytime you want to work with the robot if your container has shut down.** </span>

@@ -1,5 +1,5 @@
-# Use an official Ubuntu 20.04 LTS as a parent image
-FROM osrf/ros:noetic-desktop-full
+
+FROM osrf/ros:melodic-desktop-full
 
 # Set noninteractive to avoid prompts during the build
 ARG DEBIAN_FRONTEND=noninteractive
@@ -12,13 +12,13 @@ RUN apt-get update && \
     build-essential\ 
     cmake\
     libeigen3-dev\
-    python3-catkin-tools\
     python2.7 \
-    python2.7-dev \
-    ros-noetic-libfranka \
-    ros-noetic-urdfdom-py \
-    ros-noetic-kdl-parser-py \
-    ros-noetic-kdl-conversions 
+    python2.7-dev \ 
+    python-catkin-tools \
+    ros-melodic-libfranka \
+    ros-melodic-urdfdom-py \
+    ros-melodic-kdl-parser-py \
+    ros-melodic-kdl-conversions 
 
 # Install Julia for RelaxedIK
 RUN wget https://julialang-s3.julialang.org/bin/linux/x64/1.8/julia-1.8.1-linux-x86_64.tar.gz \
