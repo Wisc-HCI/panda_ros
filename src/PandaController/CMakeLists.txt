@@ -7,9 +7,9 @@ SET(CMAKE_SKIP_RPATH False)
 SET(CMAKE_INSTALL_RPATH ../lib)
 SET( CMAKE_INSTALL_PREFIX ../../../devel )
 
-# find_library(franka libfranka.so.0.7.1 REQUIRED)
-find_library(FRANKA_LIBRARY NAMES franka REQUIRED PATHS /opt/ros/noetic/lib)
-include_directories(/opt/ros/noetic/include)
+find_library(franka libfranka.so.0.7.1 REQUIRED)
+# find_library(FRANKA_LIBRARY NAMES franka REQUIRED PATHS /opt/ros/melodic/lib)
+# include_directories(/opt/ros/melodic/include)
 
 find_package(Eigen3 REQUIRED)
 find_library(boost_system REQUIRED)
@@ -31,8 +31,8 @@ add_library(PandaController SHARED
   ${CMAKE_CURRENT_SOURCE_DIR}/src/PandaControllerAccessors.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/src/Kinematics.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/src/Trajectory.cpp)
-# target_link_libraries(PandaController PUBLIC common franka boost_system)
-target_link_libraries(PandaController PUBLIC common ${FRANKA_LIBRARY} boost_system)
+target_link_libraries(PandaController PUBLIC common franka boost_system)
+#target_link_libraries(PandaController PUBLIC common ${FRANKA_LIBRARY} boost_system)
 target_include_directories(PandaController PUBLIC ${EIGEN3_INCLUDE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/include)
 list(APPEND installTargets PandaController)
 

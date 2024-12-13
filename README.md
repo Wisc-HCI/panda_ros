@@ -3,18 +3,6 @@ Welcome to PandaFCI! This is a set of interfaces for controlling the Panda robot
 
 ## Compilation:
 
-
-### Compile ROS package
-Compile individually each ros packages:
-```bash
-catkin build relaxed_ik --no-notify
-catkin build panda_ros_msgs --no-notify
-catkin build panda_ros --no-notify
-#catkin build dmp_deformations --no-notify
-catkin build inputs_ros --no-notify
-catkin build controller --no-notify
-```
-
 ### Compile non-ROS package (PandaController)
 
 If first time, first configure:
@@ -32,6 +20,19 @@ cd src/PandaController/build
 make install
 cd ../../..
 ```
+
+### Compile ROS package
+Compile individually each ros packages:
+```bash
+catkin build relaxed_ik --no-notify
+catkin build panda_ros_msgs --no-notify
+catkin build panda_ros --no-notify
+#catkin build dmp_deformations --no-notify
+catkin build inputs_ros --no-notify
+catkin build controller --no-notify
+```
+
+
 
 ## Running with ROS
 1. Run `source devel/setup.bash` inside the root directory

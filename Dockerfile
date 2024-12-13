@@ -15,10 +15,14 @@ RUN apt-get update && \
     python2.7 \
     python2.7-dev \ 
     python-catkin-tools \
-    ros-melodic-libfranka \
     ros-melodic-urdfdom-py \
     ros-melodic-kdl-parser-py \
     ros-melodic-kdl-conversions 
+
+
+# Setup up libfranka
+RUN  dpkg -i /workspace/libfranka/build/libfranka-0.7.1-amd64.deb  
+
 
 # Install Julia for RelaxedIK
 RUN wget https://julialang-s3.julialang.org/bin/linux/x64/1.8/julia-1.8.1-linux-x86_64.tar.gz \
