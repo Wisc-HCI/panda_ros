@@ -21,10 +21,14 @@ RUN apt-get update && \
 
 
 # Setup up libfranka
+COPY . /workspace
+WORKDIR /workspace/
 RUN  dpkg -i /workspace/libfranka/build/libfranka-0.7.1-amd64.deb  
+RUN ln -s /usr/lib/libfranka.so /opt/ros/melodic/lib/libfranka.so
 
 
 # Install Julia for RelaxedIK
+WORKDIR /
 RUN wget https://julialang-s3.julialang.org/bin/linux/x64/1.8/julia-1.8.1-linux-x86_64.tar.gz \
     && tar zxvf julia-1.8.1-linux-x86_64.tar.gz
 ENV PATH="/julia-1.8.1/bin:${PATH}"
@@ -50,7 +54,6 @@ RUN python2.7 -m pip install \
     
 RUN python2.7 -m pip install --upgrade numpy
 
-COPY . /workspace
 WORKDIR /workspace/
 
 
