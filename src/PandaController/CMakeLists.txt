@@ -19,8 +19,8 @@ find_library(DHDC libdhd.so.3.8.0 RECOMMENDED)
 find_library(DRDC libdrd.so.3.8.0 RECOMMENDED)
 
 add_library(common SHARED ${CMAKE_CURRENT_SOURCE_DIR}/src/Common.cpp)
-# target_link_libraries(common PUBLIC franka)
-target_link_libraries(common PUBLIC ${FRANKA_LIBRARY})
+target_link_libraries(common PUBLIC franka)
+#target_link_libraries(common PUBLIC ${FRANKA_LIBRARY})
 target_include_directories(common PUBLIC ${EIGEN3_INCLUDE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/include)
 list(APPEND installTargets common)
 
