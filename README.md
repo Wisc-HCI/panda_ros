@@ -33,7 +33,6 @@ catkin build controller --no-notify
 ```
 
 
-
 ## Running with ROS
 1. Run `source devel/setup.bash` inside the root directory
 2. Start the launch files related to the application:

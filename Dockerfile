@@ -17,7 +17,8 @@ RUN apt-get update && \
     python-catkin-tools \
     ros-melodic-urdfdom-py \
     ros-melodic-kdl-parser-py \
-    ros-melodic-kdl-conversions 
+    ros-melodic-kdl-conversions\
+    spacenavd ros-melodic-spacenav-node
 
 
 # Setup up libfranka
