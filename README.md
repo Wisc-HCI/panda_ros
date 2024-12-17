@@ -32,6 +32,11 @@ catkin build inputs_ros --no-notify
 catkin build controller --no-notify
 ```
 
+### Setup
+Replace with your Panda's IP 
+```bash
+export PANDA_IP=192.168.1.3
+```
 
 ## Running with ROS
 1. Run `source devel/setup.bash` inside the root directory
