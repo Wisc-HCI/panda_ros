@@ -1,4 +1,5 @@
 build/
+!/libfranka/build/
 devel/*
 src/PandaController/build/
 .catkin_workspace

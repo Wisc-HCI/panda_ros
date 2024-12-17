@@ -1,0 +1,11 @@
+Package: libfranka
+Version: 0.7.1-1
+Section: devel
+Priority: optional
+Architecture: amd64
+Depends: libpoco-dev
+Conflicts: ros-kinetic-libfranka
+Installed-Size: 1731
+Maintainer: Franka Emika GmbH
+Description: libfranka built using CMake
+
