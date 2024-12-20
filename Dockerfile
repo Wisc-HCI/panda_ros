@@ -1,5 +1,5 @@
 
-FROM osrf/ros:melodic-desktop-full
+FROM osrf/ros:noetic-desktop-full
 
 # Set noninteractive to avoid prompts during the build
 ARG DEBIAN_FRONTEND=noninteractive
@@ -15,17 +15,17 @@ RUN apt-get update && \
     python2.7 \
     python2.7-dev \ 
     python-catkin-tools \
-    ros-melodic-urdfdom-py \
-    ros-melodic-kdl-parser-py \
-    ros-melodic-kdl-conversions\
-    spacenavd ros-melodic-spacenav-node
+    ros-noetic-urdfdom-py \
+    ros-noetic-kdl-parser-py \
+    ros-noetic-kdl-conversions\
+    spacenavd ros-noetic-spacenav-node
 
 
 # Setup up libfranka
 COPY . /workspace
 WORKDIR /workspace/
 RUN  dpkg -i /workspace/libfranka/build/libfranka-0.7.1-amd64.deb  
-RUN ln -s /usr/lib/libfranka.so /opt/ros/melodic/lib/libfranka.so
+RUN ln -s /usr/lib/libfranka.so /opt/ros/noetic/lib/libfranka.so
 
 
 # Install Julia for RelaxedIK
