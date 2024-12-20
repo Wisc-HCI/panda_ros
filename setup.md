@@ -1,25 +1,20 @@
-# Setup 
+# PandaFCI
+Welcome to PandaFCI! This is a set of interfaces for controlling the Panda robot in real time through Franka Control Interface. It allows both real-time control (1kHz) and ros support (in cartesian space and joint space, both in position and velocity).
 
-The following instructions are for setting up FCI control on the Franka Emika Robot (FER) Panda using libfranka and franka_ros. These instructions allow you to launch a container so that you don't have to face most of the pain and suffering we went through in the installation process. However, if you want to control the physical Panda (versus just simulating it), you will still nee to install a Real-Time kernel patch (required by libfranka) on your host computer because containers share the host's machines kernel.
-
-<span style="color:red"> **Note: You only have to do steps 1-2 once, the first time you are setting up this repo to work with your Panda. Steps 3-4 you have to do EVERY time you want to work with the robot if your container has shut down.**</span>
-
-
-
-### 1. Prequisites
+## 1. Prequisites
 
 Here is what you need to start with:
-* Robot system version: 4.2.2 (FER pandas)
-* Robot / Gripper Server version: 5/3
-* Ubuntu version: 20.04.06 Focal Fossil (any 20.04 version should work fine)
+* Robot system version: 4.2.X (FER pandas)
+* Robot / Gripper Server version: 5 / 3
+* Ubuntu 
 
 
 Here is what we are going to install:
-* Libfranka (ros-melodic-libfranka) version 0.9.0
+* ROS Noetic
+* Libfranka  version 0.9.1
+* Various apt/ROS packages 
 
-2. Setting Up Your Container
-<span style="color:red"> **The previous steps, you only have to do one time. The following steps, you need to do everytime you want to work with the robot if your container has shut down.** </span>
-
+## 2. Setting Up Your Container
 
 First set up display forwarding:
 ```bash
@@ -33,33 +28,43 @@ sudo docker build -t panda-prim-controller-container .
 sudo docker run --rm -it --privileged --cap-add=SYS_NICE --env DISPLAY=$DISPLAY -v /tmp/.X11-unix:/tmp/.X11-unix -v $(pwd):/workspace --net=host panda-prim-controller-container
 ```
 
+## 3. Compilation:
 
----
+### Compile non-ROS package (PandaController)
 
-###  Notes
-* If there is an error with `catkin build` about configuration differences of symlink, run `catkin clean -y` and then rebuild. That should fix the issues.
+If first time, first configure:
+```bash
+cd src/PandaController
+mkdir build
+cd build
+cmake ..
+cd ../../..
+```
 
-* If you make changes in any of the src C/C++ files, you'll need to run:
+Anytime, run:
+```bash
+cd src/PandaController/build
+make install
+cd ../../..
+```
 
-    ```bash
-    catkin build
-    source devel/setup.bash
-    ```
-* Opening a new docker terminal:
-    ```bash
-    docker ps  # This will show you running containers w/ their ID
-    docker exec -it <CONTAINER_ID> bash  # This will open the container's terminal
-    source devel/setup.bash  # Run this in the container's terminal
-    ```
+### Compile ROS package
+Compile individually each ros packages:
+```bash
+catkin build relaxed_ik --no-notify
+catkin build panda_ros_msgs --no-notify
+catkin build panda_ros --no-notify
+#catkin build dmp_deformations --no-notify
+catkin build inputs_ros --no-notify
+catkin build controller --no-notify
+```
 
-* If you ever change  /src/relaxed_ik_ros1/relaxed_ik_core (which you probably should not be doing), you will need to go into that directory and recompile it with `cargo build`
 
-* If you make changes to libfranka (which you probably should not be doing), you'll need to run:
-    ``` bash
-    cd libfranka/build  # May need to use other command to get to this directory
-    rm -r * # For cleaning the cache to avoid errors of builds on different machines
-    cmake -DBUILD_TESTS=OFF .. 
-    cmake --build .
-    cpack -G DEB
-    sudo dpkg -i libfranka-0.9.2-x86_64.deb
-    ```
+## 4. Running with ROS
+1. Run `source devel/setup.bash` inside the root directory
+2. Start the launch files related to the application:
+    * Falcon:
+		- Terminal 1: `roslaunch relaxed_ik relaxed_ik_julia.launch`
+		- Terminal 2: `roslaunch inputs_ros falcon.launch`
+	* Space mouse:
+	    - Terminal 1: `roslaunch inputs_ros space_mouse.launch`
