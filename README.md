@@ -22,10 +22,10 @@ xhost +local:
 ```
 Now  build the container image and start the container. Make sure you are in this root directory (NIST_Benchmark). These commands mount on the current directory as the containers file system so any changes you make to the files on your host machine will be mirrored in the container. These commands also allow the containers display to be forwarded to your host machine so that you can see it.
 ```bash
-sudo docker build -t panda-prim-controller-container .
+sudo docker build -t panda-prim-controller .
 
 # Start the container with real-time kernel privileges, mount onto the current directory, and allow display forwarding. Container is removed once it exits.
-sudo docker run --rm -it --privileged --cap-add=SYS_NICE --env DISPLAY=$DISPLAY -v /tmp/.X11-unix:/tmp/.X11-unix -v $(pwd):/workspace --net=host panda-prim-controller-container
+sudo docker run --rm -it --privileged --cap-add=SYS_NICE --env DISPLAY=$DISPLAY -v /tmp/.X11-unix:/tmp/.X11-unix -v $(pwd):/workspace --net=host panda-prim-controller
 ```
 
 Add necessary environment variables:
@@ -74,3 +74,15 @@ catkin build controller --no-notify
 		- Terminal 2: `roslaunch inputs_ros falcon.launch`
 	* Space mouse:
 	    - Terminal 1: `roslaunch inputs_ros space_mouse.launch`
+
+
+## Updating to Noetic/Python3 Progress
+- [x] Update Dockerfile to Noetic and Python3
+- [x] Make sure libraries in Dockerfile still work or upgrade as needed.
+- [ ] Update libfranka to 0.9.1 (can be done in DockerFile).
+- [ ] Update franka_ros to 0.8.0 (source code needs to be re-cloned from Github).
+- [ ] Fix any CMAKE issues.
+- [ ] Update python code necessarey to get Space Mouse working.
+- [ ] Upgrade RelaxedIK to RangedIK.
+- [ ] Figure out which code is relevent to ros_gui and upgrade that.
+- [ ] Possibly delete any remaining outdated/unessesary code.
