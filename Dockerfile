@@ -7,23 +7,18 @@ ARG DEBIAN_FRONTEND=noninteractive
 # Update apt package list and install general packages
 RUN apt-get update && \
     apt-get install -y --fix-missing \
-    curl wget\
-    nano\
-    build-essential\ 
-    cmake\
+    curl wget \
+    nano \
+    build-essential \ 
+    cmake \
     libeigen3-dev\
     python3-catkin-tools \
+    ros-noetic-libfranka ros-noetic-franka-ros \
     ros-noetic-urdfdom-py \
     ros-noetic-kdl-parser-py \
     ros-noetic-kdl-conversions\
     spacenavd ros-noetic-spacenav-node
 
-
-# Setup up libfranka
-COPY . /workspace
-WORKDIR /workspace/
-RUN  dpkg -i /workspace/libfranka/build/libfranka-0.7.1-amd64.deb  
-RUN ln -s /usr/lib/libfranka.so /opt/ros/noetic/lib/libfranka.so
 
 
 # # Install Julia for RelaxedIK

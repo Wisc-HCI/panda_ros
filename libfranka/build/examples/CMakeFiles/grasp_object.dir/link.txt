@@ -1,1 +1,0 @@
-/usr/bin/c++  -O3 -DNDEBUG   CMakeFiles/grasp_object.dir/grasp_object.cpp.o  -o grasp_object -Wl,-rpath,/workspace/libfranka/build: libexamples_common.a ../libfranka.so.0.7.1 

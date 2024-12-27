@@ -11,7 +11,8 @@ Here is what you need to start with:
 
 Here is what we are going to install:
 * ROS Noetic
-* Libfranka  version 0.9.1
+* Libfranka  version 0.9.2
+* franka_ros version 0.10.0
 * Various apt/ROS packages 
 
 ## 2. Setting Up Your Container
@@ -57,7 +58,7 @@ cd ../../..
 ### Compile ROS package
 Compile individually each ros packages:
 ```bash
-catkin build relaxed_ik --no-notify
+# catkin build relaxed_ik --no-notify
 catkin build panda_ros_msgs --no-notify
 catkin build panda_ros --no-notify
 #catkin build dmp_deformations --no-notify
@@ -79,9 +80,10 @@ catkin build controller --no-notify
 ## Updating to Noetic/Python3 Progress
 - [x] Update Dockerfile to Noetic and Python3
 - [x] Make sure libraries in Dockerfile still work or upgrade as needed.
-- [ ] Update libfranka to 0.9.1 (can be done in DockerFile).
-- [ ] Update franka_ros to 0.8.0 (source code needs to be re-cloned from Github).
+- [x] Update libfranka to 0.9.2 (This can be done in DockerFile with apt-get).
+- [x] Update franka_ros to 0.10.0 (This version can be done in the DockerFile through apt-get. This version should be compatible but I've only tested 0.8.0 before. If we end up  needing 0.8.0, that will need to be downloaded through source code.)
 - [ ] Fix any CMAKE issues.
+- [ ] Check if changes in changelog of libfranka and franka_ros show effect code to get Space Mouse working.
 - [ ] Update python code necessarey to get Space Mouse working.
 - [ ] Upgrade RelaxedIK to RangedIK.
 - [ ] Figure out which code is relevent to ros_gui and upgrade that.
