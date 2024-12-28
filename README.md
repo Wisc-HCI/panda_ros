@@ -88,3 +88,8 @@ catkin build controller --no-notify
 - [ ] Upgrade RelaxedIK to RangedIK.
 - [ ] Figure out which code is relevent to ros_gui and upgrade that.
 - [ ] Possibly delete any remaining outdated/unessesary code.
+
+## Resources
+* Noetic/Python3 Migration:
+	* https://wiki.ros.org/noetic/Migration
+	* https://mil.ufl.edu/docs/software/noetic_migration.html
