@@ -74,7 +74,9 @@ catkin build controller --no-notify
 		- Terminal 1: `roslaunch relaxed_ik relaxed_ik_julia.launch`
 		- Terminal 2: `roslaunch inputs_ros falcon.launch`
 	* Space mouse:
-	    - Terminal 1: `roslaunch inputs_ros space_mouse.launch`
+	    - Terminal 1: 
+			`spacenavd`
+			`roslaunch inputs_ros space_mouse.launch`
 
 
 ## Updating to Noetic/Python3 Progress
@@ -82,7 +84,7 @@ catkin build controller --no-notify
 - [x] Make sure libraries in Dockerfile still work or upgrade as needed.
 - [x] Update libfranka to 0.9.2 (This can be done in DockerFile with apt-get).
 - [x] Update franka_ros to 0.10.0 (This version can be done in the DockerFile through apt-get. This version should be compatible but I've only tested 0.8.0 before. If we end up  needing 0.8.0, that will need to be downloaded through source code.)
-- [ ] Fix any CMAKE issues.
+- [x] Fix any CMAKE issues.
 - [ ] Check if changes in changelog of libfranka and franka_ros show effect code to get Space Mouse working.
 - [ ] Update python code necessarey to get Space Mouse working.
 - [ ] Upgrade RelaxedIK to RangedIK.

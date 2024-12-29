@@ -12,9 +12,8 @@ find_package(Eigen3 REQUIRED)
 find_library(DHDC libdhd.so.3.8.0 REQUIRED)
 find_library(DRDC libdrd.so.3.8.0 REQUIRED)
 find_library(LIBNIFALCON nifalcon REQUIRED)
-find_library(franka libfranka.so.0.7.1 REQUIRED)
-# find_library(FRANKA_LIBRARY NAMES franka REQUIRED PATHS /opt/ros/melodic/lib)
-# include_directories(/opt/ros/melodic/include)
+# find_library(franka libfranka.so.0.7.1 REQUIRED)
+find_package(Franka 0.9.2 REQUIRED)
 
 find_library(
     pandaController
