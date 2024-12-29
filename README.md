@@ -85,7 +85,7 @@ catkin build controller --no-notify
 - [x] Update libfranka to 0.9.2 (This can be done in DockerFile with apt-get).
 - [x] Update franka_ros to 0.10.0 (This version can be done in the DockerFile through apt-get. This version should be compatible but I've only tested 0.8.0 before. If we end up  needing 0.8.0, that will need to be downloaded through source code.)
 - [x] Fix any CMAKE issues.
-- [ ] Check if changes in changelog of libfranka and franka_ros show effect code to get Space Mouse working.
+- [X] Check if changes in changelog of libfranka and franka_ros show effect code.
 - [ ] Update python code necessarey to get Space Mouse working.
 - [ ] Upgrade RelaxedIK to RangedIK.
 - [ ] Figure out which code is relevent to ros_gui and upgrade that.
