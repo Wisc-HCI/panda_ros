@@ -17,10 +17,21 @@ RUN apt-get update && \
     ros-noetic-urdfdom-py \
     ros-noetic-kdl-parser-py \
     ros-noetic-kdl-conversions\
-    spacenavd ros-noetic-spacenav-node
+    ros-noetic-spacenav-node\
+    usbutils
 
 # Add python alias to python3
 RUN ln -s /usr/bin/python3 /usr/bin/python
+
+# Setup spacenavd (can't use apt-get bc that version is too old)
+WORKDIR /workspace/
+COPY . .
+WORKDIR /workspace/spacenavd
+RUN ./configure
+RUN make install
+WORKDIR /workspace/
+
+
 
 # # Install Julia for RelaxedIK
 # WORKDIR /
@@ -49,7 +60,7 @@ RUN ln -s /usr/bin/python3 /usr/bin/python
     
 # RUN python2.7 -m pip install --upgrade numpy
 
-WORKDIR /workspace/
+
 
 
 # Set the default command to execute

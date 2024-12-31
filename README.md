@@ -15,7 +15,19 @@ Here is what we are going to install:
 * franka_ros version 0.10.0
 * Various apt/ROS packages 
 
-## 2. Setting Up Your Container
+
+## 2. Setting up this repository
+First clone this repository to your local computer and open a terminal in the repository's directory. All further commands should be run from there.
+Run the following command to grab the proper submodules:
+```bash
+git submodule init
+git submodule update
+```
+
+The following submodules should have been cloned:
+- [spacenavd v1.3](https://github.com/FreeSpacenav/spacenavd)
+
+## 3. Setting Up Your Container
 
 First set up display forwarding:
 ```bash
@@ -25,8 +37,8 @@ Now  build the container image and start the container. Make sure you are in thi
 ```bash
 sudo docker build -t panda-prim-controller .
 
-# Start the container with real-time kernel privileges, mount onto the current directory, and allow display forwarding. Container is removed once it exits.
-sudo docker run --rm -it --privileged --cap-add=SYS_NICE --env DISPLAY=$DISPLAY -v /tmp/.X11-unix:/tmp/.X11-unix -v $(pwd):/workspace --net=host panda-prim-controller
+# Start the container with real-time kernel privileges, allow access to usb devices,  mount onto the current directory, and allow display forwarding. Container is removed once it exits.
+sudo docker run --rm -it --privileged --device=/dev/input/event* --cap-add=SYS_NICE --env DISPLAY=$DISPLAY -v /tmp/.X11-unix:/tmp/.X11-unix -v $(pwd):/workspace --net=host panda-prim-controller
 ```
 
 Add necessary environment variables:
@@ -35,7 +47,7 @@ Replace with your Panda's IP
 export PANDA_IP=192.168.1.3
 ```
 
-## 3. Compilation:
+## 4. Compilation:
 
 ### Compile non-ROS package (PandaController)
 
@@ -67,7 +79,7 @@ catkin build controller --no-notify
 ```
 
 
-## 4. Running with ROS
+## 5. Running with ROS
 1. Run `source devel/setup.bash` inside the root directory
 2. Start the launch files related to the application:
     * Falcon:
@@ -97,8 +109,25 @@ catkin build controller --no-notify
 * Noetic/Python3 Migration:
 	* https://wiki.ros.org/noetic/Migration
 	* https://mil.ufl.edu/docs/software/noetic_migration.html
+* SpaceNav ROS:
+	* https://github.com/ros-drivers/joystick_drivers/tree/ros1/spacenav_node
 
 
+## Testing
+
+* To test the space mouse, run each of these commands in their own terminal. The last command will subscribe to the spacemouse topic and the numbers outputted should change as you move the mouse.
+	- Terminal 1: 
+		```bash
+		roscore
+		```
+	- Terminal 2: 
+		```bash
+		spacenavd  
+		rosrun spacenav_node spacenav_node
+		```
+	- Terminal 3: 
+		```bash
+		rostopic echo /spacenav/joy
+		```	
 
 
-/usr/bin/env: ‘python’: No such file or directory

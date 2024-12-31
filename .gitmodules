@@ -1,0 +1,3 @@
+[submodule "spacenavd"]
+	path = spacenavd
+	url = https://github.com/FreeSpacenav/spacenavd.git
