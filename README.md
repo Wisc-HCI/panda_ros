@@ -75,8 +75,10 @@ catkin build controller --no-notify
 		- Terminal 2: `roslaunch inputs_ros falcon.launch`
 	* Space mouse:
 	    - Terminal 1: 
-			`spacenavd`
-			`roslaunch inputs_ros space_mouse.launch`
+			```bash
+			spacenavd
+			roslaunch inputs_ros space_mouse.launch
+			```
 
 
 ## Updating to Noetic/Python3 Progress
@@ -95,3 +97,8 @@ catkin build controller --no-notify
 * Noetic/Python3 Migration:
 	* https://wiki.ros.org/noetic/Migration
 	* https://mil.ufl.edu/docs/software/noetic_migration.html
+
+
+
+
+/usr/bin/env: ‘python’: No such file or directory

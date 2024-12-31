@@ -19,7 +19,8 @@ RUN apt-get update && \
     ros-noetic-kdl-conversions\
     spacenavd ros-noetic-spacenav-node
 
-
+# Add python alias to python3
+RUN ln -s /usr/bin/python3 /usr/bin/python
 
 # # Install Julia for RelaxedIK
 # WORKDIR /
