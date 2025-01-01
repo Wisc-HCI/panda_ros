@@ -4,9 +4,17 @@ Welcome to PandaFCI! This is a set of interfaces for controlling the Panda robot
 ## 1. Prequisites
 
 Here is what you need to start with:
-* Robot system version: 4.2.X (FER pandas)
-* Robot / Gripper Server version: 5 / 3
-* Ubuntu 
+* Ubuntu Machine with the [Real Time Kernel](https://frankaemika.github.io/docs/installation_linux.html#setting-up-the-real-time-kernel)
+	* [Docker Engine](https://docs.docker.com/engine/install/)
+* Franka Emika Panda 7 DOF Robot setup with the [FCI](https://frankaemika.github.io/docs/getting_started.html)
+	* Robot system version: 4.2.X (FER pandas)
+	* Robot / Gripper Server version: 5 / 3
+
+
+
+You will optionally need:
+* [SpaceMouse Compact or Wireless](https://3dconnexion.com/us/product/spacemouse-compact/)
+* [Axio80-M20 Force Torque Sensor](https://www.ati-ia.com/products/ft/ft_models.aspx?id=Axia80-M20) installed on the Panda's End Effector
 
 
 Here is what we are going to install:
