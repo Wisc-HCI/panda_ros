@@ -82,16 +82,12 @@ catkin build controller --no-notify
 ## 5. Running with ROS
 1. Run `source devel/setup.bash` inside the root directory
 2. Start the launch files related to the application:
-    * Falcon:
-		- Terminal 1: `roslaunch relaxed_ik relaxed_ik_julia.launch`
-		- Terminal 2: `roslaunch inputs_ros falcon.launch`
 	* Space mouse:
 	    - Terminal 1: 
 			```bash
 			spacenavd
 			roslaunch inputs_ros space_mouse.launch
 			```
-
 
 ## Updating to Noetic/Python3 Progress
 - [x] Update Dockerfile to Noetic and Python3
@@ -100,7 +96,7 @@ catkin build controller --no-notify
 - [x] Update franka_ros to 0.10.0 (This version can be done in the DockerFile through apt-get. This version should be compatible but I've only tested 0.8.0 before. If we end up  needing 0.8.0, that will need to be downloaded through source code.)
 - [x] Fix any CMAKE issues.
 - [X] Check if changes in changelog of libfranka and franka_ros show effect code.
-- [ ] Update python code necessarey to get Space Mouse working.
+- [X] Update python code necessarey to get Space Mouse working.
 - [ ] Upgrade RelaxedIK to RangedIK.
 - [ ] Figure out which code is relevent to ros_gui and upgrade that.
 - [ ] Possibly delete any remaining outdated/unessesary code.
@@ -111,6 +107,8 @@ catkin build controller --no-notify
 	* https://mil.ufl.edu/docs/software/noetic_migration.html
 * SpaceNav ROS:
 	* https://github.com/ros-drivers/joystick_drivers/tree/ros1/spacenav_node
+* ROS Headers:
+	* https://medium.com/@smilesajid14/how-custom-msg-works-in-ros-7d5a14bf5781
 
 
 ## Testing

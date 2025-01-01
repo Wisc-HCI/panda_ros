@@ -186,6 +186,7 @@ void setVelocityBoundPath(const panda_ros_msgs::VelocityBoundPath::ConstPtr& msg
 
 void setVelocity(const geometry_msgs::TwistStamped::ConstPtr& msg) {
     if (PandaController::isRunning()) {
+        
         PandaController::setKinematicChain(kinematicChain, eeLink);
         auto twist = msg->twist;
         Eigen::VectorXd velocity(6);
@@ -198,22 +199,25 @@ void setVelocity(const geometry_msgs::TwistStamped::ConstPtr& msg) {
             twist.angular.z;
         double end_time = msg->header.stamp.toSec();
 
+        
+
         PandaController::setTrajectory(PandaController::Trajectory(
             PandaController::TrajectoryType::Velocity, 
             [velocity, end_time]() {
-                if (ros::Time::now().toSec() > end_time){
-                    Eigen::VectorXd velocity(6);
-                    velocity << 
-                    ((double) rand() / (RAND_MAX))/100000.,
-                    ((double) rand() / (RAND_MAX))/100000.,
-                    ((double) rand() / (RAND_MAX))/100000.,
-                    ((double) rand() / (RAND_MAX))/100000.,
-                    ((double) rand() / (RAND_MAX))/100000.,
-                    ((double) rand() / (RAND_MAX))/100000.;
+                // if (ros::Time::now().toSec() > end_time){
+                //     Eigen::VectorXd velocity(6);
+                //     velocity << 
+                //     ((double) rand() / (RAND_MAX))/100000.,
+                //     ((double) rand() / (RAND_MAX))/100000.,
+                //     ((double) rand() / (RAND_MAX))/100000.,
+                //     ((double) rand() / (RAND_MAX))/100000.,
+                //     ((double) rand() / (RAND_MAX))/100000.,
+                //     ((double) rand() / (RAND_MAX))/100000.;
+                //     return velocity;
+                // }
+                // else 
                     return velocity;
-                }
-                else
-                    return velocity;
+                
             }
         ));
     }
@@ -434,6 +438,7 @@ void signalHandler(int sig)
 }
 
 int main(int argc, char **argv) {
+    cout << "HERE 0" << endl;
     ros::init(argc, argv, "PandaListener");
     ros::NodeHandle n("~");
     
@@ -459,7 +464,9 @@ int main(int argc, char **argv) {
     g_jointPub = n.advertise<sensor_msgs::JointState>("/panda/joint_states", 1);
     g_eventPub = n.advertise<std_msgs::String>("/panda/events", 1);
     ros::Rate loopRate(1000);
+    
     while (ros::ok() && PandaController::isRunning()) {
+        
         publishState();
         ros::spinOnce();
         loopRate.sleep();
