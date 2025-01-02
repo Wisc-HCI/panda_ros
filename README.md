@@ -88,8 +88,9 @@ catkin build controller --no-notify
 
 
 ## 5. Running with ROS
-1. Run `source devel/setup.bash` inside the root directory
-2. Start the launch files related to the application:
+1. Use Franka Desktop to unlock the Panda's joints and enable FCI mode.
+2. Run `source devel/setup.bash` inside the root directory
+3. Start the launch files related to the application:
 	* Space mouse:
 	    - Terminal 1: 
 			```bash
@@ -124,7 +125,7 @@ catkin build controller --no-notify
 
 
 
-## Testing
+## Troubleshooting/Testing
 
 * To test the space mouse, run each of these commands in their own terminal. The last command will subscribe to the spacemouse topic and the numbers outputted should change as you move the mouse.
 	- Terminal 1: 
@@ -140,6 +141,7 @@ catkin build controller --no-notify
 		```bash
 		rostopic echo /spacenav/joy
 		```	
+* To test if the Force/Torque Sensor is properly connected, go to the sensor's IP (ex/ 192.168.1.6) in a webrowser on your computer. If the ATI Configuration page shows up, that means you are properly connected. If not, reference section 4 of the [Sensor Guide](https://www.ati-ia.com/app_content/Documents/9610-05-Ethernet%20Axia80.pdf).
 
 ## Mya notes, please ignore :)
 Bus 002 Device 003: ID 0bda:8153 Realtek Semiconductor Corp. RTL8153 Gigabit Ethernet Adapter
