@@ -161,6 +161,7 @@ namespace PandaController {
         f = m * f;
         t = m * t;
         array<double, 6> ft_sensor ={f[0], -f[1], -f[2], t[0], -t[1], -t[2]};
+
         return ft_sensor;
     }
 
