@@ -118,6 +118,10 @@ catkin build controller --no-notify
 	* https://github.com/ros-drivers/joystick_drivers/tree/ros1/spacenav_node
 * ROS Headers:
 	* https://medium.com/@smilesajid14/how-custom-msg-works-in-ros-7d5a14bf5781
+* Force Torque Sensor:
+	* https://www.ati-ia.com/app_content/Documents/9610-05-Ethernet%20Axia80.pdf
+	* https://www.ati-ia.com/products/ft/ft_models.aspx?id=Axia80-M20
+
 
 
 ## Testing
@@ -137,4 +141,16 @@ catkin build controller --no-notify
 		rostopic echo /spacenav/joy
 		```	
 
+## Mya notes, please ignore :)
+Bus 002 Device 003: ID 0bda:8153 Realtek Semiconductor Corp. RTL8153 Gigabit Ethernet Adapter
+screen /dev/tty4 115200
+lsusb
+dmesg
 
+Force Torque Controller:
+/home/hcilab/Desktop/github/panda-primitives-control/src/PandaController/src/ForceTorqueListener.cpp
+
+
+Force Dimension referenced by ros_gui: /home/hcilab/Desktop/github/panda-primitives-control/src/dmp_deformations/src/backup/ForceDimension_Deformation_Emmanuel.cpp
+
+https://www.forcedimension.com/software/sdk
