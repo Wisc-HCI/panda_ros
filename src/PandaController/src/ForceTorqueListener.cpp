@@ -70,7 +70,7 @@ namespace PandaController {
         *(uint32*)&request[4] = htonl(NUM_SAMPLES); /* see section 9.1 in Net F/T user manual. */
         
         /* Sending the request. */
-        he = gethostbyname("192.168.1.6");
+        he = gethostbyname("192.168.2.2");
         memcpy(&addr.sin_addr, he->h_addr_list[0], he->h_length);
         addr.sin_family = AF_INET;
         addr.sin_port = htons(PORT);

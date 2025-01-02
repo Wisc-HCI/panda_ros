@@ -4,17 +4,17 @@ Welcome to PandaFCI! This is a set of interfaces for controlling the Panda robot
 ## 1. Prequisites
 
 Here is what you need to start with:
-* Ubuntu Machine with the [Real Time Kernel](https://frankaemika.github.io/docs/installation_linux.html#setting-up-the-real-time-kernel), set to static IP of 192.168.1.XXX (Ex/ 192.168.1.5)
+* Ubuntu Machine with the [Real Time Kernel](https://frankaemika.github.io/docs/installation_linux.html#setting-up-the-real-time-kernel)
+	* Static IP of 192.168.1.XXX (Ex/ 192.168.1.5) and Netmask of 255.255.255.0 for the ethernet connected to the Panda. If you have also have a force torque sensor, the ethernet connected to that needs to be set to a static IP of 192.168.2.XXX (Ex/ 192.168.2.5).
 	* [Docker Engine](https://docs.docker.com/engine/install/)
-* Franka Emika Panda 7 DOF Robot setup with the [FCI](https://frankaemika.github.io/docs/getting_started.html) and set to static IP of 192.168.1.XXX (Ex/ 192.168.1.3).
+* Franka Emika Panda 7 DOF Robot setup with the [FCI](https://frankaemika.github.io/docs/getting_started.html) and set to static IP of 192.168.1.XXX (Ex/ 192.168.1.3) and Netmask to 255.255.255.0.
 	* Robot system version: 4.2.X (FER pandas)
 	* Robot / Gripper Server version: 5 / 3
 
 
-
 You will optionally need:
 * [SpaceMouse Compact or Wireless](https://3dconnexion.com/us/product/spacemouse-compact/)
-* [Axio80-M20 Force Torque Sensor](https://www.ati-ia.com/products/ft/ft_models.aspx?id=Axia80-M20) installed on the Panda's End Effector and connected to the host computer via ethernet with IP 192.168.1.6 (or change the IP in src/PandaController/src/ForceTorqueListener.cpp).
+* [Axio80-M20 Force Torque Sensor](https://www.ati-ia.com/products/ft/ft_models.aspx?id=Axia80-M20) installed on the Panda's End Effector and connected to the host computer via ethernet with IP 192.168.2.2 (or change the IP in src/PandaController/src/ForceTorqueListener.cpp).
 
 
 Here is what we are going to install:
