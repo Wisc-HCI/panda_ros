@@ -122,6 +122,8 @@ catkin build controller --no-notify
 * Force Torque Sensor:
 	* https://www.ati-ia.com/app_content/Documents/9610-05-Ethernet%20Axia80.pdf
 	* https://www.ati-ia.com/products/ft/ft_models.aspx?id=Axia80-M20
+* Force Dimension Input:
+	* https://www.forcedimension.com/software/sdk
 
 
 
@@ -141,18 +143,7 @@ catkin build controller --no-notify
 		```bash
 		rostopic echo /spacenav/joy
 		```	
-* To test if the Force/Torque Sensor is properly connected, go to the sensor's IP (ex/ 192.168.1.6) in a webrowser on your computer. If the ATI Configuration page shows up, that means you are properly connected. If not, reference section 4 of the [Sensor Guide](https://www.ati-ia.com/app_content/Documents/9610-05-Ethernet%20Axia80.pdf).
-
-## Mya notes, please ignore :)
-Bus 002 Device 003: ID 0bda:8153 Realtek Semiconductor Corp. RTL8153 Gigabit Ethernet Adapter
-screen /dev/tty4 115200
-lsusb
-dmesg
-
-Force Torque Controller:
-/home/hcilab/Desktop/github/panda-primitives-control/src/PandaController/src/ForceTorqueListener.cpp
+		
+* To test if the Force/Torque Sensor is properly connected, go to the sensor's IP (ex/ 192.168.1.6) in a webrowser on your computer. If the ATI Configuration page shows up, that means you are properly connected. If not, reference section 4 of the [Sensor Guide](https://www.ati-ia.com/app_content/Documents/9610-05-Ethernet%20Axia80.pdf). Once you can access the ATI site, you can go to Demo and download the Java application to see the values coming from the sensor.
 
 
-Force Dimension referenced by ros_gui: /home/hcilab/Desktop/github/panda-primitives-control/src/dmp_deformations/src/backup/ForceDimension_Deformation_Emmanuel.cpp
-
-https://www.forcedimension.com/software/sdk
