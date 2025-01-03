@@ -369,7 +369,7 @@ namespace PandaController {
         cout << "Panda ip is " << ip << endl;
         // Gripper thread will hang forever on a blocking tcp call
         // if the gripper is not attached. 
-        // gripper = thread(initGripper, ip); 
+        gripper = thread(initGripper, ip); 
         controller = thread(runController, ip, simulate, onStopped);
         ft_listener = thread(forceTorqueListener);
     }

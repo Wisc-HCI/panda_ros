@@ -438,7 +438,6 @@ void signalHandler(int sig)
 }
 
 int main(int argc, char **argv) {
-    cout << "HERE 0" << endl;
     ros::init(argc, argv, "PandaListener");
     ros::NodeHandle n("~");
     
