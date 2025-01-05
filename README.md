@@ -106,10 +106,10 @@ catkin build controller --no-notify
 - [x] Fix any CMAKE issues.
 - [X] Check if changes in changelog of libfranka and franka_ros show effect code.
 - [X] Update python code necessary to get Space Mouse working.
-- [ ] Get Force/Torque Sensor working
-- [ ] Upgrade RelaxedIK to RangedIK.
-- [ ] Figure out which code is relevant to ros_gui and upgrade that.
-- [ ] Possibly delete any remaining outdated/unnecessary code.
+- [X] Get Force/Torque Sensor working
+- [ ] Figure out which code is relevant to ros-gui and upgrade that.
+- [ ] Upgrade RelaxedIK to RangedIK if necessary
+- [ ] Possibly delete any remaining outdated/unnecessary code (franka_ros may be able to be removed).
 
 ## Resources
 * Noetic/Python3 Migration:
