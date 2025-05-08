@@ -6,7 +6,7 @@ SET(CMAKE_SKIP_RPATH False)
 SET(CMAKE_INSTALL_RPATH ..)
 
 
-find_package(catkin REQUIRED COMPONENTS roscpp rospy tf2_ros geometry_msgs sensor_msgs std_msgs genmsg)
+find_package(catkin REQUIRED COMPONENTS panda_ros_msgs roscpp rospy tf2_ros geometry_msgs sensor_msgs std_msgs genmsg)
 catkin_package()
 
 install(DIRECTORY
