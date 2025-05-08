@@ -6,8 +6,14 @@ SET(CMAKE_SKIP_RPATH False)
 SET(CMAKE_INSTALL_RPATH ..)
 
 
-find_package(catkin REQUIRED COMPONENTS roscpp tf2_ros geometry_msgs sensor_msgs std_msgs)
+find_package(catkin REQUIRED COMPONENTS roscpp rospy tf2_ros geometry_msgs sensor_msgs std_msgs genmsg)
 catkin_package()
+
+install(DIRECTORY
+    launch/
+    DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}/launch
+)
+
 
 find_package(Eigen3 REQUIRED)
 # find_library(franka libfranka.so.0.7.1 REQUIRED)
@@ -40,4 +46,5 @@ catkin_install_python(PROGRAMS
     test/velocity_control_test
     test/path_control_test
     test/mocap_calib
+    nodes/mover
     DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION})

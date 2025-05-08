@@ -147,3 +147,8 @@ catkin build controller --no-notify
 * To test if the Force/Torque Sensor is properly connected, go to the sensor's IP (ex/ 192.168.1.6) in a webrowser on your computer. If the ATI Configuration page shows up, that means you are properly connected. If not, reference section 4 of the [Sensor Guide](https://www.ati-ia.com/app_content/Documents/9610-05-Ethernet%20Axia80.pdf). Once you can access the ATI site, you can go to Demo and download the Java application to see the values coming from the sensor.
 
 
+
+## Dependencies:
+- [panda_ros_msgs](https://github.com/emmanuel-senft/panda-ros-msgs/tree/study)
+- [authoring_msgs](https://github.com/emmanuel-senft/authoring-msgs/tree/study)
+- [spacenavd](https://github.com/FreeSpacenav/spacenavd)
