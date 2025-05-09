@@ -1,0 +1,99 @@
+#!/usr/bin/env python
+import rospy
+import signal
+import sys
+import math
+import tf
+import PyKDL
+import copy
+
+from sensor_msgs.msg import Joy
+from geometry_msgs.msg import Twist,Pose,PoseStamped
+from std_msgs.msg import String
+
+REFERENCE_FRAME='panda_link0'
+
+class Mover(object):
+    def __init__(self):
+        self._tl = tf.TransformListener()
+        rospy.sleep(0.5) # sleep a bit to make sure the TF cache is filled
+        self._twist_pub = rospy.Publisher("/panda/cart_vel",Twist, queue_size=5)
+        self._goal1 = PoseStamped()
+        self._goal1.pose.position.x=.4
+        self._goal1.pose.position.y=0.125
+        self._goal1.pose.position.z=.7
+        q = tf.transformations.quaternion_from_euler(math.pi,0,0)
+        self._goal1.pose.orientation.x = q[0] 
+        self._goal1.pose.orientation.y = q[1] 
+        self._goal1.pose.orientation.z = q[2] 
+        self._goal1.pose.orientation.w = q[3] 
+        self._goal1.header.frame_id=REFERENCE_FRAME
+
+        self._goal2 = copy.deepcopy(self._goal1)
+        self._goal2.pose.position.y=-self._goal2.pose.position.y
+        self._current_goal = 1
+
+    def run(self):
+        r = rospy.Rate(100)
+        while not rospy.is_shutdown():
+            self.control()
+            r.sleep()
+
+    def control(self):
+        try:
+            (trans,rot) = self._tl.lookupTransform(REFERENCE_FRAME, 'end_effector', rospy.Time(0))
+        except:
+            print("fail")
+            return
+
+        if self._current_goal == 1:
+            goal = self._goal1
+        if self._current_goal == 2:
+            goal = self._goal2
+
+        pose = Pose()
+        pose.position.x = goal.pose.position.x-trans[0]
+        pose.position.y = goal.pose.position.y-trans[1]
+        pose.position.z = goal.pose.position.z-trans[2]
+
+        #From https://answers.ros.org/question/10124/relative-rotation-between-two-quaternions/
+        qp = PyKDL.Rotation.Quaternion(rot[0],rot[1],rot[2],rot[3])
+
+        rot = goal.pose.orientation
+        qg = PyKDL.Rotation.Quaternion(rot.x,rot.y,rot.z,rot.w)
+        q = qg*qp.Inverse()
+
+        angle = q.GetRPY()
+        
+        threshold = .01
+        if math.fabs(pose.position.x) < threshold and math.fabs(pose.position.y) < threshold and math.fabs(pose.position.z) <threshold:
+            print("close enough")
+            self._current_goal = 3 - self._current_goal
+            if self._current_goal == 1:
+                self._goal1.pose.position.z-=.1
+            if self._current_goal == 2:
+                self._goal2.pose.position.z-=.1
+            return
+
+        twist = Twist()
+        P=.5
+        twist.linear.x=P*pose.position.x
+        twist.linear.y=P*pose.position.y
+        twist.linear.z=P*pose.position.z
+        twist.angular.x=angle[0]
+        twist.angular.y=angle[1]
+        twist.angular.z=angle[2]
+        self._twist_pub.publish(twist)
+
+    def signal_handler(self, signal, frame):
+        #publish zeros for the twist, exit
+        twist = Twist()
+        self._twist_pub.publish(twist)
+        sys.exit(0)
+
+if __name__ == "__main__":
+    rospy.init_node("mover")
+    mover = Mover()
+    signal.signal(signal.SIGINT, mover.signal_handler)
+    mover.run()
+

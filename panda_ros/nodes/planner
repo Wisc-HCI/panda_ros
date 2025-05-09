@@ -1,0 +1,93 @@
+#!/usr/bin/env python
+import rospy
+import signal
+import sys
+import math
+import tf
+import PyKDL
+import copy
+
+from geometry_msgs.msg import Twist,Pose,PoseStamped
+from nav_msgs.msg import Path
+
+REFERENCE_FRAME='common_world'
+
+class Planner(object):
+    def __init__(self):
+        self._tl = tf.TransformListener()
+        rospy.sleep(0.5) # sleep a bit to make sure the TF cache is filled
+        self._path_pub = rospy.Publisher("/panda/path", Path, queue_size=0)
+        
+        goal = PoseStamped()
+        goal.pose.position.x=.4
+        goal.pose.position.y=0.125
+        goal.pose.position.z=.7
+        q = tf.transformations.quaternion_from_euler(math.pi,0,0)
+        goal.pose.orientation.x = q[0] 
+        goal.pose.orientation.y = q[1] 
+        goal.pose.orientation.z = q[2] 
+        goal.pose.orientation.w = q[3] 
+        goal.header.frame_id=REFERENCE_FRAME
+        self._goals=[]
+        for i in range(10):
+            self._goals.append(copy.deepcopy(goal))
+            if not i % 2:
+                goal.pose.position.y=-goal.pose.position.y
+            else:
+                goal.pose.position.z -=.1
+        print self._goals
+
+    def run(self):
+        r = rospy.Rate(100)
+        while not rospy.is_shutdown():
+            self.update_path()
+            r.sleep()
+
+    def check_goal(self):
+        try:
+            (trans,rot) = self._tl.lookupTransform(REFERENCE_FRAME, 'end_effector', rospy.Time(0))
+        except:
+            print("fail")
+            return
+
+        goal = self._goals[0]
+        pose = Pose()
+        pose.position.x = goal.pose.position.x-trans[0]
+        pose.position.y = goal.pose.position.y-trans[1]
+        pose.position.z = goal.pose.position.z-trans[2]
+
+        #From https://answers.ros.org/question/10124/relative-rotation-between-two-quaternions/
+        qp = PyKDL.Rotation.Quaternion(rot[0],rot[1],rot[2],rot[3])
+
+        rot = goal.pose.orientation
+        qg = PyKDL.Rotation.Quaternion(rot.x,rot.y,rot.z,rot.w)
+        q = qg*qp.Inverse()
+
+        angle = q.GetRPY()
+
+        threshold = .01
+        if math.fabs(pose.position.x) < threshold and math.fabs(pose.position.y) < threshold and math.fabs(pose.position.z) <threshold:
+            print("close enough")
+            self._goals.pop(0)
+        return
+
+    def update_path(self):
+        self.check_goal()
+
+        path = Path()
+        path.header.frame_id = REFERENCE_FRAME
+        path.poses= self._goals
+        self._path_pub.publish(path)
+
+    def signal_handler(self, signal, frame):
+        #publish empty path
+        path = Path()
+        self._path_pub.publish(path)
+        sys.exit(0)
+
+if __name__ == "__main__":
+    rospy.init_node("planner")
+    planner = Planner()
+    signal.signal(signal.SIGINT, planner.signal_handler)
+    planner.run()
+
