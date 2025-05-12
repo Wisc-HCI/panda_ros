@@ -22,7 +22,6 @@ Here is what you need to start with:
 Here is what we are going to install with docker:
 * ROS Noetic
 * Libfranka  version 0.9.2
-* franka_ros version 0.10.0
 * Various apt/ROS packages 
 
 
@@ -50,7 +49,6 @@ export PANDA_IP=192.168.1.3
 
 ### Compile non-ROS package (PandaController)
 
-If first time, first configure:
 ```bash
 cd src/PandaController/
 mkdir -p build
